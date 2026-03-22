@@ -14,14 +14,24 @@ import (
 	"os/exec"
 	"path"
 	"runtime"
+	"strings"
 
+	"github.com/DaniilSokolyuk/go-pcap2socks/api"
 	"github.com/DaniilSokolyuk/go-pcap2socks/cfg"
 	"github.com/DaniilSokolyuk/go-pcap2socks/core"
 	"github.com/DaniilSokolyuk/go-pcap2socks/core/device"
+	"github.com/DaniilSokolyuk/go-pcap2socks/discord"
 	"github.com/DaniilSokolyuk/go-pcap2socks/core/option"
 	"github.com/DaniilSokolyuk/go-pcap2socks/i18n"
+	"github.com/DaniilSokolyuk/go-pcap2socks/notify"
 	"github.com/DaniilSokolyuk/go-pcap2socks/proxy"
+	"github.com/DaniilSokolyuk/go-pcap2socks/service"
+	"github.com/DaniilSokolyuk/go-pcap2socks/stats"
+	"github.com/DaniilSokolyuk/go-pcap2socks/telegram"
+	"github.com/DaniilSokolyuk/go-pcap2socks/tray"
+	"github.com/DaniilSokolyuk/go-pcap2socks/upnp"
 	"github.com/jackpal/gateway"
+	"golang.org/x/sys/windows/svc"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
@@ -50,10 +60,46 @@ func main() {
 	handler := slog.NewTextHandler(os.Stdout, opts)
 	slog.SetDefault(slog.New(handler))
 
-	// Check for config command
-	if len(os.Args) > 1 && os.Args[1] == "config" {
-		openConfigInEditor()
-		return
+	// Check for commands
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "config":
+			openConfigInEditor()
+			return
+		case "auto-config":
+			autoConfigure()
+			return
+		case "tray":
+			runTray()
+			return
+		case "web":
+			runWebServer()
+			return
+		case "api":
+			runAPIServer()
+			return
+		case "upnp-discover":
+			discoverUPnP()
+			return
+		case "install-service":
+			installService()
+			return
+		case "uninstall-service":
+			uninstallService()
+			return
+		case "start-service":
+			startService()
+			return
+		case "stop-service":
+			stopService()
+			return
+		case "service-status":
+			serviceStatus()
+			return
+		case "service":
+			runService()
+			return
+		}
 	}
 
 	// get config file from first argument or use config.json
@@ -91,6 +137,115 @@ func main() {
 	// Initialize localizer with language from config
 	localizer := i18n.NewLocalizer(i18n.Language(config.Language))
 	msgs := localizer.GetMessages()
+
+	// Initialize statistics store
+	_statsStore = stats.NewStore()
+
+	// Initialize and start ARP monitor
+	_, network, _ := net.ParseCIDR(config.PCAP.Network)
+	localIP := net.ParseIP(config.PCAP.LocalIP)
+	if network != nil && localIP != nil {
+		_arpMonitor = stats.NewARPMonitor(network, localIP)
+		_arpMonitor.Start(_statsStore)
+		slog.Info("ARP monitor started", "network", network.String())
+		
+		// Register ARP change callbacks for Discord notifications
+		_arpMonitor.OnChange(func(change stats.DeviceChange) {
+			if _discordWebhook != nil {
+				if wh, ok := _discordWebhook.(*discord.WebhookClient); ok {
+					wh.SendDeviceNotification(change.Type, change.IP, change.MAC)
+				}
+			}
+			if _telegramBot != nil && _telegramBot.IsEnabled() {
+				emoji := "❌"
+				if change.Type == "connected" {
+					emoji = "✅"
+				}
+				_telegramBot.SendNotification(
+					fmt.Sprintf("%s Устройство %s", emoji, change.Type),
+					fmt.Sprintf("IP: %s\nMAC: %s", change.IP, change.MAC),
+				)
+			}
+		})
+	}
+
+	// Initialize Telegram bot if configured
+	if config.Telegram != nil && config.Telegram.Token != "" {
+		_telegramBot = telegram.NewBot(config.Telegram.Token, config.Telegram.ChatID)
+		
+		// Set up handlers with real data
+		_telegramBot.SetStatusHandler(func() string {
+			status := "🟢 Запущен"
+			mode := _defaultProxy.Mode().String()
+			if mode == "" || mode == "Direct" {
+				status = "🔴 Остановлен"
+			}
+			total, upload, download, _ := _statsStore.GetTotalTraffic()
+			return fmt.Sprintf("📊 *Статус go-pcap2socks*\n\n"+
+				"Статус: %s\n"+
+				"Режим: %s\n"+
+				"Трафик: ↑ %s ↓ %s\n"+
+				"Всего: %s\n"+
+				"Устройств: %d",
+				status,
+				mode,
+				formatBytes(upload),
+				formatBytes(download),
+				formatBytes(total),
+				_statsStore.GetActiveDeviceCount())
+		})
+		
+		_telegramBot.SetTrafficHandler(func() string {
+			total, upload, download, packets := _statsStore.GetTotalTraffic()
+			return fmt.Sprintf("📈 *Трафик*\n\n"+
+				"Upload: %s\n"+
+				"Download: %s\n"+
+				"Total: %s\n"+
+				"Packets: %d",
+				formatBytes(upload),
+				formatBytes(download),
+				formatBytes(total),
+				packets)
+		})
+		
+		_telegramBot.SetDevicesHandler(func() string {
+			devices := _statsStore.GetAllDevices()
+			if len(devices) == 0 {
+				return "📱 *Устройства*\n\nНет подключенных устройств"
+			}
+			
+			msg := "📱 *Устройства*\n\n"
+			for _, d := range devices {
+				d.RLock()
+				status := "🟢"
+				if !d.Connected {
+					status = "🔴"
+				}
+				msg += fmt.Sprintf("%s %s (%s)\n", status, d.IP, d.MAC)
+				d.RUnlock()
+			}
+			return msg
+		})
+		
+		_telegramBot.SetServiceHandlers(
+			func() string {
+				return "✅ Сервис запущен"
+			},
+			func() string {
+				return "⏹ Сервис остановлен"
+			},
+		)
+		
+		_telegramBot.Start()
+		slog.Info("Telegram bot initialized")
+	}
+
+	// Initialize Discord webhook if configured
+	if config.Discord != nil && config.Discord.WebhookURL != "" {
+		_discordWebhook = discord.NewWebhookClient(config.Discord.WebhookURL)
+		_discordWebhook.(*discord.WebhookClient).SendInfo("🚀 go-pcap2socks", "Бот запущен!")
+		slog.Info("Discord webhook initialized")
+	}
 
 	if len(config.ExecuteOnStart) > 0 {
 		slog.Info(msgs.ExecutingCommands, "cmd", config.ExecuteOnStart)
@@ -153,7 +308,8 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		case outbound.Direct != nil:
 			p = proxy.NewDirect()
 		case outbound.Socks != nil:
-			p, err = proxy.NewSocks5(outbound.Socks.Address, outbound.Socks.Username, outbound.Socks.Password)
+			// Use Socks5WithFallback for automatic failover
+			p, err = proxy.NewSocks5WithFallback(outbound.Socks.Address, outbound.Socks.Username, outbound.Socks.Password)
 			if err != nil {
 				return fmt.Errorf("%s: %w", msgs.NewSocks5Error, err)
 			}
@@ -165,6 +321,8 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			return fmt.Errorf("%s: %+v", msgs.InvalidOutbound, outbound)
 		}
 
+		// Wrap with stats tracking
+		p = proxy.NewStatsProxy(p, _statsStore)
 		proxies[outbound.Tag] = p
 	}
 
@@ -199,7 +357,24 @@ var (
 
 	// _defaultStack holds the default stack for the engine.
 	_defaultStack *stack.Stack
+
+	// _statsStore holds the global statistics store
+	_statsStore *stats.Store
+
+	// _arpMonitor holds the ARP monitor for device discovery
+	_arpMonitor *stats.ARPMonitor
+
+	// _telegramBot holds the Telegram bot
+	_telegramBot *telegram.Bot
+
+	// _discordWebhook holds the Discord webhook client
+	_discordWebhook interface{} // *discord.WebhookClient
 )
+
+// GetStatsStore returns the global statistics store
+func GetStatsStore() *stats.Store {
+	return _statsStore
+}
 
 func findInterface(cfgIfce string, localizer *i18n.Localizer) net.Interface {
 	msgs := localizer.GetMessages()
@@ -403,4 +578,413 @@ func openConfigInEditor() {
 	if err != nil {
 		slog.Error(msgs.OpenEditorError, slog.Any("err", err))
 	}
+}
+
+// autoConfigure автоматически конфигурирует сеть
+func autoConfigure() {
+	slog.Info("Автоматическая конфигурация сети...")
+
+	// Find best interface for ICS (typically Ethernet with 192.168.137.1)
+	interfaceConfig := findBestInterface()
+	if interfaceConfig.Name == "" {
+		slog.Error("Не найдено подходящего сетевого интерфейса")
+		return
+	}
+
+	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC)
+
+	// Get executable path
+	executable, err := os.Executable()
+	if err != nil {
+		slog.Error("get executable error", slog.Any("err", err))
+		return
+	}
+	cfgFile := path.Join(path.Dir(executable), "config.json")
+
+	// Create clean JSON config manually
+	configJSON := fmt.Sprintf(`{
+  "pcap": {
+    "interfaceGateway": "%s",
+    "network": "%s",
+    "localIP": "%s",
+    "mtu": %d
+  },
+  "dns": {
+    "servers": [
+      {"address": "8.8.8.8:53"},
+      {"address": "1.1.1.1:53"}
+    ]
+  },
+  "routing": {
+    "rules": [
+      {"dstPort": "53", "outboundTag": "dns-out"}
+    ]
+  },
+  "outbounds": [
+    {"socks": {"address": "127.0.0.1:10808"}},
+    {"tag": "dns-out", "dns": {}}
+  ],
+  "language": "ru"
+}`, interfaceConfig.IP, interfaceConfig.Network, interfaceConfig.IP, interfaceConfig.RecommendedMTU)
+
+	// Write config file
+	err = os.WriteFile(cfgFile, []byte(configJSON), 0666)
+	if err != nil {
+		slog.Error("write config error", slog.Any("err", err))
+		return
+	}
+
+	slog.Info("Конфигурация создана", "file", cfgFile)
+	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	slog.Info(fmt.Sprintf("  IP адрес:     %s - %s", interfaceConfig.NetworkStart, strings.Split(interfaceConfig.Network, "/")[0]))
+	slog.Info(fmt.Sprintf("  Маска подсети:    %s", interfaceConfig.Netmask))
+	slog.Info(fmt.Sprintf("  Шлюз:        %s", interfaceConfig.IP))
+	slog.Info(fmt.Sprintf("  MTU:            %d", interfaceConfig.RecommendedMTU))
+	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	slog.Info("Теперь вы можете запустить: go-pcap2socks")
+}
+
+type InterfaceConfig struct {
+	Name           string
+	IP             string
+	MAC            string
+	Network        string
+	Netmask        string
+	NetworkStart   string
+	RecommendedMTU uint32
+}
+
+func findBestInterface() InterfaceConfig {
+	// Priority 1: Look for interface with 192.168.137.1 (Windows ICS default)
+	// Priority 2: Look for Ethernet interface with private IP
+	// Priority 3: Use gateway interface
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return InterfaceConfig{}
+	}
+
+	var icsInterface InterfaceConfig
+	var ethernetInterface InterfaceConfig
+	var gatewayInterface InterfaceConfig
+
+	for _, iface := range ifaces {
+		// Skip loopback and inactive interfaces
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			ip4 := ipnet.IP.To4()
+			if ip4 == nil {
+				continue
+			}
+
+			ipStr := ip4.String()
+			ones, _ := ipnet.Mask.Size()
+			netmask := fmt.Sprintf("%d.%d.%d.%d", ipnet.Mask[0], ipnet.Mask[1], ipnet.Mask[2], ipnet.Mask[3])
+
+			// Calculate network range
+			networkIP := make(net.IP, 4)
+			binary.BigEndian.PutUint32(networkIP, binary.BigEndian.Uint32(ip4)&binary.BigEndian.Uint32(net.ParseIP(netmask).To4()))
+			networkStart := make(net.IP, 4)
+			binary.BigEndian.PutUint32(networkStart, binary.BigEndian.Uint32(networkIP)+1)
+
+			// Calculate recommended MTU
+			recommendedMTU := uint32(iface.MTU) - 14
+
+			ifaceConfig := InterfaceConfig{
+				Name:           iface.Name,
+				IP:             ipStr,
+				MAC:            iface.HardwareAddr.String(),
+				Network:        fmt.Sprintf("%s/%d", networkIP.String(), ones),
+				Netmask:        netmask,
+				NetworkStart:   networkStart.String(),
+				RecommendedMTU: recommendedMTU,
+			}
+
+			// Priority 1: ICS interface (192.168.137.1)
+			if ipStr == "192.168.137.1" {
+				icsInterface = ifaceConfig
+			}
+
+			// Priority 2: Ethernet interface with private IP
+			if strings.Contains(strings.ToLower(iface.Name), "ethernet") && isPrivateIP(ip4) {
+				ethernetInterface = ifaceConfig
+			}
+
+			// Priority 3: Gateway interface
+			if gatewayInterface.Name == "" {
+				gwIP, err := gateway.DiscoverInterface()
+				if err == nil && bytes.Equal(ip4, gwIP.To4()) {
+					gatewayInterface = ifaceConfig
+				}
+			}
+		}
+	}
+
+	// Return in priority order
+	if icsInterface.Name != "" {
+		return icsInterface
+	}
+	if ethernetInterface.Name != "" {
+		return ethernetInterface
+	}
+	if gatewayInterface.Name != "" {
+		return gatewayInterface
+	}
+
+	return InterfaceConfig{}
+}
+
+func isPrivateIP(ip net.IP) bool {
+	privateRanges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+	}
+
+	for _, cidr := range privateRanges {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// formatBytes formats bytes into human-readable format
+func formatBytes(bytes uint64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/GB)
+	case bytes >= MB:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/MB)
+	case bytes >= KB:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/KB)
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
+// runTray runs the application in system tray mode
+func runTray() {
+	slog.Info("Starting in tray mode...")
+	tray.Run()
+}
+
+// runWebServer starts the web server with API
+func runWebServer() {
+	slog.Info("Starting web server on :8080...")
+	
+	// Create stats store
+	statsStore := stats.NewStore()
+	
+	// Create API server
+	apiServer := api.NewServer(statsStore)
+	
+	// Start HTTP server
+	err := http.ListenAndServe(":8080", apiServer)
+	if err != nil {
+		slog.Error("web server error", slog.Any("err", err))
+	}
+}
+
+// runAPIServer starts only the API server (no web UI)
+func runAPIServer() {
+	slog.Info("Starting API server on :8081...")
+	
+	// Create stats store
+	statsStore := stats.NewStore()
+	
+	// Create API server
+	apiServer := api.NewServer(statsStore)
+	
+	// Start HTTP server
+	err := http.ListenAndServe(":8081", apiServer)
+	if err != nil {
+		slog.Error("api server error", slog.Any("err", err))
+	}
+}
+
+// discoverUPnP discovers UPnP devices on the network
+func discoverUPnP() {
+	slog.Info("Discovering UPnP devices...")
+	
+	u := upnp.New()
+	devices, err := u.Discover()
+	if err != nil {
+		slog.Error("UPnP discovery error", slog.Any("err", err))
+		fmt.Println("Error:", err)
+		return
+	}
+	
+	if len(devices) == 0 {
+		slog.Info("No UPnP devices found")
+		fmt.Println("No UPnP devices found")
+		return
+	}
+	
+	fmt.Printf("Found %d UPnP device(s):\n\n", len(devices))
+	for i, device := range devices {
+		fmt.Printf("%d. %s\n", i+1, device.FriendlyName)
+		fmt.Printf("   Manufacturer: %s\n", device.Manufacturer)
+		fmt.Printf("   Model: %s\n", device.ModelName)
+		fmt.Printf("   UDN: %s\n", device.UDN)
+		if device.ControlURL != "" {
+			fmt.Printf("   Control URL: %s\n", device.ControlURL)
+		}
+		fmt.Println()
+	}
+	
+	// Try to get external IP
+	if len(devices) > 0 {
+		slog.Info("Attempting to get external IP...")
+		ip, err := u.GetExternalIP()
+		if err != nil {
+			slog.Debug("GetExternalIP error", slog.Any("err", err))
+		} else {
+			fmt.Printf("External IP: %s\n", ip)
+		}
+	}
+}
+
+// installService installs the Windows service
+func installService() {
+	if err := service.Install(); err != nil {
+		slog.Error("install service error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось установить сервис: "+err.Error(), notify.NotifyError)
+	} else {
+		slog.Info("Service installed successfully")
+		notify.Show("Успех", "Сервис установлен", notify.NotifySuccess)
+	}
+}
+
+// uninstallService removes the Windows service
+func uninstallService() {
+	if err := service.Uninstall(); err != nil {
+		slog.Error("uninstall service error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось удалить сервис: "+err.Error(), notify.NotifyError)
+	} else {
+		slog.Info("Service uninstalled successfully")
+		notify.Show("Успех", "Сервис удален", notify.NotifySuccess)
+	}
+}
+
+// startService starts the Windows service
+func startService() {
+	if err := service.Start(); err != nil {
+		slog.Error("start service error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось запустить сервис: "+err.Error(), notify.NotifyError)
+	} else {
+		slog.Info("Service started")
+		notify.Show("Успех", "Сервис запущен", notify.NotifySuccess)
+	}
+}
+
+// stopService stops the Windows service
+func stopService() {
+	if err := service.Stop(); err != nil {
+		slog.Error("stop service error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось остановить сервис: "+err.Error(), notify.NotifyError)
+	} else {
+		slog.Info("Service stopped")
+		notify.Show("Успех", "Сервис остановлен", notify.NotifySuccess)
+	}
+}
+
+// serviceStatus shows the current service status
+func serviceStatus() {
+	status, err := service.Status()
+	if err != nil {
+		slog.Error("get service status error", slog.Any("err", err))
+		fmt.Println("Error:", err)
+		return
+	}
+
+	statusText := map[string]string{
+		"not_installed": "Сервис не установлен",
+		"stopped":       "Остановлен",
+		"running":       "Запущен",
+		"paused":        "Приостановлен",
+		"starting":      "Запускается",
+		"stopping":      "Останавливается",
+		"unknown":       "Неизвестно",
+	}
+
+	fmt.Printf("Статус сервиса: %s\n", statusText[status])
+}
+
+// runService runs the application as a Windows service
+func runService() {
+	// Check if running as service
+	isInteractive, err := svc.IsAnInteractiveSession()
+	if err != nil {
+		slog.Error("check interactive session error", slog.Any("err", err))
+	}
+
+	if isInteractive {
+		// Running interactively, just run the main app
+		slog.Info("Running in interactive mode")
+		if err := runWithNotifications(); err != nil {
+			notify.Show("Ошибка", err.Error(), notify.NotifyError)
+			slog.Error("run error", slog.Any("err", err))
+		}
+	} else {
+		// Running as service
+		slog.Info("Starting as service...")
+		service.Run()
+	}
+}
+
+// runWithNotifications wraps run() with notification support
+func runWithNotifications() error {
+	// Get config file path
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable error: %w", err)
+	}
+	cfgFile := path.Join(path.Dir(executable), "config.json")
+
+	// Load config
+	config, err := cfg.Load(cfgFile)
+	if err != nil {
+		return fmt.Errorf("load config error: %w", err)
+	}
+
+	localizer := i18n.NewLocalizer(i18n.Language(config.Language))
+
+	// Run with error handling and notifications
+	return runWithRecovery(config, localizer)
+}
+
+// runWithRecovery wraps run() with panic recovery and notifications
+func runWithRecovery(config *cfg.Config, localizer *i18n.Localizer) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic recovered: %v", r)
+			notify.Show("Критическая ошибка", fmt.Sprintf("%v", r), notify.NotifyError)
+		}
+	}()
+
+	return run(config, localizer)
 }

@@ -98,14 +98,20 @@ func setSocketOptions(s *stack.Stack, ep tcpip.Endpoint) tcpip.Error {
 			return err
 		}
 	}
-	{ /* TCP recv/send buffer size */
+	{ /* TCP recv/send buffer size - increased for better performance */
 		var ss tcpip.TCPSendBufferSizeRangeOption
 		if err := s.TransportProtocolOption(header.TCPProtocolNumber, &ss); err == nil {
+			// Increase send buffer to 4MB max
+			ss.Max = 4 * 1024 * 1024
+			s.SetTransportProtocolOption(header.TCPProtocolNumber, &ss)
 			ep.SocketOptions().SetSendBufferSize(int64(ss.Default), false)
 		}
 
 		var rs tcpip.TCPReceiveBufferSizeRangeOption
 		if err := s.TransportProtocolOption(header.TCPProtocolNumber, &rs); err == nil {
+			// Increase receive buffer to 4MB max
+			rs.Max = 4 * 1024 * 1024
+			s.SetTransportProtocolOption(header.TCPProtocolNumber, &rs)
 			ep.SocketOptions().SetReceiveBufferSize(int64(rs.Default), false)
 		}
 	}

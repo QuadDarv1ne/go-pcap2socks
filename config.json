@@ -1,40 +1,35 @@
 {
   "pcap": {
-    "network": "172.26.0.0/16",
-    "localIP": "172.26.0.1"
+    "interfaceGateway": "192.168.137.1",
+    "network": "192.168.137.0/24",
+    "localIP": "192.168.137.1",
+    "mtu": 1486
   },
   "dns": {
     "servers": [
-      {
-        "address": "8.8.8.8"
-      },
-      {
-        "address": "1.1.1.1"
-      }
+      {"address": "8.8.8.8:53"},
+      {"address": "1.1.1.1:53"}
     ]
   },
   "routing": {
     "rules": [
-      {
-        "dstPort": "53",
-        "outboundTag": "dns-out"
-      }
+      {"dstPort": "53", "outboundTag": "dns-out"}
     ]
   },
   "outbounds": [
-    {
-      "tag": "",
-      "socks": {
-        "address": "127.0.0.1:10808"
-      }
-    },
-    {
-      "tag": "dns-out",
-      "dns": {}
-    }
+    {"socks": {"address": "127.0.0.1:10808"}},
+    {"tag": "dns-out", "dns": {}}
   ],
-  "capture": {
-    "enabled": false
+  "telegram": {
+    "token": "",
+    "chat_id": ""
+  },
+  "discord": {
+    "webhook_url": ""
+  },
+  "hotkey": {
+    "enabled": true,
+    "toggle": "Ctrl+Alt+P"
   },
   "language": "ru"
 }

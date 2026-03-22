@@ -19,8 +19,8 @@ import (
 
 const (
 	// Queue length for outbound packet, arriving for read. Overflow
-	// causes packet drops.
-	defaultOutQueueLen = 1 << 10
+	// causes packet drops. Increased for better performance.
+	defaultOutQueueLen = 1 << 14 // 16384 packets
 )
 
 // Endpoint implements the interface of stack.LinkEndpoint from io.ReadWriter.

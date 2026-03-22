@@ -21,7 +21,10 @@ go-pcap2socks работает как маршрутизатор, позволя
 
 # 2. Откройте PowerShell от имени администратора
 
-# 3. Запустите
+# 3. Автоматическая настройка (рекомендуется)
+.\go-pcap2socks.exe auto-config
+
+# 4. Запуск
 .\go-pcap2socks.exe
 ```
 
@@ -31,12 +34,32 @@ go-pcap2socks работает как маршрутизатор, позволя
 # Установка
 go install github.com/DaniilSokolyuk/go-pcap2socks@latest
 
-# Настройка
-go-pcap2socks config
+# Автоматическая настройка
+sudo go-pcap2socks auto-config
 
 # Запуск
 sudo go-pcap2socks
 ```
+
+### Команды
+
+#### Основные
+- `go-pcap2socks` — запуск программы в консольном режиме
+- `go-pcap2socks auto-config` — автоматическое определение сети и создание конфигурации
+- `go-pcap2socks config` — открыть конфигурационный файл в редакторе
+
+#### Режимы работы
+- `go-pcap2socks tray` — запуск в системном трее с иконкой и меню (рекомендуется для Windows)
+- `go-pcap2socks service` — запуск как сервис Windows
+
+#### Управление сервисом (Windows)
+- `go-pcap2socks install-service` — установить сервис для автозагрузки
+- `go-pcap2socks uninstall-service` — удалить сервис
+- `go-pcap2socks start-service` — запустить сервис
+- `go-pcap2socks stop-service` — остановить сервис
+- `go-pcap2socks service-status` — показать статус сервиса
+
+📄 **Полный список новых функций:** [NEW_FEATURES.md](NEW_FEATURES.md)
 
 ## Решение проблем
 
