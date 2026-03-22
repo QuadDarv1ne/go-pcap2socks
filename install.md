@@ -1,27 +1,27 @@
-# Installation
+# Установка
 
-go-pcap2socks depends on libpcap and is fully compatible with any version on any platform.
+go-pcap2socks зависит от libpcap и полностью совместим с любой версией на любой платформе.
 
-## Prerequisites
+## Предварительные требования
 
-- Go 1.21 or later ([download](https://go.dev/dl/))
-- libpcap (see platform-specific instructions below)
+- Go 1.21 или новее ([скачать](https://go.dev/dl/))
+- libpcap (см. инструкции для конкретных платформ ниже)
 
-## Installing from Source
+## Установка из исходного кода
 
-To build the latest stable version:
+Для сборки последней стабильной версии:
 
 ```bash
 go install github.com/DaniilSokolyuk/go-pcap2socks@latest
 ```
 
-To build the latest development version:
+Для сборки последней разрабатываемой версии:
 
 ```bash
 go install github.com/DaniilSokolyuk/go-pcap2socks@main
 ```
 
-## Dependencies
+## Зависимости
 
 ### Linux
 
@@ -47,37 +47,37 @@ brew install libpcap
 
 ### Windows
 
-Download and install [Npcap](https://npcap.com/#download) with "WinPcap API-compatible Mode" enabled.
+Скачайте и установите [Npcap](https://npcap.com/#download) с включённым режимом "WinPcap API-compatible Mode".
 
-## Running
+## Запуск
 
 ```bash
-# Open configuration in editor
+# Открыть конфигурацию в редакторе
 go-pcap2socks config
 
-# Run with default config (requires root)
+# Запуск с конфигурацией по умолчанию (требуются права root)
 sudo go-pcap2socks
 
-# Run with custom config
+# Запуск с пользовательской конфигурацией
 sudo go-pcap2socks /path/to/config.json
 ```
 
 ## Termux (Android)
 
-**Note:** Requires a rooted Android device as packet capture needs root privileges.
+**Примечание:** Требуется rooted Android-устройство, так как захват пакетов требует прав root.
 
 ```bash
-# Install dependencies
+# Установка зависимостей
 pkg update
 pkg install root-repo
 pkg install golang libpcap tsu
 
-# Install go-pcap2socks
+# Установка go-pcap2socks
 go install github.com/DaniilSokolyuk/go-pcap2socks@latest
 
-# Run with root (requires rooted device)
+# Запуск с правами root (требуется rooted устройство)
 sudo $HOME/go/bin/go-pcap2socks
 
-# Or use tsu for better root handling
+# Или используйте tsu для лучшей обработки root-прав
 tsu -c "$HOME/go/bin/go-pcap2socks"
 ```

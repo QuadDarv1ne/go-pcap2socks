@@ -1,27 +1,27 @@
-# go-pcap2socks Configuration Guide
+# Руководство по настройке go-pcap2socks
 
-This document describes the configuration options for go-pcap2socks. The configuration uses JSON format and is typically stored in `config.json`.
+Этот документ описывает параметры конфигурации go-pcap2socks. Конфигурация использует JSON-формат и обычно хранится в файле `config.json`.
 
-## CLI Commands
+## Команды CLI
 
-### Opening Configuration in Editor
+### Открытие конфигурации в редакторе
 
-To open the configuration file in your default text editor:
+Чтобы открыть файл конфигурации в текстовом редакторе по умолчанию:
 
 ```bash
 go-pcap2socks config
 ```
 
-This command will:
-- Create the config file if it doesn't exist (using default settings)
-- Open the file in your system's default text editor:
-  - **Windows**: Opens in Notepad
-  - **macOS**: Opens in default text editor
-  - **Linux**: Uses `$EDITOR` or `$VISUAL` environment variable, or falls back to nano/vim/vi
+Эта команда:
+- Создаст файл конфигурации, если он не существует (с настройками по умолчанию)
+- Откроет файл в системном редакторе:
+  - **Windows**: Блокнот (Notepad)
+  - **macOS**: Текстовый редактор по умолчанию
+  - **Linux**: Использует переменную окружения `$EDITOR` или `$VISUAL`, или nano/vim/vi
 
-### Running with Custom Config
+### Запуск с пользовательской конфигурацией
 
-To run with a specific configuration file:
+Для запуска с определённым файлом конфигурации:
 
 ```bash
 go-pcap2socks /path/to/custom-config.json
@@ -29,23 +29,23 @@ go-pcap2socks /path/to/custom-config.json
 
 ## executeOnStart
 
-Commands to execute when the application starts. Useful for starting local VPN connections for example.
+Команды для выполнения при запуске приложения. Полезно для запуска локальных VPN-подключений, например.
 
 ```json
 "executeOnStart": [
-  "echo 'Starting pcap2socks and VPN'",
+  "echo 'Запуск pcap2socks и VPN'",
   "sing-box run -c /etc/sing-box/config.json"
 ]
 ```
 
-- Type: Array of strings
-- Optional: Yes
-- Default: Empty array
-- Each string is executed as a shell command in order
+- **Тип**: Массив строк
+- **Обязательно**: Нет
+- **По умолчанию**: Пустой массив
+- Каждая строка выполняется как shell-команда по порядку
 
 ## pcap
 
-Controls the packet capture interface and virtual network configuration.
+Управляет интерфейсом захвата пакетов и настройками виртуальной сети.
 
 ```json
 "pcap": {
@@ -57,40 +57,40 @@ Controls the packet capture interface and virtual network configuration.
 }
 ```
 
-### Fields:
+### Поля:
 
 - **interfaceGateway**
-  - Type: String
-  - Optional: Yes
-  - Description: Physical network interface to use as gateway
+  - **Тип**: Строка
+  - **Обязательно**: Нет
+  - **Описание**: Физический сетевой интерфейс для использования в качестве шлюза
 
 - **mtu**
-  - Type: Number
-  - Required: Yes
-  - Default: 1500
-  - Description: Maximum Transmission Unit size for packets
+  - **Тип**: Число
+  - **Обязательно**: Да
+  - **По умолчанию**: 1500
+  - **Описание**: Размер Maximum Transmission Unit для пакетов
 
 - **network**
-  - Type: String (CIDR notation)
-  - Required: Yes
-  - Example: "172.26.0.0/16"
-  - Description: Virtual network address range
+  - **Тип**: Строка (CIDR-нотация)
+  - **Обязательно**: Да
+  - **Пример**: `"172.26.0.0/16"`
+  - **Описание**: Диапазон адресов виртуальной сети
 
 - **localIP**
-  - Type: String
-  - Required: Yes
-  - Example: "172.26.0.1"
-  - Description: Local IP address within the virtual network
+  - **Тип**: Строка
+  - **Обязательно**: Да
+  - **Пример**: `"172.26.0.1"`
+  - **Описание**: Локальный IP-адрес в виртуальной сети
 
 - **localMAC**
-  - Type: String
-  - Optional: Yes
-  - Format: "aa:bb:cc:dd:ee:ff"
-  - Description: MAC address for the virtual interface
+  - **Тип**: Строка
+  - **Обязательно**: Нет
+  - **Формат**: `"aa:bb:cc:dd:ee:ff"`
+  - **Описание**: MAC-адрес для виртуального интерфейса
 
 ## dns
 
-Configures DNS servers for domain name resolution.
+Настраивает DNS-серверы для разрешения доменных имён.
 
 ```json
 "dns": {
@@ -108,22 +108,22 @@ Configures DNS servers for domain name resolution.
 }
 ```
 
-### Fields:
+### Поля:
 
 - **servers**
-  - Type: Array of objects
-  - Required: Yes
-  - Description: List of DNS servers to use
+  - **Тип**: Массив объектов
+  - **Обязательно**: Да
+  - **Описание**: Список DNS-серверов для использования
 
 - **servers[].address**
-  - Type: String
-  - Required: Yes
-  - Values: "local" or IP address
-  - Description: DNS server address. "local" uses system DNS
+  - **Тип**: Строка
+  - **Обязательно**: Да
+  - **Значения**: `"local"` или IP-адрес
+  - **Описание**: Адрес DNS-сервера. `"local"` использует системный DNS
 
 ## routing
 
-Defines rules for routing traffic to different outbounds based on matching criteria.
+Определяет правила маршрутизации трафика к различным outbound-обработчикам на основе критериев сопоставления.
 
 ```json
 "routing": {
@@ -139,58 +139,58 @@ Defines rules for routing traffic to different outbounds based on matching crite
 }
 ```
 
-### Fields:
+### Поля:
 
 - **rules**
-  - Type: Array of rule objects
-  - Required: Yes
-  - Description: Ordered list of routing rules (first match wins)
+  - **Тип**: Массив объектов правил
+  - **Обязательно**: Да
+  - **Описание**: Упорядоченный список правил маршрутизации (первое совпадение побеждает)
 
-### Rule Object Fields:
+### Поля объекта правила:
 
 - **srcPort**
-  - Type: String
-  - Optional: Yes
-  - Format: "80" or "80,443" or "1000-2000"
-  - Description: Source port(s) to match
+  - **Тип**: Строка
+  - **Обязательно**: Нет
+  - **Формат**: `"80"` или `"80,443"` или `"1000-2000"`
+  - **Описание**: Исходящий порт(ы) для сопоставления
 
 - **dstPort**
-  - Type: String
-  - Optional: Yes
-  - Format: Same as srcPort
-  - Description: Destination port(s) to match
+  - **Тип**: Строка
+  - **Обязательно**: Нет
+  - **Формат**: Как у srcPort
+  - **Описание**: Целевой порт(ы) для сопоставления
 
 - **srcIP**
-  - Type: Array of strings
-  - Optional: Yes
-  - Format: ["192.168.1.1"] or ["192.168.0.0/24"]
-  - Description: Source IP addresses/CIDRs to match
+  - **Тип**: Массив строк
+  - **Обязательно**: Нет
+  - **Формат**: `["192.168.1.1"]` или `["192.168.0.0/24"]`
+  - **Описание**: Исходящие IP-адреса/CIDR для сопоставления
 
 - **dstIP**
-  - Type: Array of strings
-  - Optional: Yes
-  - Format: Same as srcIP
-  - Description: Destination IP addresses/CIDRs to match
+  - **Тип**: Массив строк
+  - **Обязательно**: Нет
+  - **Формат**: Как у srcIP
+  - **Описание**: Целевые IP-адреса/CIDR для сопоставления
 
 - **outboundTag**
-  - Type: String
-  - Required: Yes
-  - Description: Tag of the outbound to use for matching traffic
+  - **Тип**: Строка
+  - **Обязательно**: Да
+  - **Описание**: Тег outbound-обработчика для использования с сопоставленным трафиком
 
-### Port Format Examples:
-- Single port: `"80"`
-- Multiple ports: `"80,443,8080"`
-- Port range: `"1000-2000"`
-- Combined: `"80,443,1000-2000,3000"`
+### Примеры формата портов:
+- Одиночный порт: `"80"`
+- Несколько портов: `"80,443,8080"`
+- Диапазон портов: `"1000-2000"`
+- Комбинированный: `"80,443,1000-2000,3000"`
 
-### IP Format Examples:
-- Single IP: `["192.168.1.1"]` (automatically treated as /32)
+### Примеры формата IP:
+- Одиночный IP: `["192.168.1.1"]` (автоматически считается как /32)
 - CIDR: `["192.168.0.0/24"]`
-- Multiple: `["192.168.0.0/24", "10.0.0.0/8", "172.16.0.0/12"]`
+- Несколько: `["192.168.0.0/24", "10.0.0.0/8", "172.16.0.0/12"]`
 
 ## outbounds
 
-Defines handlers for outgoing traffic. Each outbound has a tag for routing reference. **An outbound with an empty tag (`""`) serves as the default route for all unmatched traffic.**
+Определяет обработчики исходящего трафика. Каждый outbound имеет тег для маршрутизации. **Outbound с пустым тегом (`""`) служит маршрутом по умолчанию для всего несовпавшего трафика.**
 
 ```json
 "outbounds": [
@@ -217,17 +217,17 @@ Defines handlers for outgoing traffic. Each outbound has a tag for routing refer
 ]
 ```
 
-### Common Fields:
+### Общие поля:
 
 - **tag**
-  - Type: String
-  - Required: Yes
-  - Description: Identifier for routing. **Empty string (`""`) denotes default outbound**
+  - **Тип**: Строка
+  - **Обязательно**: Да
+  - **Описание**: Идентификатор для маршрутизации. **Пустая строка (`""`) обозначает outbound по умолчанию**
 
-### Outbound Types:
+### Типы outbound:
 
 #### Direct
-Routes traffic directly to the internet without proxy.
+Маршрутизирует трафик напрямую в интернет без прокси.
 
 ```json
 {
@@ -237,7 +237,7 @@ Routes traffic directly to the internet without proxy.
 ```
 
 #### SOCKS
-Routes traffic through a SOCKS4/SOCKS5 proxy.
+Маршрутизирует трафик через SOCKS4/SOCKS5-прокси.
 
 ```json
 {
@@ -250,12 +250,12 @@ Routes traffic through a SOCKS4/SOCKS5 proxy.
 }
 ```
 
-- **address**: Required. Proxy server address and port
-- **username**: Optional. For SOCKS5 authentication
-- **password**: Optional. For SOCKS5 authentication
+- **address**: Обязательно. Адрес и порт прокси-сервера
+- **username**: Опционально. Для аутентификации SOCKS5
+- **password**: Опционально. Для аутентификации SOCKS5
 
 #### DNS
-Special handler for DNS queries.
+Специальный обработчик для DNS-запросов.
 
 ```json
 {
@@ -265,7 +265,7 @@ Special handler for DNS queries.
 ```
 
 #### Reject
-Blocks matching traffic.
+Блокирует сопоставленный трафик.
 
 ```json
 {
@@ -276,7 +276,7 @@ Blocks matching traffic.
 
 ## capture
 
-Debug feature for capturing packets to a file for analysis. Captures all Ethernet frames (including MAC addresses) for troubleshooting.
+Отладочная функция для захвата пакетов в файл для анализа. Захватывает все Ethernet-кадры (включая MAC-адреса) для устранения неполадок.
 
 ```json
 "capture": {
@@ -285,23 +285,23 @@ Debug feature for capturing packets to a file for analysis. Captures all Etherne
 }
 ```
 
-### Fields:
+### Поля:
 
 - **enabled**
-  - Type: Boolean
-  - Required: Yes
-  - Default: false
-  - Description: Enable/disable packet capture
+  - **Тип**: Булево
+  - **Обязательно**: Да
+  - **По умолчанию**: false
+  - **Описание**: Включить/выключить захват пакетов
 
 - **outputFile**
-  - Type: String
-  - Optional: Yes
-  - Default: "capture_YYYYMMDD_HHMMSS.pcap"
-  - Description: Path to save captured packets. Timestamp is automatically appended to prevent overwriting
+  - **Тип**: Строка
+  - **Обязательно**: Нет
+  - **По умолчанию**: `"capture_YYYYMMDD_HHMMSS.pcap"`
+  - **Описание**: Путь для сохранения захваченных пакетов. Временная метка автоматически добавляется для предотвращения перезаписи
 
-## Complete Example Configurations
+## Полные примеры конфигураций
 
-### Minimal Configuration
+### Минимальная конфигурация
 
 ```json
 {
@@ -338,7 +338,7 @@ Debug feature for capturing packets to a file for analysis. Captures all Etherne
 }
 ```
 
-### SOCKS Proxy for All Traffic
+### SOCKS-прокси для всего трафика
 
 ```json
 {
@@ -377,7 +377,7 @@ Debug feature for capturing packets to a file for analysis. Captures all Etherne
 }
 ```
 
-### Complex Routing Rules
+### Сложные правила маршрутизации
 
 ```json
 {
@@ -446,7 +446,7 @@ Debug feature for capturing packets to a file for analysis. Captures all Etherne
 }
 ```
 
-### Debug Configuration with Capture
+### Отладочная конфигурация с захватом
 
 ```json
 {

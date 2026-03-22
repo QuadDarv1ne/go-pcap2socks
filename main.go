@@ -131,6 +131,8 @@ func main() {
 }
 
 func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
+	msgs := localizer.GetMessages()
+
 	// Find the interface first
 	ifce := findInterface(cfg.PCAP.InterfaceGateway, localizer)
 	slog.Info(msgs.UsingInterface, "interface", ifce.Name, "mac", ifce.HardwareAddr.String())
