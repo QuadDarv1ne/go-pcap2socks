@@ -45,6 +45,7 @@ type Config struct {
 	} `json:"routing"`
 	Outbounds []Outbound `json:"outbounds"`
 	Capture   Capture    `json:"capture,omitempty"`
+	Language  string     `json:"language,omitempty"`
 }
 
 type PCAP struct {

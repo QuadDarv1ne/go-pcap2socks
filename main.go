@@ -19,6 +19,7 @@ import (
 	"github.com/DaniilSokolyuk/go-pcap2socks/core"
 	"github.com/DaniilSokolyuk/go-pcap2socks/core/device"
 	"github.com/DaniilSokolyuk/go-pcap2socks/core/option"
+	"github.com/DaniilSokolyuk/go-pcap2socks/i18n"
 	"github.com/DaniilSokolyuk/go-pcap2socks/proxy"
 	"github.com/jackpal/gateway"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -87,8 +88,12 @@ func main() {
 	}
 	slog.Info("Config loaded", "file", cfgFile)
 
+	// Initialize localizer with language from config
+	localizer := i18n.NewLocalizer(i18n.Language(config.Language))
+	msgs := localizer.GetMessages()
+
 	if len(config.ExecuteOnStart) > 0 {
-		slog.Info("Executing commands on start", "cmd", config.ExecuteOnStart)
+		slog.Info(msgs.ExecutingCommands, "cmd", config.ExecuteOnStart)
 
 		var cmd *exec.Cmd
 		if len(config.ExecuteOnStart) > 1 {
@@ -103,7 +108,7 @@ func main() {
 		go func() {
 			err := cmd.Start()
 			if err != nil {
-				slog.Error("execute command error", slog.Any("err", err))
+				slog.Error(msgs.ExecuteCommandError, slog.Any("err", err))
 			}
 
 			err = cmd.Wait()
@@ -113,31 +118,31 @@ func main() {
 		}()
 	}
 
-	err = run(config)
+	err = run(config, localizer)
 	if err != nil {
 		slog.Error("run error", slog.Any("err", err))
 		return
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("Hello world!"))
+		_, _ = w.Write([]byte(msgs.HelloWorld))
 	})
 	log.Fatal(http.ListenAndServe(":8085", nil))
 }
 
-func run(cfg *cfg.Config) error {
+func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	// Find the interface first
-	ifce := findInterface(cfg.PCAP.InterfaceGateway)
-	slog.Info("Using ethernet interface", "interface", ifce.Name, "mac", ifce.HardwareAddr.String())
+	ifce := findInterface(cfg.PCAP.InterfaceGateway, localizer)
+	slog.Info(msgs.UsingInterface, "interface", ifce.Name, "mac", ifce.HardwareAddr.String())
 
 	// Parse network configuration
-	netConfig, err := parseNetworkConfig(cfg.PCAP, ifce)
+	netConfig, err := parseNetworkConfig(cfg.PCAP, ifce, localizer)
 	if err != nil {
 		return err
 	}
 
 	// Display network configuration
-	displayNetworkConfig(netConfig)
+	displayNetworkConfig(netConfig, localizer)
 
 	proxies := make(map[string]proxy.Proxy)
 	for _, outbound := range cfg.Outbounds {
@@ -148,14 +153,14 @@ func run(cfg *cfg.Config) error {
 		case outbound.Socks != nil:
 			p, err = proxy.NewSocks5(outbound.Socks.Address, outbound.Socks.Username, outbound.Socks.Password)
 			if err != nil {
-				return fmt.Errorf("new socks5 error: %w", err)
+				return fmt.Errorf("%s: %w", msgs.NewSocks5Error, err)
 			}
 		case outbound.Reject != nil:
 			p = proxy.NewReject()
 		case outbound.DNS != nil:
 			p = proxy.NewDNS(cfg.DNS, ifce.Name)
 		default:
-			return fmt.Errorf("invalid outbound: %+v", outbound)
+			return fmt.Errorf("%s: %+v", msgs.InvalidOutbound, outbound)
 		}
 
 		proxies[outbound.Tag] = p
@@ -177,7 +182,7 @@ func run(cfg *cfg.Config) error {
 		MulticastGroups:  []net.IP{},
 		Options:          []option.Option{},
 	}); err != nil {
-		slog.Error("create stack error", slog.Any("err", err))
+		slog.Error(msgs.CreateStackError, slog.Any("err", err))
 	}
 
 	return nil
@@ -194,18 +199,19 @@ var (
 	_defaultStack *stack.Stack
 )
 
-func findInterface(cfgIfce string) net.Interface {
+func findInterface(cfgIfce string, localizer *i18n.Localizer) net.Interface {
+	msgs := localizer.GetMessages()
 	var targetIP net.IP
 	if cfgIfce != "" {
 		targetIP = net.ParseIP(cfgIfce)
 		if targetIP == nil {
-			panic(fmt.Errorf("parse ip error: %s", cfgIfce))
+			panic(fmt.Errorf("%s: %s", msgs.ParseIPError, cfgIfce))
 		}
 	} else {
 		var err error
 		targetIP, err = gateway.DiscoverInterface()
 		if err != nil {
-			panic(fmt.Errorf("discover interface error: %w", err))
+			panic(fmt.Errorf("%s: %w", msgs.DiscoverInterfaceError, err))
 		}
 	}
 
@@ -234,25 +240,26 @@ func findInterface(cfgIfce string) net.Interface {
 		}
 	}
 
-	panic(fmt.Errorf("interface with IP %s not found", targetIP))
+	panic(fmt.Errorf(msgs.InterfaceNotFound, targetIP))
 }
 
-func parseNetworkConfig(pcapCfg cfg.PCAP, ifce net.Interface) (*device.NetworkConfig, error) {
+func parseNetworkConfig(pcapCfg cfg.PCAP, ifce net.Interface, localizer *i18n.Localizer) (*device.NetworkConfig, error) {
+	msgs := localizer.GetMessages()
 	// Parse network CIDR
 	_, network, err := net.ParseCIDR(pcapCfg.Network)
 	if err != nil {
-		return nil, fmt.Errorf("parse cidr error: %w", err)
+		return nil, fmt.Errorf("%s: %w", msgs.ParseCIDRError, err)
 	}
 
 	// Parse local IP
 	localIP := net.ParseIP(pcapCfg.LocalIP)
 	if localIP == nil {
-		return nil, fmt.Errorf("parse local ip error: %s", pcapCfg.LocalIP)
+		return nil, fmt.Errorf("%s: %s", msgs.ParseIPError, pcapCfg.LocalIP)
 	}
 
 	localIP = localIP.To4()
 	if !network.Contains(localIP) {
-		return nil, fmt.Errorf("local ip (%s) not in network (%s)", localIP, network)
+		return nil, fmt.Errorf(msgs.LocalIPNotInNetwork, localIP, network)
 	}
 
 	// Parse or use interface MAC
@@ -260,7 +267,7 @@ func parseNetworkConfig(pcapCfg cfg.PCAP, ifce net.Interface) (*device.NetworkCo
 	if pcapCfg.LocalMAC != "" {
 		localMAC, err = net.ParseMAC(pcapCfg.LocalMAC)
 		if err != nil {
-			return nil, fmt.Errorf("parse local mac error: %w", err)
+			return nil, fmt.Errorf("%s: %w", msgs.ParseMACError, err)
 		}
 	} else {
 		localMAC = ifce.HardwareAddr
@@ -280,19 +287,15 @@ func parseNetworkConfig(pcapCfg cfg.PCAP, ifce net.Interface) (*device.NetworkCo
 	}, nil
 }
 
-func displayNetworkConfig(config *device.NetworkConfig) {
+func displayNetworkConfig(config *device.NetworkConfig, localizer *i18n.Localizer) {
 	// Calculate IP range
 	ipRangeStart, ipRangeEnd := calculateIPRange(config.Network, config.LocalIP)
 	recommendedMTU := calculateRecommendedMTU(config.MTU)
 
-	// Log network settings in a cleaner format
-	slog.Info("Configure your device with these network settings:")
-	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	slog.Info(fmt.Sprintf("  IP Address:     %s - %s", ipRangeStart.String(), ipRangeEnd.String()))
-	slog.Info(fmt.Sprintf("  Subnet Mask:    %s", net.IP(config.Network.Mask).String()))
-	slog.Info(fmt.Sprintf("  Gateway:        %s", config.LocalIP.String()))
-	slog.Info(fmt.Sprintf("  MTU:            %d (or lower)", recommendedMTU))
-	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	// Log network settings in a cleaner format with localization
+	for _, line := range localizer.FormatNetworkConfig(ipRangeStart, ipRangeEnd, config.Network.Mask, config.LocalIP, recommendedMTU) {
+		slog.Info(line)
+	}
 }
 
 // calculateIPRange calculates the usable IP range for the given network
@@ -344,10 +347,13 @@ func openConfigInEditor() {
 
 	// Create config if it doesn't exist
 	if !cfg.Exists(cfgFile) {
-		slog.Info("Config file not found, creating a new one", "file", cfgFile)
+		// Use default language for this early message
+		localizer := i18n.NewLocalizer(i18n.DefaultLanguage)
+		msgs := localizer.GetMessages()
+		slog.Info(msgs.ConfigNotFound, "file", cfgFile)
 		err := os.WriteFile(cfgFile, []byte(configData), 0666)
 		if err != nil {
-			slog.Error("write config error", slog.Any("file", cfgFile), slog.Any("err", err))
+			slog.Error(msgs.ConfigWriteError, slog.Any("file", cfgFile), slog.Any("err", err))
 			return
 		}
 	}
@@ -388,9 +394,11 @@ func openConfigInEditor() {
 	cmd.Stderr = os.Stderr
 
 	// Run the editor
-	slog.Info("Opening config in editor", "file", cfgFile)
+	localizer := i18n.NewLocalizer(i18n.DefaultLanguage)
+	msgs := localizer.GetMessages()
+	slog.Info(msgs.OpeningConfig, "file", cfgFile)
 	err = cmd.Run()
 	if err != nil {
-		slog.Error("failed to open editor", slog.Any("err", err))
+		slog.Error(msgs.OpenEditorError, slog.Any("err", err))
 	}
 }

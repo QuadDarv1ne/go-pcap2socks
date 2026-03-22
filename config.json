@@ -30,5 +30,6 @@
   ],
   "capture": {
     "enabled": false
-  }
+  },
+  "language": "en"
 }
