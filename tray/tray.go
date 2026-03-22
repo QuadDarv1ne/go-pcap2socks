@@ -11,8 +11,9 @@ import (
 	"path"
 	"syscall"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/cfg"
-	"github.com/DaniilSokolyuk/go-pcap2socks/notify"
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
+	"github.com/QuadDarv1ne/go-pcap2socks/notify"
 	"github.com/getlantern/systray"
 )
 
@@ -20,9 +21,14 @@ import (
 func Run() {
 	slog.Info("Starting system tray...")
 
+	// Initialize hotkey manager
+	hotkeyMgr := hotkey.NewManager()
+
 	// Run systray in a goroutine
 	go func() {
-		systray.Run(onReady, onExit)
+		systray.Run(func() {
+			onReady(hotkeyMgr)
+		}, onExit)
 	}()
 
 	// Wait for exit signal
@@ -30,11 +36,12 @@ func Run() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
+	hotkeyMgr.Stop()
 	systray.Quit()
 	slog.Info("Tray application exited")
 }
 
-func onReady() {
+func onReady(hotkeyMgr *hotkey.Manager) {
 	systray.SetIcon(getIcon())
 	systray.SetTitle("go-pcap2socks")
 	systray.SetTooltip("go-pcap2socks - SOCKS5 прокси для устройств")
@@ -42,6 +49,14 @@ func onReady() {
 	// Status menu item
 	mStatus := systray.AddMenuItem("Статус: Неизвестно", "")
 	mStatus.Disable()
+
+	systray.AddSeparator()
+
+	// Profile submenu
+	mProfileMenu := systray.AddMenuItem("Профили", "")
+	mProfileDefault := mProfileMenu.AddSubMenuItem("Default", "")
+	mProfileGaming := mProfileMenu.AddSubMenuItem("Gaming", "")
+	mProfileStreaming := mProfileMenu.AddSubMenuItem("Streaming", "")
 
 	systray.AddSeparator()
 
@@ -75,6 +90,45 @@ func onReady() {
 		return
 	}
 	cfgFile := path.Join(path.Dir(executable), "config.json")
+	profilesDir := path.Join(path.Dir(executable), "profiles")
+
+	// Register hotkeys
+	proxyToggled := false
+	hotkeyMgr.RegisterDefaultHotkeys(
+		func() {
+			// Toggle proxy
+			proxyToggled = !proxyToggled
+			if proxyToggled {
+				mStatus.SetTitle("Статус: Запущено (Hotkey)")
+				mStart.Hide()
+				mStop.Show()
+				notify.Show("Горячие клавиши", "Прокси включён", notify.NotifySuccess)
+			} else {
+				mStatus.SetTitle("Статус: Остановлено (Hotkey)")
+				mStop.Hide()
+				mStart.Show()
+				notify.Show("Горячие клавиши", "Прокси выключен", notify.NotifyWarning)
+			}
+		},
+		func() {
+			// Restart service
+			notify.Show("Горячие клавиши", "Перезапуск сервиса", notify.NotifyInfo)
+			mStart.Hide()
+			mStop.Show()
+			mStatus.SetTitle("Статус: Перезапуск...")
+		},
+		func() {
+			// Stop service
+			notify.Show("Горячие клавиши", "Остановка сервиса", notify.NotifyWarning)
+			mStop.Hide()
+			mStart.Show()
+			mStatus.SetTitle("Статус: Остановлено")
+		},
+		func() {
+			// Toggle logs
+			showLogs()
+		},
+	)
 
 	// Handle menu clicks
 	for {
@@ -84,6 +138,15 @@ func onReady() {
 
 		case <-mAutoConfig.ClickedCh:
 			runAutoConfig()
+
+		case <-mProfileDefault.ClickedCh:
+			switchProfile(profilesDir, "default")
+
+		case <-mProfileGaming.ClickedCh:
+			switchProfile(profilesDir, "gaming")
+
+		case <-mProfileStreaming.ClickedCh:
+			switchProfile(profilesDir, "streaming")
 
 		case <-mStart.ClickedCh:
 			mStart.Hide()
@@ -169,4 +232,39 @@ func showLogs() {
 	if err := cmd.Start(); err != nil {
 		slog.Error("open logs error", slog.Any("err", err))
 	}
+}
+
+// switchProfile switches to the specified profile
+func switchProfile(profilesDir, profile string) {
+	profileFile := path.Join(profilesDir, profile+".json")
+	executable, err := os.Executable()
+	if err != nil {
+		slog.Error("get executable error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось переключить профиль", notify.NotifyError)
+		return
+	}
+	cfgFile := path.Join(path.Dir(executable), "config.json")
+
+	// Check if profile exists
+	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+		notify.Show("Профиль", fmt.Sprintf("Профиль '%s' не найден", profile), notify.NotifyWarning)
+		return
+	}
+
+	// Read profile
+	data, err := os.ReadFile(profileFile)
+	if err != nil {
+		slog.Error("read profile error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось прочитать профиль", notify.NotifyError)
+		return
+	}
+
+	// Write to config
+	if err := os.WriteFile(cfgFile, data, 0644); err != nil {
+		slog.Error("write config error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось применить профиль", notify.NotifyError)
+		return
+	}
+
+	notify.Show("Профиль", fmt.Sprintf("Переключено на '%s'. Перезапустите сервис.", profile), notify.NotifySuccess)
 }

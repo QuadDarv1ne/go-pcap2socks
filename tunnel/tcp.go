@@ -1,8 +1,8 @@
 package tunnel
 
 import (
-	"github.com/DaniilSokolyuk/go-pcap2socks/common/pool"
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"gvisor.dev/gvisor/pkg/log"
 	"io"
 	"log/slog"
@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	M "github.com/DaniilSokolyuk/go-pcap2socks/md"
-	"github.com/DaniilSokolyuk/go-pcap2socks/proxy"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
+	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 )
 
 const (

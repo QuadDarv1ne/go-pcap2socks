@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/dialer"
-	M "github.com/DaniilSokolyuk/go-pcap2socks/md"
+	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
 var _ Proxy = (*Socks5WithFallback)(nil)
@@ -97,7 +97,7 @@ func (sf *Socks5WithFallback) dialDirect(ctx context.Context, metadata *M.Metada
 func (sf *Socks5WithFallback) dialUDPDirect(metadata *M.Metadata) (net.PacketConn, error) {
 	atomic.AddInt64(&sf.fallbackCounter, 1)
 
-	address := fmt.Sprintf("%s:%d", metadata.DstIP.String(), metadata.DstPort)
+	address := net.JoinHostPort(metadata.DstIP.String(), fmt.Sprintf("%d", metadata.DstPort))
 	conn, err := net.Dial("udp", address)
 	if err != nil {
 		return nil, err

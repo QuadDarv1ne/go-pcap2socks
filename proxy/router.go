@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/cfg"
-	M "github.com/DaniilSokolyuk/go-pcap2socks/md"
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
 var _ Proxy = (*Router)(nil)

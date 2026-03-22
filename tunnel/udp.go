@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/common/pool"
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/adapter"
-	"github.com/DaniilSokolyuk/go-pcap2socks/proxy"
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	alog "github.com/anacrolix/log"
 	"github.com/anacrolix/upnp"
 )

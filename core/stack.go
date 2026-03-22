@@ -3,8 +3,8 @@ package core
 import (
 	"net"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/adapter"
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/option"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
 
 	"gvisor.dev/gvisor/pkg/tcpip"

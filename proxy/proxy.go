@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	M "github.com/DaniilSokolyuk/go-pcap2socks/md"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
 const (
