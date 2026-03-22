@@ -160,7 +160,7 @@ func createPcapHandle(dev pcap.Interface) (*pcap.InactiveHandle, error) {
 		return nil, fmt.Errorf("set immediate mode error: %w", err)
 	}
 
-	err = handle.SetBufferSize(512 * 1024)
+	err = handle.SetBufferSize(4 * 1024 * 1024) // 4MB buffer for better performance
 	if err != nil {
 		return nil, fmt.Errorf("set buffer size error: %w", err)
 	}
@@ -218,11 +218,56 @@ func (t *PCAP) Read() []byte {
 func (t *PCAP) Write(p []byte) (n int, err error) {
 	err = t.handle.WritePacketData(p)
 	if err != nil {
-		slog.Error("write packet error: %w", slog.Any("err", err))
+		// Check if it's a network adapter disconnected error
+		if isAdapterDisconnected(err) {
+			// Don't log every packet, just log once
+			slog.Warn("Network adapter disconnected, waiting for reconnection...")
+			return 0, nil // Silently drop packets, don't error
+		}
+		slog.Debug("write packet error: %w", slog.Any("err", err))
 		return 0, nil
 	}
 
 	return len(p), nil
+}
+
+// isAdapterDisconnected checks if the error is due to network adapter being disconnected
+func isAdapterDisconnected(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	// Check for common Windows Npcap errors related to adapter disconnection
+	disconnectErrors := []string{
+		"PacketSendPacket failed",
+		"сетевой носитель отключен",
+		"network medium disconnected",
+		"adapter disconnected",
+		"no such device",
+	}
+
+	for _, disconnectErr := range disconnectErrors {
+		if contains(errStr, disconnectErr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// contains is a helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *PCAP) Name() string {

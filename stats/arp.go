@@ -1,0 +1,346 @@
+package stats
+
+import (
+	"bytes"
+	"fmt"
+	"log/slog"
+	"net"
+	"os/exec"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+)
+
+// ARPMonitor monitors ARP table for device discovery
+type ARPMonitor struct {
+	mu         sync.RWMutex
+	network    *net.IPNet
+	localIP    net.IP
+	devices    map[string]*DeviceStats
+	stopChan   chan struct{}
+	interval   time.Duration
+	callbacks  []func(DeviceChange)
+}
+
+// DeviceChange represents a device connection change
+type DeviceChange struct {
+	Type    string // "connected" or "disconnected"
+	IP      string
+	MAC     string
+	Device  *DeviceStats
+}
+
+// NewARPMonitor creates a new ARP monitor
+func NewARPMonitor(network *net.IPNet, localIP net.IP) *ARPMonitor {
+	return &ARPMonitor{
+		network:  network,
+		localIP:  localIP,
+		devices:  make(map[string]*DeviceStats),
+		stopChan: make(chan struct{}),
+		interval: 5 * time.Second,
+	}
+}
+
+// Start starts the ARP monitoring
+func (m *ARPMonitor) Start(store *Store) {
+	slog.Info("Starting ARP monitor", "network", m.network.String())
+	
+	go func() {
+		ticker := time.NewTicker(m.interval)
+		defer ticker.Stop()
+		
+		for {
+			select {
+			case <-ticker.C:
+				m.scan(store)
+			case <-m.stopChan:
+				slog.Info("ARP monitor stopped")
+				return
+			}
+		}
+	}()
+}
+
+// Stop stops the ARP monitoring
+func (m *ARPMonitor) Stop() {
+	close(m.stopChan)
+}
+
+// scan scans the ARP table for devices
+func (m *ARPMonitor) scan(store *Store) {
+	entries, err := m.getARPTable()
+	if err != nil {
+		slog.Debug("ARP scan error", "err", err)
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	currentIPs := make(map[string]bool)
+
+	for _, entry := range entries {
+		if !m.network.Contains(entry.IP) {
+			continue
+		}
+
+		// Skip local IP
+		if entry.IP.Equal(m.localIP) {
+			continue
+		}
+
+		currentIPs[entry.IP.String()] = true
+
+		// Check if device is new
+		if _, exists := m.devices[entry.IP.String()]; !exists {
+			// New device discovered!
+			device := &DeviceStats{
+				IP:           entry.IP.String(),
+				MAC:          entry.MAC.String(),
+				Connected:    true,
+				LastSeen:     time.Now(),
+				SessionStart: time.Now(),
+			}
+
+			m.devices[entry.IP.String()] = device
+			store.UpdateHeartbeat(entry.IP.String(), entry.MAC.String())
+
+			slog.Info("New device discovered", "ip", entry.IP, "mac", entry.MAC)
+			m.notifyChange(DeviceChange{
+				Type:   "connected",
+				IP:     entry.IP.String(),
+				MAC:    entry.MAC.String(),
+				Device: device,
+			})
+		} else {
+			// Update existing device
+			device := m.devices[entry.IP.String()]
+			device.mu.Lock()
+			device.LastSeen = time.Now()
+			device.Connected = true
+			device.MAC = entry.MAC.String()
+			device.mu.Unlock()
+			store.UpdateHeartbeat(entry.IP.String(), entry.MAC.String())
+		}
+	}
+
+	// Check for disconnected devices
+	for ip, device := range m.devices {
+		if !currentIPs[ip] {
+			device.mu.Lock()
+			if device.Connected {
+				device.Connected = false
+				slog.Info("Device disconnected", "ip", ip, "mac", device.MAC)
+				m.notifyChange(DeviceChange{
+					Type:   "disconnected",
+					IP:     ip,
+					MAC:    device.MAC,
+					Device: device,
+				})
+			}
+			device.mu.Unlock()
+			store.SetDisconnected(ip)
+		}
+	}
+}
+
+// ARPEntry represents a single ARP table entry
+type ARPEntry struct {
+	IP  net.IP
+	MAC net.HardwareAddr
+}
+
+// getARPTable gets the system ARP table
+func (m *ARPMonitor) getARPTable() ([]ARPEntry, error) {
+	var cmd *exec.Cmd
+	var parseFunc func([]byte) ([]ARPEntry, error)
+
+	switch {
+	case isWindows():
+		cmd = exec.Command("arp", "-a")
+		parseFunc = parseWindowsARP
+	case isLinux():
+		cmd = exec.Command("ip", "neigh")
+		parseFunc = parseLinuxARP
+	case isMacOS():
+		cmd = exec.Command("arp", "-a")
+		parseFunc = parseMacOSARP
+	default:
+		return nil, fmt.Errorf("unsupported OS")
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	return parseFunc(output)
+}
+
+// parseWindowsARP parses Windows arp -a output
+func parseWindowsARP(output []byte) ([]ARPEntry, error) {
+	entries := []ARPEntry{}
+	lines := strings.Split(string(output), "\n")
+
+	// Regex for Windows ARP output: 192.168.1.100    00-11-22-33-44-55
+	ipRegex := regexp.MustCompile(`(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17})`)
+
+	for _, line := range lines {
+		matches := ipRegex.FindStringSubmatch(line)
+		if len(matches) >= 3 {
+			ip := net.ParseIP(matches[1])
+			macStr := strings.Replace(matches[2], "-", ":", -1)
+			mac, err := net.ParseMAC(macStr)
+			if err == nil {
+				entries = append(entries, ARPEntry{IP: ip, MAC: mac})
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+// parseLinuxARP parses Linux ip neigh output
+func parseLinuxARP(output []byte) ([]ARPEntry, error) {
+	entries := []ARPEntry{}
+	lines := strings.Split(string(output), "\n")
+
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 3 {
+			ip := net.ParseIP(parts[0])
+			mac, err := net.ParseMAC(parts[2])
+			if err == nil && ip != nil {
+				entries = append(entries, ARPEntry{IP: ip, MAC: mac})
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+// parseMacOSARP parses macOS arp -a output
+func parseMacOSARP(output []byte) ([]ARPEntry, error) {
+	entries := []ARPEntry{}
+	lines := strings.Split(string(output), "\n")
+
+	// Regex for macOS ARP: ? (192.168.1.100) at 00:11:22:33:44:55
+	ipRegex := regexp.MustCompile(`\? \((\d+\.\d+\.\d+\.\d+)\) at ([0-9a-fA-F:]{17})`)
+
+	for _, line := range lines {
+		matches := ipRegex.FindStringSubmatch(line)
+		if len(matches) >= 3 {
+			ip := net.ParseIP(matches[1])
+			mac, err := net.ParseMAC(matches[2])
+			if err == nil {
+				entries = append(entries, ARPEntry{IP: ip, MAC: mac})
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+// OnChange registers a callback for device changes
+func (m *ARPMonitor) OnChange(callback func(DeviceChange)) {
+	m.callbacks = append(m.callbacks, callback)
+}
+
+func (m *ARPMonitor) notifyChange(change DeviceChange) {
+	for _, cb := range m.callbacks {
+		go cb(change)
+	}
+}
+
+// GetDevices returns all discovered devices
+func (m *ARPMonitor) GetDevices() []*DeviceStats {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	devices := make([]*DeviceStats, 0, len(m.devices))
+	for _, device := range m.devices {
+		devices = append(devices, device)
+	}
+	return devices
+}
+
+// Helper functions to detect OS
+func isWindows() bool {
+	return isWindowsPlatform()
+}
+
+func isLinux() bool {
+	data, err := osReadFile("/etc/os-release")
+	return err == nil && bytes.Contains(data, []byte("Linux"))
+}
+
+func isMacOS() bool {
+	cmd := exec.Command("uname", "-s")
+	output, err := cmd.Output()
+	return err == nil && bytes.Contains(output, []byte("Darwin"))
+}
+
+// Wrapper for testing
+func isWindowsPlatform() bool {
+	cmd := exec.Command("cmd", "/c", "ver")
+	err := cmd.Run()
+	return err == nil
+}
+
+func osReadFile(path string) ([]byte, error) {
+	data, err := exec.Command("cat", path).Output()
+	return data, err
+}
+
+// FormatMAC formats MAC address for display
+func FormatMAC(mac net.HardwareAddr) string {
+	if mac == nil {
+		return "00:00:00:00:00:00"
+	}
+	return strings.ToUpper(mac.String())
+}
+
+// IsPrivateIP checks if an IP is in private range
+func IsPrivateIP(ip net.IP) bool {
+	privateRanges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+	}
+
+	for _, cidr := range privateRanges {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// GenerateMACHostname generates a hostname from MAC address
+func GenerateMACHostname(mac net.HardwareAddr) string {
+	if mac == nil || len(mac) < 3 {
+		return "Unknown"
+	}
+	
+	// Use OUI (first 3 bytes) to identify manufacturer
+	oui := fmt.Sprintf("%02X%02X%02X", mac[0], mac[1], mac[2])
+	
+	// Common OUI mappings
+	ouiMap := map[string]string{
+		"78C881": "Sony",      // PlayStation
+		"B025AA": "Realtek",   // Common Ethernet
+		"00155D": "Microsoft", // Hyper-V
+		"0A0027": "VirtualBox",
+	}
+	
+	if manufacturer, ok := ouiMap[oui]; ok {
+		return manufacturer
+	}
+	
+	return fmt.Sprintf("Device-%s", oui)
+}

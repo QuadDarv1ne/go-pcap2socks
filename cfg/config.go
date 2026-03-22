@@ -37,15 +37,18 @@ func Load(filePath string) (*Config, error) {
 }
 
 type Config struct {
-	ExecuteOnStart []string `json:"executeOnStart"`
-	PCAP           PCAP     `json:"pcap"`
-	DNS            DNS      `json:"dns"`
+	ExecuteOnStart []string  `json:"executeOnStart,omitempty"`
+	PCAP           PCAP      `json:"pcap"`
+	DNS            DNS       `json:"dns"`
 	Routing        struct {
 		Rules []Rule `json:"rules"`
 	} `json:"routing"`
 	Outbounds []Outbound `json:"outbounds"`
 	Capture   Capture    `json:"capture,omitempty"`
 	Language  string     `json:"language,omitempty"`
+	Telegram  *Telegram  `json:"telegram,omitempty"`
+	Discord   *Discord   `json:"discord,omitempty"`
+	Hotkey    *Hotkey    `json:"hotkey,omitempty"`
 }
 
 type PCAP struct {
@@ -96,8 +99,8 @@ type OutboundReject struct{}
 
 type OutboundSocks struct {
 	Address  string `json:"address"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 type OutboundDNS struct{}
@@ -105,12 +108,30 @@ type OutboundDNS struct{}
 type DNS struct {
 	Servers []struct {
 		Address string `json:"address"`
-	}
+	} `json:"servers"`
 }
 
 type Capture struct {
-	Enabled    bool   `json:"enabled"`
-	OutputFile string `json:"outputFile"`
+	Enabled    bool   `json:"enabled,omitempty"`
+	OutputFile string `json:"outputFile,omitempty"`
+}
+
+// Telegram holds Telegram bot configuration
+type Telegram struct {
+	Token  string `json:"token"`
+	ChatID string `json:"chat_id"`
+}
+
+// Discord holds Discord webhook configuration
+type Discord struct {
+	WebhookURL string `json:"webhook_url"`
+	Username   string `json:"username,omitempty"`
+}
+
+// Hotkey holds hotkey configuration
+type Hotkey struct {
+	Enabled bool   `json:"enabled"`
+	Toggle  string `json:"toggle,omitempty"`
 }
 
 func mustToNetIP(addrs []string) []net.IPNet {
