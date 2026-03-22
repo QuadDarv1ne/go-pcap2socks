@@ -32,3 +32,10 @@ go-pcap2socks
 go-pcap2socks-*
 go_build_*
 -h
+
+# Logs and temporary files
+logs.txt
+$null
+
+# AI/editor files
+CLAUDE.md
