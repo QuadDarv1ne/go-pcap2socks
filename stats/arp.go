@@ -98,6 +98,7 @@ func (m *ARPMonitor) scan(store *Store) {
 			device := &DeviceStats{
 				IP:           entry.IP.String(),
 				MAC:          entry.MAC.String(),
+				Hostname:     GenerateMACHostname(entry.MAC),
 				Connected:    true,
 				LastSeen:     time.Now(),
 				SessionStart: time.Now(),
@@ -106,7 +107,7 @@ func (m *ARPMonitor) scan(store *Store) {
 			m.devices[entry.IP.String()] = device
 			store.UpdateHeartbeat(entry.IP.String(), entry.MAC.String())
 
-			slog.Info("New device discovered", "ip", entry.IP, "mac", entry.MAC)
+			slog.Info("New device discovered", "ip", entry.IP, "mac", entry.MAC, "hostname", device.Hostname)
 			m.notifyChange(DeviceChange{
 				Type:   "connected",
 				IP:     entry.IP.String(),
@@ -120,6 +121,9 @@ func (m *ARPMonitor) scan(store *Store) {
 			device.LastSeen = time.Now()
 			device.Connected = true
 			device.MAC = entry.MAC.String()
+			if device.Hostname == "" {
+				device.Hostname = GenerateMACHostname(entry.MAC)
+			}
 			device.mu.Unlock()
 			store.UpdateHeartbeat(entry.IP.String(), entry.MAC.String())
 		}
@@ -319,28 +323,4 @@ func IsPrivateIP(ip net.IP) bool {
 		}
 	}
 	return false
-}
-
-// GenerateMACHostname generates a hostname from MAC address
-func GenerateMACHostname(mac net.HardwareAddr) string {
-	if mac == nil || len(mac) < 3 {
-		return "Unknown"
-	}
-	
-	// Use OUI (first 3 bytes) to identify manufacturer
-	oui := fmt.Sprintf("%02X%02X%02X", mac[0], mac[1], mac[2])
-	
-	// Common OUI mappings
-	ouiMap := map[string]string{
-		"78C881": "Sony",      // PlayStation
-		"B025AA": "Realtek",   // Common Ethernet
-		"00155D": "Microsoft", // Hyper-V
-		"0A0027": "VirtualBox",
-	}
-	
-	if manufacturer, ok := ouiMap[oui]; ok {
-		return manufacturer
-	}
-	
-	return fmt.Sprintf("Device-%s", oui)
 }

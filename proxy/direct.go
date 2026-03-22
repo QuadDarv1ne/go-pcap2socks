@@ -4,8 +4,8 @@ import (
 	"context"
 	"net"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/dialer"
-	M "github.com/DaniilSokolyuk/go-pcap2socks/md"
+	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
 var _ Proxy = (*Direct)(nil)

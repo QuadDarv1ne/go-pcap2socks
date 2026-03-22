@@ -3,33 +3,40 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"context"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/api"
-	"github.com/DaniilSokolyuk/go-pcap2socks/cfg"
-	"github.com/DaniilSokolyuk/go-pcap2socks/core"
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/device"
-	"github.com/DaniilSokolyuk/go-pcap2socks/discord"
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/option"
-	"github.com/DaniilSokolyuk/go-pcap2socks/i18n"
-	"github.com/DaniilSokolyuk/go-pcap2socks/notify"
-	"github.com/DaniilSokolyuk/go-pcap2socks/proxy"
-	"github.com/DaniilSokolyuk/go-pcap2socks/service"
-	"github.com/DaniilSokolyuk/go-pcap2socks/stats"
-	"github.com/DaniilSokolyuk/go-pcap2socks/telegram"
-	"github.com/DaniilSokolyuk/go-pcap2socks/tray"
-	"github.com/DaniilSokolyuk/go-pcap2socks/upnp"
+	"github.com/QuadDarv1ne/go-pcap2socks/api"
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/core"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
+	"github.com/QuadDarv1ne/go-pcap2socks/discord"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
+	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
+	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
+	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
+	"github.com/QuadDarv1ne/go-pcap2socks/notify"
+	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
+	"github.com/QuadDarv1ne/go-pcap2socks/service"
+	"github.com/QuadDarv1ne/go-pcap2socks/stats"
+	"github.com/QuadDarv1ne/go-pcap2socks/telegram"
+	"github.com/QuadDarv1ne/go-pcap2socks/tray"
+	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
+	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
+	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	"github.com/jackpal/gateway"
 	"golang.org/x/sys/windows/svc"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -98,6 +105,12 @@ func main() {
 			return
 		case "service":
 			runService()
+			return
+		case "check-update":
+			checkUpdate()
+			return
+		case "update":
+			doUpdate()
 			return
 		}
 	}
@@ -238,6 +251,10 @@ func main() {
 		
 		_telegramBot.Start()
 		slog.Info("Telegram bot initialized")
+
+		// Start periodic reports (every 24 hours)
+		_telegramBot.StartPeriodicReports(24 * time.Hour)
+		slog.Info("Periodic Telegram reports scheduled (24h interval)")
 	}
 
 	// Initialize Discord webhook if configured
@@ -245,6 +262,63 @@ func main() {
 		_discordWebhook = discord.NewWebhookClient(config.Discord.WebhookURL)
 		_discordWebhook.(*discord.WebhookClient).SendInfo("🚀 go-pcap2socks", "Бот запущен!")
 		slog.Info("Discord webhook initialized")
+	}
+
+	// Initialize hotkeys if enabled
+	hotkeysEnabled := config.Hotkey != nil && config.Hotkey.Enabled
+	if hotkeysEnabled {
+		_hotkeyManager = hotkey.NewManager()
+		_hotkeyManager.RegisterDefaultHotkeys(
+			func() {
+				// Toggle proxy
+				slog.Info("Hotkey: Toggle proxy")
+				notify.Show("Горячие клавиши", "Переключение прокси", notify.NotifyInfo)
+				// Toggle proxy mode in default proxy
+				if _defaultProxy != nil {
+					currentMode := _defaultProxy.Mode().String()
+					slog.Info("Proxy toggle", "current_mode", currentMode)
+				}
+			},
+			func() {
+				// Restart service
+				slog.Info("Hotkey: Restart service")
+				notify.Show("Горячие клавиши", "Перезапуск сервиса", notify.NotifyInfo)
+				// Service restart would require service package integration
+			},
+			func() {
+				// Stop service
+				slog.Info("Hotkey: Stop service")
+				notify.Show("Горячие клавиши", "Остановка сервиса", notify.NotifyWarning)
+			},
+			func() {
+				// Toggle logs
+				slog.Info("Hotkey: Toggle logs")
+				notify.Show("Горячие клавиши", "Переключение логов", notify.NotifyInfo)
+			},
+		)
+		slog.Info("Hotkeys initialized")
+	}
+
+	// Initialize profile manager
+	_profileManager, err = profiles.NewManager()
+	if err != nil {
+		slog.Warn("Profile manager initialization error", "err", err)
+	} else {
+		// Create default profiles if they don't exist
+		if err := _profileManager.CreateDefaultProfiles(); err != nil {
+			slog.Warn("Create default profiles error", "err", err)
+		}
+		slog.Info("Profile manager initialized")
+	}
+
+	// Initialize UPnP manager
+	if config.UPnP != nil && config.UPnP.Enabled {
+		_upnpManager = upnpmanager.NewManager(config.UPnP, config.PCAP.LocalIP)
+		if _upnpManager != nil {
+			if err := _upnpManager.Start(); err != nil {
+				slog.Warn("UPnP manager start failed", "err", err)
+			}
+		}
 	}
 
 	if len(config.ExecuteOnStart) > 0 {
@@ -279,10 +353,47 @@ func main() {
 		return
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(msgs.HelloWorld))
-	})
-	log.Fatal(http.ListenAndServe(":8085", nil))
+	// Mark as running
+	_running = true
+
+	// Initialize shutdown channel
+	_shutdownChan = make(chan struct{})
+
+	// Start hotkey manager if enabled
+	if _hotkeyManager != nil {
+		go _hotkeyManager.StartMessageLoop()
+		slog.Info("Hotkey message loop started")
+	}
+
+	// Setup HTTP server with graceful shutdown
+	_httpServer = &http.Server{
+		Addr: ":8085",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(msgs.HelloWorld))
+		}),
+	}
+
+	// Start HTTP server in goroutine
+	go func() {
+		slog.Info("HTTP server starting on :8085")
+		if err := _httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("HTTP server error", slog.Any("err", err))
+		}
+	}()
+
+	// Wait for shutdown signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case <-sigChan:
+		slog.Info("Received shutdown signal")
+	case <-_shutdownChan:
+		slog.Info("Shutdown channel closed")
+	}
+
+	// Perform graceful shutdown
+	Stop()
 }
 
 func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
@@ -369,11 +480,98 @@ var (
 
 	// _discordWebhook holds the Discord webhook client
 	_discordWebhook interface{} // *discord.WebhookClient
+
+	// _hotkeyManager holds the hotkey manager
+	_hotkeyManager *hotkey.Manager
+
+	// _profileManager holds the profile manager
+	_profileManager *profiles.Manager
+
+	// _shutdownChan is used for graceful shutdown
+	_shutdownChan chan struct{}
+
+	// _httpServer holds the HTTP server for graceful shutdown
+	_httpServer *http.Server
+
+	// _running indicates if the service is running
+	_running bool
+
+	// _upnpManager holds the UPnP manager
+	_upnpManager *upnpmanager.Manager
 )
 
 // GetStatsStore returns the global statistics store
 func GetStatsStore() *stats.Store {
 	return _statsStore
+}
+
+// GetProfileManager returns the global profile manager
+func GetProfileManager() *profiles.Manager {
+	return _profileManager
+}
+
+// GetUPnPManager returns the global UPnP manager
+func GetUPnPManager() *upnpmanager.Manager {
+	return _upnpManager
+}
+
+// GetShutdownChan returns the shutdown channel
+func GetShutdownChan() <-chan struct{} {
+	return _shutdownChan
+}
+
+// IsRunning returns the running state
+func IsRunning() bool {
+	return _running
+}
+
+// Stop stops the service gracefully
+func Stop() {
+	slog.Info("Stopping service...")
+	_running = false
+
+	// Close HTTP server
+	if _httpServer != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := _httpServer.Shutdown(shutdownCtx); err != nil {
+			slog.Error("HTTP server shutdown error", slog.Any("err", err))
+		}
+	}
+
+	// Stop ARP monitor
+	if _arpMonitor != nil {
+		_arpMonitor.Stop()
+		slog.Info("ARP monitor stopped")
+	}
+
+	// Stop Telegram bot
+	if _telegramBot != nil {
+		_telegramBot.Stop()
+		slog.Info("Telegram bot stopped")
+	}
+
+	// Stop stack (close device)
+	if _defaultStack != nil {
+		_defaultStack.Close()
+		slog.Info("Stack closed")
+	}
+
+	// Close device
+	if _defaultDevice != nil {
+		_defaultDevice.Close()
+		slog.Info("Device closed")
+	}
+
+	// Stop UPnP manager
+	if _upnpManager != nil {
+		_upnpManager.Stop()
+		slog.Info("UPnP manager stopped")
+	}
+
+	// Signal shutdown complete
+	close(_shutdownChan)
+	slog.Info("Service stopped gracefully")
 }
 
 func findInterface(cfgIfce string, localizer *i18n.Localizer) net.Interface {
@@ -795,15 +993,26 @@ func runTray() {
 // runWebServer starts the web server with API
 func runWebServer() {
 	slog.Info("Starting web server on :8080...")
-	
+
 	// Create stats store
 	statsStore := stats.NewStore()
-	
-	// Create API server
-	apiServer := api.NewServer(statsStore)
-	
+
+	// Initialize profile manager
+	profileMgr, err := profiles.NewManager()
+	if err != nil {
+		slog.Warn("Profile manager initialization error", "err", err)
+	}
+	if profileMgr != nil {
+		if err := profileMgr.CreateDefaultProfiles(); err != nil {
+			slog.Warn("Create default profiles error", "err", err)
+		}
+	}
+
+	// Create API server with profile manager (UPnP not available in standalone mode)
+	apiServer := api.NewServer(statsStore, profileMgr, nil)
+
 	// Start HTTP server
-	err := http.ListenAndServe(":8080", apiServer)
+	err = http.ListenAndServe(":8080", apiServer)
 	if err != nil {
 		slog.Error("web server error", slog.Any("err", err))
 	}
@@ -812,15 +1021,26 @@ func runWebServer() {
 // runAPIServer starts only the API server (no web UI)
 func runAPIServer() {
 	slog.Info("Starting API server on :8081...")
-	
+
 	// Create stats store
 	statsStore := stats.NewStore()
+
+	// Initialize profile manager
+	profileMgr, err := profiles.NewManager()
+	if err != nil {
+		slog.Warn("Profile manager initialization error", "err", err)
+	}
+	if profileMgr != nil {
+		if err := profileMgr.CreateDefaultProfiles(); err != nil {
+			slog.Warn("Create default profiles error", "err", err)
+		}
+	}
 	
-	// Create API server
-	apiServer := api.NewServer(statsStore)
-	
+	// Create API server with profile manager (UPnP not available in standalone mode)
+	apiServer := api.NewServer(statsStore, profileMgr, nil)
+
 	// Start HTTP server
-	err := http.ListenAndServe(":8081", apiServer)
+	err = http.ListenAndServe(":8081", apiServer)
 	if err != nil {
 		slog.Error("api server error", slog.Any("err", err))
 	}
@@ -987,4 +1207,75 @@ func runWithRecovery(config *cfg.Config, localizer *i18n.Localizer) (err error) 
 	}()
 
 	return run(config, localizer)
+}
+
+// checkUpdate checks for available updates
+func checkUpdate() {
+	updater := updaterpkg.NewUpdater("v3.1")
+	
+	slog.Info("Checking for updates...")
+	release, isNewer, err := updater.CheckForUpdates()
+	if err != nil {
+		slog.Error("Update check failed", slog.Any("err", err))
+		fmt.Printf("Error checking for updates: %v\n", err)
+		return
+	}
+
+	if isNewer {
+		fmt.Printf("\n✅ New version available: %s\n", release.TagName)
+		fmt.Printf("   Current version: v3.1\n")
+		fmt.Printf("   Released: %s\n", release.PublishedAt)
+		fmt.Printf("   URL: %s\n\n", release.HTMLURL)
+		fmt.Println("Run 'go-pcap2socks update' to install the update.")
+	} else {
+		fmt.Printf("\n✅ You are running the latest version: %s\n\n", release.TagName)
+	}
+}
+
+// doUpdate downloads and installs the latest update
+func doUpdate() {
+	updater := updaterpkg.NewUpdater("v3.1")
+	
+	slog.Info("Checking for updates...")
+	release, isNewer, err := updater.CheckForUpdates()
+	if err != nil {
+		slog.Error("Update check failed", slog.Any("err", err))
+		fmt.Printf("Error checking for updates: %v\n", err)
+		return
+	}
+
+	if !isNewer {
+		fmt.Printf("\n✅ You are already running the latest version: %s\n\n", release.TagName)
+		return
+	}
+
+	fmt.Printf("\n📥 Downloading update %s...\n", release.TagName)
+	
+	tempFile, err := updater.DownloadUpdate(release)
+	if err != nil {
+		slog.Error("Download failed", slog.Any("err", err))
+		fmt.Printf("Error downloading update: %v\n", err)
+		return
+	}
+
+	fmt.Println("📦 Applying update...")
+	
+	if err := updater.ApplyUpdate(release.TagName); err != nil {
+		slog.Error("Update apply failed", slog.Any("err", err))
+		fmt.Printf("Error applying update: %v\n", err)
+		os.Remove(tempFile)
+		return
+	}
+
+	fmt.Println("✅ Update installed successfully!")
+	fmt.Println("   Restarting application...")
+	
+	// Small delay before restart
+	time.Sleep(2 * time.Second)
+	
+	if err := updaterpkg.Restart(); err != nil {
+		slog.Error("Restart failed", slog.Any("err", err))
+		fmt.Printf("Update installed but restart failed: %v\n", err)
+		fmt.Println("Please restart the application manually.")
+	}
 }

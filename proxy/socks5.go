@@ -7,9 +7,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/dialer"
-	M "github.com/DaniilSokolyuk/go-pcap2socks/md"
-	socks5 "github.com/DaniilSokolyuk/go-pcap2socks/transport"
+	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
+	socks5 "github.com/QuadDarv1ne/go-pcap2socks/transport"
 )
 
 var _ Proxy = (*Socks5)(nil)

@@ -28,10 +28,14 @@ func Load(filePath string) (*Config, error) {
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode config: %w", err)
 	}
 
 	config.Normalize()
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
+	}
 
 	return config, nil
 }
@@ -49,6 +53,7 @@ type Config struct {
 	Telegram  *Telegram  `json:"telegram,omitempty"`
 	Discord   *Discord   `json:"discord,omitempty"`
 	Hotkey    *Hotkey    `json:"hotkey,omitempty"`
+	UPnP      *UPnP      `json:"upnp,omitempty"`
 }
 
 type PCAP struct {
@@ -63,6 +68,58 @@ func (c *Config) Normalize() {
 	for i := range c.Routing.Rules {
 		c.Routing.Rules[i].Normalize()
 	}
+}
+
+// Validate validates the configuration
+func (c *Config) Validate() error {
+	// Validate PCAP config
+	if c.PCAP.Network != "" {
+		if _, _, err := net.ParseCIDR(c.PCAP.Network); err != nil {
+			return fmt.Errorf("invalid pcap.network: %w", err)
+		}
+	}
+
+	if c.PCAP.LocalIP != "" {
+		if ip := net.ParseIP(c.PCAP.LocalIP); ip == nil {
+			return fmt.Errorf("invalid pcap.localIP: %s", c.PCAP.LocalIP)
+		}
+	}
+
+	if c.PCAP.MTU == 0 {
+		c.PCAP.MTU = 1500 // Default MTU
+	}
+
+	// Validate DNS config
+	if len(c.DNS.Servers) == 0 {
+		c.DNS.Servers = []DNSServer{
+			{Address: "8.8.8.8:53", Type: DNSPlain},
+			{Address: "1.1.1.1:53", Type: DNSPlain},
+		}
+	}
+
+	// Validate outbounds
+	if len(c.Outbounds) == 0 {
+		return fmt.Errorf("no outbounds configured")
+	}
+
+	// Validate Telegram config (optional)
+	if c.Telegram != nil {
+		if c.Telegram.Token != "" && c.Telegram.ChatID == "" {
+			return fmt.Errorf("telegram.token set but telegram.chat_id is empty")
+		}
+		if c.Telegram.ChatID != "" && c.Telegram.Token == "" {
+			return fmt.Errorf("telegram.chat_id set but telegram.token is empty")
+		}
+	}
+
+	// Validate Discord config (optional)
+	if c.Discord != nil && c.Discord.WebhookURL != "" {
+		if !strings.HasPrefix(c.Discord.WebhookURL, "https://discord.com/api/webhooks/") {
+			return fmt.Errorf("invalid discord.webhook_url format")
+		}
+	}
+
+	return nil
 }
 
 type Rule struct {
@@ -105,10 +162,25 @@ type OutboundSocks struct {
 
 type OutboundDNS struct{}
 
+// DNSServerType defines the type of DNS server
+type DNSServerType string
+
+const (
+	DNSPlain   DNSServerType = "plain"
+	DNSOverTLS DNSServerType = "tls"
+	DNSOverHTTPS DNSServerType = "https"
+)
+
+// DNSServer represents a DNS server configuration
+type DNSServer struct {
+	Address  string        `json:"address"`           // e.g. "8.8.8.8:53" or "https://dns.google/dns-query"
+	Type     DNSServerType `json:"type,omitempty"`    // "plain", "tls", "https"
+	ServerName string      `json:"server_name,omitempty"` // TLS server name (SNI)
+	SkipVerify bool        `json:"skip_verify,omitempty"` // Skip TLS verification
+}
+
 type DNS struct {
-	Servers []struct {
-		Address string `json:"address"`
-	} `json:"servers"`
+	Servers []DNSServer `json:"servers"`
 }
 
 type Capture struct {
@@ -132,6 +204,23 @@ type Discord struct {
 type Hotkey struct {
 	Enabled bool   `json:"enabled"`
 	Toggle  string `json:"toggle,omitempty"`
+}
+
+// UPnP holds UPnP port forwarding configuration
+type UPnP struct {
+	Enabled        bool              `json:"enabled"`
+	AutoForward    bool              `json:"autoForward"`
+	LeaseDuration  int               `json:"leaseDuration,omitempty"` // seconds, 0 = infinite
+	PortMappings   []PortMapping     `json:"portMappings,omitempty"`
+	GamePresets    map[string][]int  `json:"gamePresets,omitempty"`
+}
+
+// PortMapping defines a single port mapping
+type PortMapping struct {
+	Protocol     string `json:"protocol"` // "TCP", "UDP", or "both"
+	ExternalPort int    `json:"externalPort"`
+	InternalPort int    `json:"internalPort"`
+	Description  string `json:"description,omitempty"`
 }
 
 func mustToNetIP(addrs []string) []net.IPNet {

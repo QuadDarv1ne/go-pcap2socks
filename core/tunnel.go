@@ -1,8 +1,8 @@
 package core
 
 import (
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/adapter"
-	"github.com/DaniilSokolyuk/go-pcap2socks/tunnel"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
 )
 
 var _ adapter.TransportHandler = (*Tunnel)(nil)

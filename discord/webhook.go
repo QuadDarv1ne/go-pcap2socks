@@ -13,6 +13,8 @@ type WebhookClient struct {
 	webhookURL string
 	httpClient *http.Client
 	enabled    bool
+	// Status handler for external requests
+	statusHandler func() string
 }
 
 // Embed represents a Discord embed
@@ -196,6 +198,19 @@ func (w *WebhookClient) IsEnabled() bool {
 // TestConnection tests the webhook connection
 func (w *WebhookClient) TestConnection() error {
 	return w.SendInfo("✅ Тест подключения", "Discord webhook работает корректно!")
+}
+
+// SetStatusHandler sets the status handler callback
+func (w *WebhookClient) SetStatusHandler(handler func() string) {
+	w.statusHandler = handler
+}
+
+// GetStatusMessage returns the current status message
+func (w *WebhookClient) GetStatusMessage() string {
+	if w.statusHandler != nil {
+		return w.statusHandler()
+	}
+	return "Status handler not configured"
 }
 
 // Log sends a log message to Discord

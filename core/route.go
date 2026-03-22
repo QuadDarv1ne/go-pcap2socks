@@ -1,7 +1,7 @@
 package core
 
 import (
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/option"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"

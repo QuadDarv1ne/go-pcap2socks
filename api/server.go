@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -9,15 +10,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/stats"
+	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
+	"github.com/QuadDarv1ne/go-pcap2socks/stats"
+	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 )
 
 type Server struct {
-	mux        *http.ServeMux
-	statsStore *stats.Store
-	configPath string
-	mu         sync.RWMutex
-	enabled    bool
+	mux          *http.ServeMux
+	statsStore   *stats.Store
+	profileMgr   *profiles.Manager
+	upnpMgr      *upnpmanager.Manager
+	configPath   string
+	mu           sync.RWMutex
+	enabled      bool
 }
 
 type APIResponse struct {
@@ -50,7 +55,7 @@ type Traffic struct {
 	Packets   uint64 `json:"packets"`
 }
 
-func NewServer(statsStore *stats.Store) *Server {
+func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager) *Server {
 	executable, _ := os.Executable()
 	cfgFile := path.Join(path.Dir(executable), "config.json")
 
@@ -61,10 +66,12 @@ func NewServer(statsStore *stats.Store) *Server {
 	}
 
 	s := &Server{
-		mux:        http.NewServeMux(),
-		statsStore: statsStore,
-		configPath: cfgFile,
-		enabled:    true,
+		mux:          http.NewServeMux(),
+		statsStore:   statsStore,
+		profileMgr:   profileMgr,
+		upnpMgr:      upnpMgr,
+		configPath:   cfgFile,
+		enabled:      true,
 	}
 
 	s.setupRoutes()
@@ -86,29 +93,37 @@ func (s *Server) setupRoutes() {
 	// Traffic endpoints
 	s.mux.HandleFunc("/api/traffic", s.handleTraffic)
 	s.mux.HandleFunc("/api/traffic/export", s.handleTrafficExport)
-	
+
+	// Logs endpoints
+	s.mux.HandleFunc("/api/logs", s.handleLogs)
+	s.mux.HandleFunc("/api/logs/export", s.handleLogsExport)
+
 	// Device endpoints
 	s.mux.HandleFunc("/api/devices", s.handleDevices)
-	
+
 	// Config endpoints
 	s.mux.HandleFunc("/api/config", s.handleConfig)
 	s.mux.HandleFunc("/api/config/update", s.handleConfigUpdate)
-	
+	s.mux.HandleFunc("/api/config/reload", s.handleConfigReload)
+
 	// Profile endpoints
 	s.mux.HandleFunc("/api/profiles", s.handleProfiles)
 	s.mux.HandleFunc("/api/profiles/switch", s.handleProfileSwitch)
-	
+
 	// UPnP endpoints
 	s.mux.HandleFunc("/api/upnp", s.handleUPnP)
 	s.mux.HandleFunc("/api/upnp/discover", s.handleUPnPDiscover)
-	
+	s.mux.HandleFunc("/api/upnp/add", s.handleUPnPAddPort)
+	s.mux.HandleFunc("/api/upnp/remove", s.handleUPnPRemovePort)
+	s.mux.HandleFunc("/api/upnp/apply", s.handleUPnPApplyMappings)
+
 	// Hotkey endpoints
 	s.mux.HandleFunc("/api/hotkey", s.handleHotkey)
 	s.mux.HandleFunc("/api/hotkey/toggle", s.handleHotkeyToggle)
-	
+
 	// WebSocket endpoint
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
-	
+
 	// Static files (web UI)
 	s.mux.HandleFunc("/", s.handleStatic)
 }
@@ -191,6 +206,59 @@ func (s *Server) handleTrafficExport(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(csvData))
 }
 
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get last N lines from logs.txt
+	logPath := path.Join(path.Dir(s.configPath), "logs.txt")
+	lines, err := readLastLines(logPath, 100)
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.sendSuccess(w, map[string]interface{}{
+		"lines": lines,
+		"count": len(lines),
+	})
+}
+
+func (s *Server) handleLogsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	logPath := path.Join(path.Dir(s.configPath), "logs.txt")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Disposition", "attachment; filename=logs.txt")
+	w.Write(data)
+}
+
+func (s *Server) handleConfigReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	slog.Info("Config reload requested via API")
+	
+	// Send success response
+	s.sendSuccess(w, map[string]interface{}{
+		"message": "Config reload requested. Restart service to apply changes.",
+		"status": "pending_restart",
+	})
+}
+
 func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -251,7 +319,25 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// List available profiles
+	// If profile manager is available, use it
+	if s.profileMgr != nil {
+		profileList, err := s.profileMgr.ListProfiles()
+		if err != nil {
+			s.sendError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Get current profile
+		currentProfile := s.profileMgr.GetCurrentProfile()
+
+		s.sendSuccess(w, map[string]interface{}{
+			"profiles":      profileList,
+			"current":       currentProfile,
+		})
+		return
+	}
+
+	// Fallback: list files directly
 	profilesDir := path.Join(path.Dir(s.configPath), "profiles")
 	files, err := os.ReadDir(profilesDir)
 	if err != nil {
@@ -266,7 +352,10 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.sendSuccess(w, profileList)
+	s.sendSuccess(w, map[string]interface{}{
+		"profiles": profileList,
+		"current":  "default",
+	})
 }
 
 func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
@@ -284,9 +373,163 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement profile switching
-	slog.Info("Profile switch requested", "profile", req.Profile)
-	s.sendSuccess(w, "Profile switched: "+req.Profile)
+	// If profile manager is available, use it
+	if s.profileMgr != nil {
+		err := s.profileMgr.SwitchProfile(req.Profile)
+		if err != nil {
+			s.sendError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		slog.Info("Profile switched via API", "profile", req.Profile)
+		s.sendSuccess(w, map[string]interface{}{
+			"message":  "Profile switched: " + req.Profile,
+			"profile":  req.Profile,
+			"restart":  true,
+		})
+		return
+	}
+
+	// Fallback: manual switch
+	profilesDir := path.Join(path.Dir(s.configPath), "profiles")
+	profileFile := path.Join(profilesDir, req.Profile+".json")
+
+	// Check if profile exists
+	if _, err := os.Stat(profileFile); os.IsNotExist(err) {
+		s.sendError(w, "Profile not found: "+req.Profile, http.StatusNotFound)
+		return
+	}
+
+	// Read profile
+	data, err := os.ReadFile(profileFile)
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Write to config
+	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("Profile switched via API", "profile", req.Profile)
+	s.sendSuccess(w, map[string]interface{}{
+		"message": "Profile switched: " + req.Profile,
+		"profile": req.Profile,
+		"restart": true,
+	})
+}
+
+func (s *Server) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name        string      `json:"name"`
+		Description string      `json:"description"`
+		Config      interface{} `json:"config"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" {
+		s.sendError(w, "Profile name is required", http.StatusBadRequest)
+		return
+	}
+
+	// If profile manager is available, use it
+	if s.profileMgr != nil {
+		profile := profiles.Profile{
+			Name:        req.Name,
+			Description: req.Description,
+			Config:      req.Config,
+		}
+
+		err := s.profileMgr.SaveProfile(req.Name, profile)
+		if err != nil {
+			s.sendError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		slog.Info("Profile created via API", "profile", req.Name)
+		s.sendSuccess(w, map[string]interface{}{
+			"message": "Profile created: " + req.Name,
+			"profile": req.Name,
+		})
+		return
+	}
+
+	s.sendError(w, "Profile manager not available", http.StatusInternalServerError)
+}
+
+func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Profile string `json:"profile"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// If profile manager is available, use it
+	if s.profileMgr != nil {
+		err := s.profileMgr.DeleteProfile(req.Profile)
+		if err != nil {
+			s.sendError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		slog.Info("Profile deleted via API", "profile", req.Profile)
+		s.sendSuccess(w, map[string]interface{}{
+			"message": "Profile deleted: " + req.Profile,
+			"profile": req.Profile,
+		})
+		return
+	}
+
+	s.sendError(w, "Profile manager not available", http.StatusInternalServerError)
+}
+
+func (s *Server) handleProfileGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	profileName := r.URL.Query().Get("name")
+	if profileName == "" {
+		s.sendError(w, "Profile name is required", http.StatusBadRequest)
+		return
+	}
+
+	// If profile manager is available, use it
+	if s.profileMgr != nil {
+		config, err := s.profileMgr.LoadProfile(profileName)
+		if err != nil {
+			s.sendError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		s.sendSuccess(w, map[string]interface{}{
+			"name":   profileName,
+			"config": config,
+		})
+		return
+	}
+
+	s.sendError(w, "Profile manager not available", http.StatusInternalServerError)
 }
 
 func (s *Server) handleUPnP(w http.ResponseWriter, r *http.Request) {
@@ -295,10 +538,23 @@ func (s *Server) handleUPnP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement UPnP status
+	if s.upnpMgr == nil {
+		s.sendSuccess(w, map[string]interface{}{
+			"enabled":         false,
+			"message":         "UPnP not configured or not available",
+			"active_mappings": 0,
+		})
+		return
+	}
+
+	externalIP, _ := s.upnpMgr.GetExternalIP()
+	activeMappings := s.upnpMgr.GetActiveMappings()
+
 	s.sendSuccess(w, map[string]interface{}{
-		"enabled": false,
-		"message": "UPnP not configured",
+		"enabled":         true,
+		"external_ip":     externalIP,
+		"active_mappings": activeMappings,
+		"internal_ip":     "", // Could be added to manager
 	})
 }
 
@@ -308,9 +564,125 @@ func (s *Server) handleUPnPDiscover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement UPnP discovery
+	// Refresh port mappings
+	if s.upnpMgr != nil {
+		if err := s.upnpMgr.RefreshMappings(); err != nil {
+			s.sendError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.sendSuccess(w, map[string]interface{}{
+			"message":         "UPnP mappings refreshed",
+			"active_mappings": s.upnpMgr.GetActiveMappings(),
+		})
+		return
+	}
+
+	s.sendError(w, "UPnP not available", http.StatusInternalServerError)
+}
+
+func (s *Server) handleUPnPAddPort(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Protocol     string `json:"protocol"` // TCP, UDP, both
+		ExternalPort int    `json:"externalPort"`
+		InternalPort int    `json:"internalPort"`
+		Description  string `json:"description"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if s.upnpMgr == nil {
+		s.sendError(w, "UPnP not available", http.StatusInternalServerError)
+		return
+	}
+
+	protocol := req.Protocol
+	if protocol == "" {
+		protocol = "both"
+	}
+
+	description := req.Description
+	if description == "" {
+		description = "go-pcap2socks"
+	}
+
+	err := s.upnpMgr.AddDynamicMapping(protocol, req.ExternalPort, req.InternalPort, description)
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	s.sendSuccess(w, map[string]interface{}{
-		"devices": []string{},
+		"message":          "Port mapping added",
+		"protocol":         protocol,
+		"external_port":    req.ExternalPort,
+		"internal_port":    req.InternalPort,
+		"active_mappings":  s.upnpMgr.GetActiveMappings(),
+	})
+}
+
+func (s *Server) handleUPnPRemovePort(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Protocol string `json:"protocol"` // TCP, UDP
+		Port     int    `json:"port"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if s.upnpMgr == nil {
+		s.sendError(w, "UPnP not available", http.StatusInternalServerError)
+		return
+	}
+
+	err := s.upnpMgr.RemoveDynamicMapping(req.Protocol, req.Port)
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.sendSuccess(w, map[string]interface{}{
+		"message":          "Port mapping removed",
+		"protocol":         req.Protocol,
+		"port":             req.Port,
+		"active_mappings":  s.upnpMgr.GetActiveMappings(),
+	})
+}
+
+func (s *Server) handleUPnPApplyMappings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.upnpMgr == nil {
+		s.sendError(w, "UPnP not available", http.StatusInternalServerError)
+		return
+	}
+
+	err := s.upnpMgr.ApplyPortMappings()
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.sendSuccess(w, map[string]interface{}{
+		"message":          "Port mappings applied",
+		"active_mappings":  s.upnpMgr.GetActiveMappings(),
 	})
 }
 
@@ -404,3 +776,24 @@ func (s *Server) getTraffic() Traffic {
 }
 
 var startTime = time.Now()
+
+// readLastLines reads last N lines from a file
+func readLastLines(filePath string, n int) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	if len(lines) <= n {
+		return lines, scanner.Err()
+	}
+
+	return lines[len(lines)-n:], scanner.Err()
+}

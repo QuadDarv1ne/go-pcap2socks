@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 )
 
 // Unbuffered TCP/UDP queues.

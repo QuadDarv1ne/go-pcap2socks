@@ -3,8 +3,8 @@ package core
 import (
 	"time"
 
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/adapter"
-	"github.com/DaniilSokolyuk/go-pcap2socks/core/option"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 
 	glog "gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip"

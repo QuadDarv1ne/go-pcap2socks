@@ -31,5 +31,16 @@
     "enabled": true,
     "toggle": "Ctrl+Alt+P"
   },
+  "upnp": {
+    "enabled": false,
+    "autoForward": false,
+    "leaseDuration": 3600,
+    "gamePresets": {
+      "ps4": [3478, 3479, 3480],
+      "ps5": [3478, 3479, 3480],
+      "xbox": [3074, 3075, 3478, 3479, 3480],
+      "switch": [12400, 12401, 12402, 6657, 6667]
+    }
+  },
   "language": "ru"
 }
