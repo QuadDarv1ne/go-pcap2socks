@@ -454,7 +454,10 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	msgs := localizer.GetMessages()
 
 	// Find the interface first
-	ifce := findInterface(cfg.PCAP.InterfaceGateway, localizer)
+	ifce, err := findInterface(cfg.PCAP.InterfaceGateway, localizer)
+	if err != nil {
+		return err
+	}
 	slog.Info(msgs.UsingInterface, "interface", ifce.Name, "mac", ifce.HardwareAddr.String())
 
 	// Parse network configuration
@@ -779,26 +782,26 @@ func Stop() {
 	slog.Info("Service stopped gracefully")
 }
 
-func findInterface(cfgIfce string, localizer *i18n.Localizer) net.Interface {
+func findInterface(cfgIfce string, localizer *i18n.Localizer) (net.Interface, error) {
 	msgs := localizer.GetMessages()
 	var targetIP net.IP
 	if cfgIfce != "" {
 		targetIP = net.ParseIP(cfgIfce)
 		if targetIP == nil {
-			panic(fmt.Errorf("%s: %s", msgs.ParseIPError, cfgIfce))
+			return net.Interface{}, fmt.Errorf("%s: %s", msgs.ParseIPError, cfgIfce)
 		}
 	} else {
 		var err error
 		targetIP, err = gateway.DiscoverInterface()
 		if err != nil {
-			panic(fmt.Errorf("%s: %w", msgs.DiscoverInterfaceError, err))
+			return net.Interface{}, fmt.Errorf("%s: %w", msgs.DiscoverInterfaceError, err)
 		}
 	}
 
 	// Get a list of all interfaces
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		panic(err)
+		return net.Interface{}, err
 	}
 
 	for _, iface := range ifaces {
@@ -815,12 +818,12 @@ func findInterface(cfgIfce string, localizer *i18n.Localizer) net.Interface {
 
 			ip4 := ipnet.IP.To4()
 			if ip4 != nil && bytes.Equal(ip4, targetIP.To4()) {
-				return iface
+				return iface, nil
 			}
 		}
 	}
 
-	panic(fmt.Errorf(msgs.InterfaceNotFound, targetIP))
+	return net.Interface{}, fmt.Errorf(msgs.InterfaceNotFound, targetIP)
 }
 
 func parseNetworkConfig(pcapCfg cfg.PCAP, ifce net.Interface, localizer *i18n.Localizer) (*device.NetworkConfig, error) {

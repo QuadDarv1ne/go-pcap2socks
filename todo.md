@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.8.0-speed)
+## ✅ Завершено (v3.8.0-speed) - В main
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -16,9 +16,14 @@
 - [x] Исправлен stats/store.go (дублирование кода)
 - [x] Исправлен dns/pool.go (dns.Conn pointer)
 
+### Документация
+- [x] todo.md - план работ
+- [x] docs/SPEED_OPTIMIZATION_REPORT.md - отчет об оптимизациях
+- [x] docs/IMPROVEMENT_PLAN.md - план будущих улучшений
+
 ---
 
-## 🔥 В работе (dev)
+## 🔥 В работе
 
 ### Zero-copy UDP (высокий приоритет)
 - [ ] Изучить текущую реализацию socksPacketConn.ReadFrom
@@ -93,5 +98,5 @@ UDP Relay:          -20% CPU (после zero-copy)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.  
-**Версия**: v3.8.0-speed  
-**Статус**: dev → main (ready for review)
+**Версия**: v3.8.0-speed (в main)  
+**Статус**: ✅ main синхронизирован с dev
