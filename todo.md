@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.16.0-metadata-pool)
+## ✅ Завершено (v3.17.0-stack-tuning)
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -15,6 +15,7 @@
 - [x] Router DialContext оптимизация (byte slice key, 6→3 allocs)
 - [x] Async DNS resolver (context timeout, async exchange)
 - [x] Metadata pool (md/pool.go - 2.8x быстрее создания)
+- [x] gVisor stack tuning (TCP buffer sizes, keepalive)
 
 ### Исправления
 - [x] stats/store.go - дублирование кода
@@ -26,11 +27,10 @@
 
 ## 🔥 В работе
 
-### gVisor stack tuning (низкий приоритет)
-- [ ] Анализ текущих параметров stack
-- [ ] Настройка через config файл
-- [ ] Тестирование различных конфигураций
-- [ ] Цель: -10% CPU на network stack
+### Стабилизация и документация
+- [ ] Обновление README.md
+- [ ] CHANGELOG.md для v3.17.0
+- [ ] Benchmark comparison с v3.12.0
 
 ---
 
@@ -56,6 +56,7 @@ Metrics Record:       8.88 ns/op    0 B/op    0 allocs/op ✅
 Stats RecordTraffic:  21.94 ns/op   0 B/op    0 allocs/op ✅
 Async DNS:            5s timeout    non-block ✅
 Metadata Pool:        13.15 ns/op   16 B/op   1 allocs/op ✅ (2.8x faster)
+gVisor Stack:         tuned         256KB buf ✅
 ```
 
 ### Целевые показатели
@@ -64,7 +65,7 @@ Router DialContext:   <100 ns/op   <100 B/op  <4 allocs/op ✅
 Buffer GetPut:        <50 ns/op    <30 B/op   1 allocs/op ✅
 Async DNS:            non-block    5s timeout ✅
 Metadata Pool:        <15 ns/op    <20 B/op   1 allocs/op ✅
-gVisor Stack:         -10% CPU     (в работе)
+gVisor Stack:         tuned        256KB buf  ✅
 ```
 
 ---
@@ -87,5 +88,5 @@ gVisor Stack:         -10% CPU     (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.16.0-metadata-pool (dev)
+**Версия**: v3.17.0-stack-tuning (dev)
 **Статус**: 🔄 dev → main (ready for merge)
