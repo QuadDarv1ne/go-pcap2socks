@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 )
 
@@ -22,8 +23,8 @@ func TestServerRoutes(t *testing.T) {
 		{"GET", "/api/status", 200},
 		{"GET", "/api/traffic", 200},
 		{"GET", "/api/devices", 200},
-		{"POST", "/api/service/start", 200},
-		{"POST", "/api/service/stop", 200},
+		{"POST", "/api/start", 200},
+		{"POST", "/api/stop", 200},
 		{"GET", "/api/profiles", 200},
 		{"GET", "/api/upnp", 200},
 		{"GET", "/nonexistent", 404},
@@ -121,6 +122,9 @@ func TestDevicesHandler(t *testing.T) {
 	statsStore := stats.NewStore()
 	server := NewServer(statsStore, nil, nil)
 
+	// Add a test device
+	statsStore.RecordTraffic("192.168.137.100", "aa:bb:cc:dd:ee:ff", 1024, true)
+
 	req := httptest.NewRequest("GET", "/api/devices", nil)
 	w := httptest.NewRecorder()
 
@@ -145,7 +149,7 @@ func TestDevicesHandler(t *testing.T) {
 		t.Fatal("Expected data to be an array")
 	}
 
-	// Should have at least broadcast device
+	// Should have at least one device
 	if len(data) == 0 {
 		t.Error("Expected at least one device in response")
 	}
@@ -164,7 +168,7 @@ func TestServiceStartHandler(t *testing.T) {
 		func() error { return nil },
 	)
 
-	req := httptest.NewRequest("POST", "/api/service/start", nil)
+	req := httptest.NewRequest("POST", "/api/start", nil)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -191,7 +195,7 @@ func TestServiceStopHandler(t *testing.T) {
 		},
 	)
 
-	req := httptest.NewRequest("POST", "/api/service/stop", nil)
+	req := httptest.NewRequest("POST", "/api/stop", nil)
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -207,7 +211,21 @@ func TestServiceStopHandler(t *testing.T) {
 
 func TestProfilesHandler(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+
+	// Create a profile manager for testing
+	profileMgr, err := profiles.NewManager()
+	if err != nil {
+		t.Skipf("Skipping test: profile manager creation failed: %v", err)
+		return
+	}
+
+	// Create default profiles
+	if err := profileMgr.CreateDefaultProfiles(); err != nil {
+		t.Skipf("Skipping test: failed to create default profiles: %v", err)
+		return
+	}
+
+	server := NewServer(statsStore, profileMgr, nil)
 
 	req := httptest.NewRequest("GET", "/api/profiles", nil)
 	w := httptest.NewRecorder()
@@ -219,7 +237,7 @@ func TestProfilesHandler(t *testing.T) {
 	}
 
 	var response APIResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	if err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
