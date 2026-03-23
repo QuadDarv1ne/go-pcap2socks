@@ -40,6 +40,7 @@ type DNS struct {
 	interfaceName string
 	dohClients    map[string]*localdns.DoHClient
 	dotClients    map[string]*localdns.DoTClient
+	tcpPools      map[string]*dnsConnPool // TCP connection pools for plain DNS
 	cache         *dnsCache
 	stopCleanup   chan struct{}
 }
@@ -80,6 +81,11 @@ func (d *DNS) cleanupLoop() {
 // Close stops the DNS proxy and cleanup goroutine
 func (d *DNS) Close() {
 	close(d.stopCleanup)
+
+	// Close all TCP connection pools
+	for _, pool := range d.tcpPools {
+		pool.Close()
+	}
 }
 
 func NewDNS(cfg cfg.DNS, interfaceName string) *DNS {
@@ -114,12 +120,23 @@ func NewDNS(cfg cfg.DNS, interfaceName string) *DNS {
 		}
 	}
 
+	// Initialize TCP connection pools for plain DNS servers
+	tcpPools := make(map[string]*dnsConnPool)
+	for _, server := range cfg.Servers {
+		if server.Type == "" || server.Type == "udp" {
+			// Create TCP pool for fallback/large responses
+			tcpPools[server.Address] = newDNSConnPool(server.Address)
+			slog.Debug("Created TCP connection pool for DNS server", "server", server.Address)
+		}
+	}
+
 	d := &DNS{
 		dnsClient:     dnsClient,
 		cfg:           cfg,
 		interfaceName: interfaceName,
 		dohClients:    dohClients,
 		dotClients:    dotClients,
+		tcpPools:      tcpPools,
 		cache:         newDNSCache(10000), // Cache up to 10k DNS entries
 		stopCleanup:   make(chan struct{}),
 	}
