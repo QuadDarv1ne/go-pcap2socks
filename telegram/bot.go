@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -68,6 +69,9 @@ type Bot struct {
 	reportInterval time.Duration
 	reportStop     chan struct{}
 	reportRunning  bool
+	// Polling control
+	pollStop    context.CancelFunc
+	pollRunning bool
 }
 
 // SetDiscordWebhook sets the Discord webhook reference for cross-integration
@@ -173,12 +177,50 @@ func (b *Bot) sendPeriodicReport() {
 func (b *Bot) Stop() {
 	b.mu.Lock()
 	b.enabled = false
+
+	// Stop polling
+	if b.pollStop != nil && b.pollRunning {
+		b.pollStop()
+	}
+	b.mu.Unlock()
+
+	slog.Info("Telegram bot stopped")
+}
+
+// StopPolling stops only the polling loop (for graceful restart)
+func (b *Bot) StopPolling() {
+	b.mu.Lock()
+	if b.pollStop != nil && b.pollRunning {
+		b.pollStop()
+	}
 	b.mu.Unlock()
 }
 
 // poll polls Telegram API for new messages
 func (b *Bot) poll() {
+	ctx, cancel := context.WithCancel(context.Background())
+	b.mu.Lock()
+	b.pollStop = cancel
+	b.pollRunning = true
+	b.mu.Unlock()
+
+	defer func() {
+		b.mu.Lock()
+		b.pollRunning = false
+		b.mu.Unlock()
+	}()
+
+	errorCount := 0
+	const maxErrors = 5
+
 	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("Telegram bot polling stopped")
+			return
+		default:
+		}
+
 		b.mu.RLock()
 		enabled := b.enabled
 		b.mu.RUnlock()
@@ -190,9 +232,27 @@ func (b *Bot) poll() {
 		updates, err := b.getUpdates(b.lastUpdateID + 1)
 		if err != nil {
 			slog.Debug("Telegram getUpdates error", "err", err)
-			time.Sleep(5 * time.Second)
+			errorCount++
+
+			if errorCount >= maxErrors {
+				slog.Warn("Too many Telegram errors, stopping poll")
+				return
+			}
+
+			// Exponential backoff
+			backoff := time.Duration(5*(1<<errorCount)) * time.Second
+			if backoff > 5*time.Minute {
+				backoff = 5 * time.Minute
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
 			continue
 		}
+
+		errorCount = 0
 
 		for _, update := range updates {
 			b.lastUpdateID = update.UpdateID

@@ -49,18 +49,26 @@ func DialContextWithOptions(ctx context.Context, network, address string, opts *
 }
 
 func ListenPacket(network, address string) (net.PacketConn, error) {
-	return ListenPacketWithOptions(network, address, &Options{
+	return ListenPacketWithOptions(context.Background(), network, address, &Options{
 		InterfaceName:  DefaultInterfaceName.Load(),
 		InterfaceIndex: int(DefaultInterfaceIndex.Load()),
 		RoutingMark:    int(DefaultRoutingMark.Load()),
 	})
 }
 
-func ListenPacketWithOptions(network, address string, opts *Options) (net.PacketConn, error) {
+func ListenPacketWithContext(ctx context.Context, network, address string) (net.PacketConn, error) {
+	return ListenPacketWithOptions(ctx, network, address, &Options{
+		InterfaceName:  DefaultInterfaceName.Load(),
+		InterfaceIndex: int(DefaultInterfaceIndex.Load()),
+		RoutingMark:    int(DefaultRoutingMark.Load()),
+	})
+}
+
+func ListenPacketWithOptions(ctx context.Context, network, address string, opts *Options) (net.PacketConn, error) {
 	lc := &net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
 			return setSocketOptions(network, address, c, opts)
 		},
 	}
-	return lc.ListenPacket(context.Background(), network, address)
+	return lc.ListenPacket(ctx, network, address)
 }

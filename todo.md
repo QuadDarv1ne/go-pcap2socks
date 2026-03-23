@@ -48,6 +48,14 @@
 - [x] `proxy/socks5.go` — исправлена goroutine утечка в `DialUDP` (передача параметров)
 - [x] Добавлена защита от повторного запуска в `StartAutoCheck()`
 
+### 🚀 Улучшение контекстов (v3.2.4) — 23.03.2026
+- [x] `dialer/dialer.go` — `ListenPacket` теперь принимает `context.Context`
+- [x] `dialer/dialer.go` — добавлен `ListenPacketWithContext()` для отмены операций
+- [x] `telegram/bot.go` — добавлен контекст для остановки polling
+- [x] `telegram/bot.go` — экспоненциальный backoff при ошибках (до 5 мин)
+- [x] `telegram/bot.go` — защита от бесконечных ошибок (max 5 попыток)
+- [x] `telegram/bot.go` — добавлен `StopPolling()` для graceful restart
+
 ---
 
 ## 📊 Аудит кода (v3.2.2)
@@ -155,7 +163,14 @@ Go версия: 1.25.0
 
 ## 📅 История версий
 
-### v3.2.3 (23.03.2026) — текущая
+### v3.2.4 (23.03.2026) — текущая
+- ✅ Добавлен контекст в `dialer.ListenPacket()` для отмены операций
+- ✅ Telegram bot: контекст для остановки polling
+- ✅ Telegram bot: экспоненциальный backoff при ошибках
+- ✅ Telegram bot: защита от бесконечных ошибок (max 5)
+- ✅ Telegram bot: `StopPolling()` для graceful restart
+
+### v3.2.3 (23.03.2026)
 - ✅ Добавлен `StopAutoCheck()` в updater
 - ✅ Исправлена goroutine утечка в `proxy/socks5.go`
 - ✅ Улучшена обработка ошибок в background goroutine
