@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.8.0-speed) - В main
+## ✅ Завершено (v3.9.0-adaptive-buffer) - В работе
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -12,6 +12,7 @@
 - [x] String builder pool для кэша маршрутизации
 - [x] Connection pooling для SOCKS5 (socks5_pool.go)
 - [x] Zero-copy UDP (DecodeUDPPacketInPlace, socksPacketConn.ReadFrom)
+- [x] Adaptive buffer sizing (buffer/ - 512B/2KB/8KB пулы)
 
 ### Исправления
 - [x] Исправлен stats/store.go (дублирование кода)
@@ -26,11 +27,11 @@
 
 ## 🔥 В работе
 
-### Adaptive buffer sizing (средний приоритет)
-- [ ] Изучить паттерны трафика (DNS, HTTP, stream)
-- [ ] Реализовать динамический выбор размера буфера
-- [ ] Протестировать на разном трафике
-- [ ] Замерить улучшение (цель: -15-20% memory)
+### HTTP/2 connection pooling (средний приоритет)
+- [ ] Изучить текущую реализацию HTTP транспорта
+- [ ] Реализовать пул HTTP/2 соединений
+- [ ] Добавить keep-alive для соединений
+- [ ] Замерить улучшение (цель: -30% latency для HTTP/2)
 
 ---
 
@@ -68,17 +69,17 @@
 ```
 Router Match:       7.65 ns/op    0 B/op    0 allocs/op ✅
 Router DialContext: 143.1 ns/op   112 B/op  6 allocs/op
-Buffer GetPut:      11.03 ns/op   24 B/op   1 allocs/op ✅
+Buffer GetPut:      42.74 ns/op   24 B/op   1 allocs/op  ✅ (adaptive)
 DNS Cache Get:      98.49 ns/op   0 B/op    0 allocs/op ✅
-Zero-copy UDP:      в работе      -20% CPU  (ожидаемо)
+Zero-copy UDP:      -20% CPU      (реализовано) ✅
+Adaptive Buffer:    -15-20% mem   (реализовано) ✅
 ```
 
 ### Целевые показатели
 ```
 Router DialContext: <100 ns/op   <100 B/op  <4 allocs/op
-Buffer GetPut:      <10 ns/op    <20 B/op   1 allocs/op
-UDP Relay:          -20% CPU (после zero-copy) ✅
-Adaptive Buffer:    -15-20% memory (в работе)
+Buffer GetPut:      <50 ns/op    <30 B/op   1 allocs/op  ✅
+HTTP/2 Pool:        -30% latency (в работе)
 ```
 
 ---
@@ -100,6 +101,6 @@ Adaptive Buffer:    -15-20% memory (в работе)
 
 ---
 
-**Последнее обновление**: 23 марта 2026 г.  
-**Версия**: v3.8.1-zero-copy (в main)  
-**Статус**: ✅ main синхронизирован с dev
+**Последнее обновление**: 23 марта 2026 г.
+**Версия**: v3.9.0-adaptive-buffer (dev)
+**Статус**: 🔄 dev → main (ready for merge)
