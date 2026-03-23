@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -205,10 +206,11 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 	sb.WriteString("tcp:")
 	sb.WriteString(metadata.SrcIP.String())
 	sb.WriteByte(':')
-	fmt.Fprintf(sb, "%d:", metadata.SrcPort)
+	sb.WriteString(portToString(metadata.SrcPort))
+	sb.WriteByte(':')
 	sb.WriteString(metadata.DstIP.String())
 	sb.WriteByte(':')
-	fmt.Fprint(sb, metadata.DstPort)
+	sb.WriteString(portToString(metadata.DstPort))
 	cacheKey := sb.String()
 	d.routeCache.putBuilder(sb)
 
@@ -257,10 +259,11 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	sb.WriteString("udp:")
 	sb.WriteString(metadata.SrcIP.String())
 	sb.WriteByte(':')
-	fmt.Fprintf(sb, "%d:", metadata.SrcPort)
+	sb.WriteString(portToString(metadata.SrcPort))
+	sb.WriteByte(':')
 	sb.WriteString(metadata.DstIP.String())
 	sb.WriteByte(':')
-	fmt.Fprint(sb, metadata.DstPort)
+	sb.WriteString(portToString(metadata.DstPort))
 	cacheKey := sb.String()
 	d.routeCache.putBuilder(sb)
 
@@ -294,6 +297,24 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	}
 
 	return nil, ErrProxyNotFound
+}
+
+// portToString converts port to string without allocations using a buffer pool
+var portBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 5) // Max port is 65535 (5 digits)
+		return &b
+	},
+}
+
+func portToString(port uint16) string {
+	bufPtr := portBufPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0]
+	buf = strconv.AppendUint(buf, uint64(port), 10)
+	s := string(buf)
+	*bufPtr = buf
+	portBufPool.Put(bufPtr)
+	return s
 }
 
 func match(metadata *M.Metadata, rule cfg.Rule) bool {
