@@ -47,7 +47,7 @@ func TestListProfiles(t *testing.T) {
 	}
 
 	// Check for expected profiles
-	expectedNames := []string{"direct", "reject", "socks5"}
+	expectedNames := []string{"default", "gaming", "streaming"}
 	for _, expected := range expectedNames {
 		found := false
 		for _, name := range profiles {
