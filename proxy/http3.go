@@ -21,8 +21,9 @@ var _ Proxy = (*HTTP3)(nil)
 type HTTP3 struct {
 	*Base
 
-	client *http.Client
-	addr   string
+	client    *http.Client
+	transport *http3.Transport
+	addr      string
 }
 
 // NewHTTP3 creates a new HTTP/3 proxy
@@ -32,16 +33,18 @@ func NewHTTP3(addr string, skipVerify bool) (*HTTP3, error) {
 		NextProtos:         []string{"h3"},
 	}
 
-	roundTripper := &http3.RoundTripper{
+	quicConfig := &quic.Config{
+		MaxIdleTimeout:  30 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
+	}
+
+	transport := &http3.Transport{
 		TLSClientConfig: tlsConfig,
-		QUICConfig: &quic.Config{
-			MaxIdleTimeout:  30 * time.Second,
-			KeepAlivePeriod: 10 * time.Second,
-		},
+		QUICConfig:      quicConfig,
 	}
 
 	client := &http.Client{
-		Transport: roundTripper,
+		Transport: transport,
 		Timeout:   30 * time.Second,
 	}
 
@@ -50,8 +53,9 @@ func NewHTTP3(addr string, skipVerify bool) (*HTTP3, error) {
 			addr: addr,
 			mode: ModeHTTP3,
 		},
-		client: client,
-		addr:   addr,
+		client:    client,
+		transport: transport,
+		addr:      addr,
 	}, nil
 }
 
@@ -71,8 +75,8 @@ func (h *HTTP3) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 
 // Close closes the HTTP/3 client
 func (h *HTTP3) Close() error {
-	if rt, ok := h.client.Transport.(*http3.RoundTripper); ok {
-		rt.Close()
+	if h.transport != nil {
+		h.transport.Close()
 	}
 	return nil
 }
