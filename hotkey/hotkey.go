@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"sync"
 	"syscall"
-	"unsafe"
 )
 
 const (
@@ -35,7 +34,7 @@ type Manager struct {
 	mu          sync.RWMutex
 	hotkeys     map[int]HotkeyConfig
 	callbacks   map[int]func()
-	hwnd        syscall.HWND
+	hwnd        uintptr
 	running     bool
 	stopChan    chan struct{}
 }

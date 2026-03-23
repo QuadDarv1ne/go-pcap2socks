@@ -16,11 +16,141 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            transition: background 0.3s;
+        }
+
+        body.dark-theme {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        body.dark-theme .card {
+            background: #2d2d44;
+            color: #e0e0e0;
+        }
+
+        body.dark-theme .card h2 {
+            color: #e0e0e0;
+        }
+
+        body.dark-theme .stat-item {
+            background: #3d3d5c;
+        }
+
+        body.dark-theme .device-item {
+            border-color: #4d4d6c;
+            background: #353550;
+        }
+
+        body.dark-theme .device-item:hover {
+            border-color: #667eea;
+            background: #3d3d5c;
+        }
+
+        body.dark-theme .device-ip {
+            color: #e0e0e0;
+        }
+
+        body.dark-theme .log-container {
+            background: #1a1a2e;
+            color: #d4d4d4;
         }
         
         .container {
             max-width: 1200px;
             margin: 0 auto;
+        }
+
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            header {
+                flex-direction: column;
+                padding: 15px;
+                gap: 15px;
+            }
+
+            .header-right {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            .dashboard {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .card {
+                padding: 15px;
+            }
+
+            .stat-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
+            .stat-item {
+                padding: 10px;
+            }
+
+            .stat-value {
+                font-size: 20px;
+            }
+
+            .stat-label {
+                font-size: 11px;
+            }
+
+            .controls {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            button {
+                width: 100%;
+                padding: 14px;
+            }
+
+            .device-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .device-status {
+                align-self: flex-end;
+            }
+
+            .log-container {
+                font-size: 10px;
+                max-height: 200px;
+            }
+
+            #themeToggle {
+                padding: 8px 12px;
+                font-size: 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 18px;
+            }
+
+            .status-badge {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
         }
         
         header {
@@ -32,6 +162,17 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .connection-indicator {
+            font-size: 20px;
+            cursor: help;
         }
         
         h1 {
@@ -152,7 +293,82 @@
         .device-offline {
             background: #dc3545;
         }
-        
+
+        .profiles-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .profile-item {
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+            background: #f8f9fa;
+        }
+
+        body.dark-theme .profile-item {
+            background: #353550;
+            border-color: #4d4d6c;
+        }
+
+        .profile-item:hover {
+            border-color: #667eea;
+            background: #e9ecef;
+        }
+
+        body.dark-theme .profile-item:hover {
+            background: #3d3d5c;
+        }
+
+        .profile-item.active {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+
+        body.dark-theme .profile-item.active {
+            background: #1e4620;
+            border-color: #28a745;
+        }
+
+        .profile-info {
+            flex: 1;
+        }
+
+        .profile-name {
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+        }
+
+        body.dark-theme .profile-name {
+            color: #e0e0e0;
+        }
+
+        .profile-desc {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        body.dark-theme .profile-desc {
+            color: #aaa;
+        }
+
+        .profile-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+        }
+
         .controls {
             display: flex;
             gap: 10px;
@@ -262,7 +478,11 @@
     <div class="container">
         <header>
             <h1>🚀 go-pcap2socks</h1>
-            <span id="statusBadge" class="status-badge status-stopped">Остановлено</span>
+            <div class="header-right">
+                <button id="themeToggle" onclick="toggleTheme()" style="padding: 8px 16px; border-radius: 8px; border: none; background: #667eea; color: white; cursor: pointer;" title="Переключить тему">🌓</button>
+                <span id="connectionBadge" class="connection-indicator" title="Disconnected">○</span>
+                <span id="statusBadge" class="status-badge status-stopped">Остановлено</span>
+            </div>
         </header>
         
         <div class="dashboard">
@@ -305,8 +525,9 @@
                 <div class="controls">
                     <button class="btn-success" id="btnStart" onclick="startService()">▶ Запустить</button>
                     <button class="btn-danger" id="btnStop" onclick="stopService()">⏹ Остановить</button>
-                    <button class="btn-primary" onclick="exportTraffic()">📥 Экспорт CSV</button>
-                    <button class="btn-secondary" onclick="toggleProxy()">🔄 Прокси</button>
+                    <button class="btn-primary" onclick="exportTraffic()">📥 Экспорт трафика</button>
+                    <button class="btn-secondary" onclick="exportLogs()">📋 Экспорт логов</button>
+                    <button class="btn-secondary" onclick="reloadConfig()">🔄 Перезагрузить конфиг</button>
                 </div>
                 <div style="margin-top: 20px;">
                     <h3 style="font-size: 14px; margin-bottom: 10px;">Горячие клавиши:</h3>
@@ -314,6 +535,18 @@
                         Ctrl+Alt+P - Вкл/Выкл прокси<br>
                         Ctrl+Alt+R - Перезапуск
                     </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📁 Профили</h2>
+                <div class="profiles-list" id="profilesList">
+                    <div class="profile-item loading">Загрузка профилей...</div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        💡 Профили позволяют быстро переключаться между конфигурациями
+                    </p>
                 </div>
             </div>
         </div>
@@ -337,31 +570,62 @@
         let ws = null;
         let trafficChart = null;
         
-        // Initialize WebSocket connection
+        // Initialize WebSocket connection with retry logic
+        let wsReconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 10;
+        const RECONNECT_DELAY = 3000;
+
         function initWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
             
+            console.log(`Connecting to WebSocket: ${wsUrl}`);
+            ws = new WebSocket(wsUrl);
+
             ws.onopen = () => {
                 console.log('WebSocket connected');
                 addLog('WebSocket connected', 'success');
+                wsReconnectAttempts = 0;
+                updateConnectionStatus(true);
             };
-            
+
             ws.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                handleWSMessage(msg);
+                try {
+                    const msg = JSON.parse(event.data);
+                    handleWSMessage(msg);
+                } catch (e) {
+                    console.error('Failed to parse WebSocket message:', e);
+                    addLog('Invalid WebSocket message format', 'error');
+                }
             };
-            
-            ws.onclose = () => {
-                console.log('WebSocket disconnected, reconnecting...');
-                addLog('WebSocket disconnected, reconnecting...', 'warn');
-                setTimeout(initWebSocket, 3000);
+
+            ws.onclose = (event) => {
+                console.log(`WebSocket disconnected (code: ${event.code}, reason: ${event.reason})`);
+                updateConnectionStatus(false);
+                
+                if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    wsReconnectAttempts++;
+                    const delay = RECONNECT_DELAY * Math.min(wsReconnectAttempts, 5);
+                    addLog(`Reconnecting... (attempt ${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`, 'warn');
+                    setTimeout(initWebSocket, delay);
+                } else {
+                    addLog('WebSocket connection failed after multiple attempts. Refresh page to retry.', 'error');
+                }
             };
-            
+
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                addLog('WebSocket error', 'error');
+                addLog('WebSocket connection error', 'error');
             };
+        }
+
+        function updateConnectionStatus(connected) {
+            const badge = document.getElementById('connectionBadge');
+            if (badge) {
+                badge.textContent = connected ? '●' : '○';
+                badge.style.color = connected ? '#28a745' : '#dc3545';
+                badge.title = connected ? 'Connected' : 'Disconnected';
+            }
         }
         
         function handleWSMessage(msg) {
@@ -471,7 +735,7 @@
         
         function updateDeviceList(devices) {
             const list = document.getElementById('deviceList');
-            
+
             if (devices.length === 0) {
                 list.innerHTML = `
                     <li class="device-item">
@@ -483,17 +747,50 @@
                 `;
                 return;
             }
-            
-            list.innerHTML = devices.map(device => `
+
+            list.innerHTML = devices.map(device => {
+                const hostname = device.hostname || generateHostname(device.mac);
+                return `
                 <li class="device-item">
                     <div class="device-info">
-                        <div class="device-ip">${device.ip || 'Unknown'}</div>
+                        <div class="device-ip">${device.ip || 'Unknown'} ${hostname ? `(${hostname})` : ''}</div>
                         <div class="device-mac">${device.mac || 'Unknown'}</div>
                     </div>
                     <div class="device-status ${device.connected ? 'device-online' : 'device-offline'}"></div>
                 </li>
-            `).join('');
+            `}).join('');
         }
+
+        function generateHostname(mac) {
+            if (!mac) return '';
+            const oui = mac.replace(/:/g, '').substring(0, 6).toUpperCase();
+            const ouiMap = {
+                '78C881': 'Sony',
+                'B025AA': 'Realtek',
+                '00155D': 'Microsoft',
+                '0A0027': 'VirtualBox',
+                'F48E38': 'Microsoft',
+                'DC5475': 'Sony',
+                '00D9D1': 'Sony',
+                '84C620': 'Sony',
+                '009DD8': 'Sony'
+            };
+            return ouiMap[oui] || '';
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('darkTheme', isDark);
+        }
+
+        // Load saved theme
+        (function loadTheme() {
+            const isDark = localStorage.getItem('darkTheme') === 'true';
+            if (isDark) {
+                document.body.classList.add('dark-theme');
+            }
+        })();
         
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
@@ -540,7 +837,91 @@
                 addLog('Error exporting traffic: ' + error, 'error');
             }
         }
-        
+
+        async function exportLogs() {
+            try {
+                window.open(`${API_BASE}/api/logs/export`, '_blank');
+                addLog('Logs export started', 'success');
+            } catch (error) {
+                addLog('Error exporting logs: ' + error, 'error');
+            }
+        }
+
+        async function reloadConfig() {
+            try {
+                const response = await fetch(`${API_BASE}/api/config/reload`, { method: 'POST' });
+                const result = await response.json();
+                addLog(result.data?.message || 'Config reload requested', 'info');
+                alert(result.data?.message || 'Перезапустите сервис для применения изменений');
+            } catch (error) {
+                addLog('Error reloading config: ' + error, 'error');
+            }
+        }
+
+        async function loadProfiles() {
+            try {
+                const response = await fetch(`${API_BASE}/api/profiles`);
+                const result = await response.json();
+                if (result.success) {
+                    renderProfiles(result.data || []);
+                }
+            } catch (error) {
+                addLog('Error loading profiles: ' + error, 'error');
+            }
+        }
+
+        function renderProfiles(profiles) {
+            const container = document.getElementById('profilesList');
+            if (!container) return;
+
+            if (profiles.length === 0) {
+                container.innerHTML = '<div class="profile-item">Нет доступных профилей</div>';
+                return;
+            }
+
+            const profileDescriptions = {
+                'default': 'Стандартная конфигурация',
+                'gaming': 'Оптимизировано для игр (низкий MTU)',
+                'streaming': 'Оптимизировано для стриминга (высокий MTU)'
+            };
+
+            container.innerHTML = profiles.map(profile => {
+                const cleanName = profile.replace('.json', '');
+                const displayName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+                const description = profileDescriptions[cleanName] || 'Пользовательский профиль';
+                return `
+                <div class="profile-item" data-profile="${cleanName}">
+                    <div class="profile-info">
+                        <div class="profile-name">${displayName}</div>
+                        <div class="profile-desc">${description}</div>
+                    </div>
+                    <div class="profile-actions">
+                        <button class="btn-sm btn-primary" onclick="switchProfile('${cleanName}')">Переключить</button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        async function switchProfile(profile) {
+            try {
+                const response = await fetch(`${API_BASE}/api/profiles/switch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profile: profile })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    addLog(`Профиль '${profile}' активирован`, 'success');
+                    alert(`Профиль '${profile}' переключен. Перезапустите сервис для применения.`);
+                    loadProfiles();
+                } else {
+                    addLog('Error switching profile: ' + result.error, 'error');
+                }
+            } catch (error) {
+                addLog('Error switching profile: ' + error, 'error');
+            }
+        }
+
         function addLog(message, type = 'info') {
             const container = document.getElementById('logContainer');
             const timestamp = new Date().toLocaleTimeString();
@@ -575,9 +956,11 @@
         initWebSocket();
         initTrafficChart();
         updateStatus();
-        
+        loadProfiles();
+
         // Periodic updates (fallback if WebSocket fails)
         setInterval(updateStatus, 5000);
+        setInterval(loadProfiles, 30000); // Reload profiles every 30 seconds
     </script>
 </body>
 </html>

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/discord"
 )
 
 // CommandHandler is a callback function for bot commands
@@ -62,7 +64,20 @@ type Bot struct {
 	devicesHandler  HandlerFunc
 	startHandler    HandlerFunc
 	stopHandler     HandlerFunc
+	// Periodic reports
+	reportInterval time.Duration
+	reportStop     chan struct{}
+	reportRunning  bool
 }
+
+// SetDiscordWebhook sets the Discord webhook reference for cross-integration
+func (b *Bot) SetDiscordWebhook(webhook interface{}) {
+	// Store for later use in handlers
+	_discordWebhook = webhook
+}
+
+// Global discord webhook reference (set from main.go)
+var _discordWebhook interface{}
 
 // NewBot creates a new Telegram bot
 func NewBot(token, chatID string) *Bot {
@@ -73,6 +88,7 @@ func NewBot(token, chatID string) *Bot {
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		apiURL:     fmt.Sprintf("https://api.telegram.org/bot%s/", token),
 		callbacks:  make(map[string]CommandHandler),
+		reportStop: make(chan struct{}),
 	}
 }
 
@@ -93,8 +109,64 @@ func (b *Bot) Start() {
 	b.RegisterCommand("/stop_service", b.handleStopService)
 	b.RegisterCommand("/traffic", b.handleTraffic)
 	b.RegisterCommand("/devices", b.handleDevices)
+	b.RegisterCommand("/report", b.handleReport)
+	b.RegisterCommand("/discord_status", b.handleDiscordStatus)
 
 	go b.poll()
+}
+
+// StartPeriodicReports starts periodic traffic reports
+func (b *Bot) StartPeriodicReports(interval time.Duration) {
+	if !b.enabled || b.reportRunning {
+		return
+	}
+
+	b.mu.Lock()
+	b.reportInterval = interval
+	b.reportRunning = true
+	b.mu.Unlock()
+
+	slog.Info("Starting periodic Telegram reports", "interval", interval)
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				b.sendPeriodicReport()
+			case <-b.reportStop:
+				slog.Info("Periodic Telegram reports stopped")
+				return
+			}
+		}
+	}()
+}
+
+// StopPeriodicReports stops periodic reports
+func (b *Bot) StopPeriodicReports() {
+	if !b.reportRunning {
+		return
+	}
+
+	close(b.reportStop)
+	b.mu.Lock()
+	b.reportRunning = false
+	b.mu.Unlock()
+}
+
+func (b *Bot) sendPeriodicReport() {
+	if b.trafficHandler == nil {
+		return
+	}
+
+	report := b.trafficHandler()
+	if report != "" {
+		// Add timestamp
+		text := fmt.Sprintf("📊 *Периодический отчёт*\n\n%s", report)
+		b.SendMessage(text)
+	}
 }
 
 // Stop stops the bot polling
@@ -259,7 +331,9 @@ func (b *Bot) handleHelp(bot *Bot, args []string) string {
 /start_service - Запустить сервис
 /stop_service - Остановить сервис
 /traffic - Показать статистику трафика
-/devices - Показать подключенные устройства`
+/devices - Показать подключенные устройства
+/report - Получить периодический отчёт
+/discord_status - Проверить статус Discord webhook`
 }
 
 func (b *Bot) handleStatus(bot *Bot, args []string) string {
@@ -295,6 +369,25 @@ func (b *Bot) handleDevices(bot *Bot, args []string) string {
 		return b.devicesHandler()
 	}
 	return "Devices handler not configured"
+}
+
+func (b *Bot) handleReport(bot *Bot, args []string) string {
+	if b.trafficHandler != nil {
+		return b.trafficHandler()
+	}
+	return "Traffic handler not configured"
+}
+
+func (b *Bot) handleDiscordStatus(bot *Bot, args []string) string {
+	// Get Discord status if configured
+	if _discordWebhook != nil {
+		if wh, ok := _discordWebhook.(*discord.WebhookClient); ok {
+			if wh.IsEnabled() {
+				return "🟢 Discord webhook активен\n\n" + wh.GetStatusMessage()
+			}
+		}
+	}
+	return "🔴 Discord webhook не настроен"
 }
 
 // SetStatusHandler sets the status handler callback

@@ -4,8 +4,8 @@ import (
 	"context"
 	"net"
 
-	M "github.com/DaniilSokolyuk/go-pcap2socks/md"
-	"github.com/DaniilSokolyuk/go-pcap2socks/stats"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
+	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 )
 
 // StatsProxy wraps a Proxy to record traffic statistics
