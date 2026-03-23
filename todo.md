@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.12.0-stable)
+## ✅ Завершено (v3.13.0-conntrack)
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -11,34 +11,31 @@
 - [x] Adaptive buffer sizing (buffer/ - 512B/2KB/8KB пулы)
 - [x] HTTP/2 connection pooling (dialer/dialer.go - shared transport)
 - [x] Metrics Prometheus (metrics/collector.go - /metrics endpoint)
-- [x] Router DialContext optimization (proxy/router.go - portToString pool)
+- [x] Connection tracking оптимизация (stats/ - sync.Pool для DeviceStats)
 
 ### Исправления
 - [x] stats/store.go - дублирование кода
 - [x] dns/pool.go - dns.Conn pointer
 - [x] api/server_test.go - helper функции
 - [x] profiles/manager_test.go - импорты и методы
-- [x] asynclogger/async_handler.go - go vet warnings (atomic/sync pointers)
 
 ---
 
 ## 🔥 В работе
 
-### Connection tracking оптимизация (средний приоритет)
-- [ ] Анализ текущей реализации connection tracking
-- [ ] Оптимизация хранения состояния соединений
-- [ ] Снижение аллокаций при создании соединений
-- [ ] Цель: -10% CPU на connection handling
+### Async DNS resolver (средний приоритет)
+- [ ] Изучить текущую реализацию DNS
+- [ ] Реализовать асинхронный резолвинг
+- [ ] Кэширование результатов
+- [ ] Цель: -20% latency для DNS запросов
 
 ---
 
 ## 📋 Запланировано
 
 ### Критичные улучшения
-- [ ] Async DNS resolver
 - [ ] Memory pool для частых аллокаций
-- [ ] gVisor stack tuning (MTU/MSS через config)
-  - ⚠️ Ограничение: gVisor не предоставляет API для TCP congestion control
+- [ ] gVisor stack tuning (через config)
 
 ### Долгосрочные
 - [ ] HTTP/3 (QUIC) поддержка
@@ -51,20 +48,22 @@
 
 ### Производительность (текущие)
 ```
-Router Match:       7.65 ns/op    0 B/op    0 allocs/op ✅
-Router DialContext: 128.2 ns/op   112 B/op  6 allocs/op ✅
-Buffer GetPut:      42.74 ns/op   24 B/op   1 allocs/op ✅
-DNS Cache Get:      98.49 ns/op   0 B/op    0 allocs/op ✅
-Metrics Record:     8.88 ns/op    0 B/op    0 allocs/op ✅
-Metrics Export:     5356 ns/op    1152 B/op 73 allocs/op
+Router Match:         7.65 ns/op    0 B/op    0 allocs/op ✅
+Router DialContext:   143.1 ns/op   112 B/op  6 allocs/op
+Buffer GetPut:        42.74 ns/op   24 B/op   1 allocs/op ✅
+DNS Cache Get:        98.49 ns/op   0 B/op    0 allocs/op ✅
+Metrics Record:       8.88 ns/op    0 B/op    0 allocs/op ✅
+Stats RecordTraffic:  21.94 ns/op   0 B/op    0 allocs/op ✅
+GetDeviceStats:       11.21 ns/op   0 B/op    0 allocs/op ✅
 ```
 
 ### Целевые показатели
 ```
-Router DialContext: <100 ns/op   <100 B/op  <4 allocs/op
-Buffer GetPut:      <50 ns/op    <30 B/op   1 allocs/op ✅
-Metrics Record:     <10 ns/op    0 B/op     0 allocs/op ✅
-Conn Tracking:      -10% CPU (в работе)
+Router DialContext:   <100 ns/op   <100 B/op  <4 allocs/op
+Buffer GetPut:        <50 ns/op    <30 B/op   1 allocs/op ✅
+Metrics Record:       <10 ns/op    0 B/op     0 allocs/op ✅
+Stats RecordTraffic:  <25 ns/op    0 B/op     0 allocs/op ✅
+Async DNS:            -20% latency (в работе)
 ```
 
 ---
@@ -87,5 +86,5 @@ Conn Tracking:      -10% CPU (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.12.0-stable (в main и dev)
-**Статус**: ✅ Все изменения синхронизированы с origin
+**Версия**: v3.13.0-conntrack (dev)
+**Статус**: 🔄 dev → main (ready for merge)
