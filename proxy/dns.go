@@ -24,11 +24,11 @@ type DNS struct {
 }
 
 func (d *DNS) Addr() string {
-	panic("implement me")
+	return "dns-server"
 }
 
 func (d *DNS) Mode() Mode {
-	panic("implement me")
+	return ModeDNS
 }
 
 func NewDNS(cfg cfg.DNS, interfaceName string) *DNS {

@@ -10,7 +10,7 @@
 
 ## 🔧 В работе (v3.2-dev)
 
-### Реализовано v3.2 ✅
+### ✅ Реализовано v3.2
 
 #### DNS-over-HTTPS/TLS
 - [x] `dns/doh.go` — DoH и DoT клиенты
@@ -32,6 +32,12 @@
 - [x] Все импорты обновлены на `QuadDarv1ne` (69 файлов)
 - [x] `go.mod` — module `github.com/QuadDarv1ne/go-pcap2socks`
 - [x] Сборка без ошибок ✅
+
+### 🛠 Исправления ошибок (v3.2.2) — 23.03.2026
+- [x] `proxy/dns.go` — исправлены `Addr()` и `Mode()` (был `panic`)
+- [x] `proxy/mode.go` — добавлен `ModeDNS`
+- [x] `arpr/arp.go` — исправлен `panic` в `SendReply()` на возврат ошибки
+- [x] Все тесты проходят ✅
 
 ---
 

@@ -68,7 +68,7 @@ func SendReply(arp *layers.ARP, localIP net.IP, localMAC net.HardwareAddr) ([]by
 	}
 
 	if err := gopacket.SerializeLayers(sbuf, options, ethernetResp, arpResp); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// If we failed to write the message, we do so silently. Packet loss happen...
