@@ -27,10 +27,7 @@
 
 ## 🔥 В работе
 
-### Стабилизация и документация
-- [ ] Обновление README.md
-- [ ] CHANGELOG.md для v3.17.0
-- [ ] Benchmark comparison с v3.12.0
+_Нет активных задач_
 
 ---
 
@@ -47,9 +44,9 @@
 
 ### Производительность (текущие)
 ```
-Router Match:         7.72 ns/op    0 B/op    0 allocs/op ✅
-Router DialContext:   153.0 ns/op   88 B/op   3 allocs/op ✅
-Router Cache Hit:     292.9 ns/op   88 B/op   3 allocs/op ✅
+Router Match:         4.38 ns/op    0 B/op    0 allocs/op ✅ (было 7.72ns)
+Router DialContext:   96.93 ns/op   88 B/op   3 allocs/op ✅ (было 153.0ns)
+Router Cache Hit:     160.3 ns/op   88 B/op   3 allocs/op ✅ (было 292.9ns)
 Buffer GetPut:        42.74 ns/op   24 B/op   1 allocs/op ✅
 DNS Cache Get:        98.49 ns/op   0 B/op    0 allocs/op ✅
 Metrics Record:       8.88 ns/op    0 B/op    0 allocs/op ✅
@@ -89,4 +86,4 @@ gVisor Stack:         tuned        256KB buf  ✅
 
 **Последнее обновление**: 23 марта 2026 г.
 **Версия**: v3.17.0-stack-tuning (dev)
-**Статус**: 🔄 dev → main (ready for merge)
+**Статус**: ✅ готов к merge в main
