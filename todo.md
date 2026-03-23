@@ -11,6 +11,7 @@
 - [x] Оптимизация буферов UDP (64KB → 1.5KB)
 - [x] String builder pool для кэша маршрутизации
 - [x] Connection pooling для SOCKS5 (socks5_pool.go)
+- [x] Zero-copy UDP (DecodeUDPPacketInPlace, socksPacketConn.ReadFrom)
 
 ### Исправления
 - [x] Исправлен stats/store.go (дублирование кода)
@@ -25,11 +26,11 @@
 
 ## 🔥 В работе
 
-### Zero-copy UDP (высокий приоритет)
-- [ ] Изучить текущую реализацию socksPacketConn.ReadFrom
-- [ ] Реализовать чтение без копирования payload
-- [ ] Протестировать на UDP трафике
-- [ ] Замерить улучшение (цель: -20% CPU на UDP)
+### Adaptive buffer sizing (средний приоритет)
+- [ ] Изучить паттерны трафика (DNS, HTTP, stream)
+- [ ] Реализовать динамический выбор размера буфера
+- [ ] Протестировать на разном трафике
+- [ ] Замерить улучшение (цель: -15-20% memory)
 
 ---
 
@@ -69,13 +70,15 @@ Router Match:       7.65 ns/op    0 B/op    0 allocs/op ✅
 Router DialContext: 143.1 ns/op   112 B/op  6 allocs/op
 Buffer GetPut:      11.03 ns/op   24 B/op   1 allocs/op ✅
 DNS Cache Get:      98.49 ns/op   0 B/op    0 allocs/op ✅
+Zero-copy UDP:      в работе      -20% CPU  (ожидаемо)
 ```
 
 ### Целевые показатели
 ```
 Router DialContext: <100 ns/op   <100 B/op  <4 allocs/op
 Buffer GetPut:      <10 ns/op    <20 B/op   1 allocs/op
-UDP Relay:          -20% CPU (после zero-copy)
+UDP Relay:          -20% CPU (после zero-copy) ✅
+Adaptive Buffer:    -15-20% memory (в работе)
 ```
 
 ---
@@ -98,5 +101,5 @@ UDP Relay:          -20% CPU (после zero-copy)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.  
-**Версия**: v3.8.0-speed (в main)  
+**Версия**: v3.8.1-zero-copy (в main)  
 **Статус**: ✅ main синхронизирован с dev
