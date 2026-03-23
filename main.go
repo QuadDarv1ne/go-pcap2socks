@@ -533,6 +533,12 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			p = proxy.NewReject()
 		case outbound.DNS != nil:
 			p = proxy.NewDNS(cfg.DNS, ifce.Name)
+		case outbound.HTTP3 != nil:
+			// Create HTTP/3 proxy
+			p, err = proxy.NewHTTP3(outbound.HTTP3.Address, outbound.HTTP3.SkipVerify)
+			if err != nil {
+				return fmt.Errorf("create HTTP/3 proxy: %w", err)
+			}
 		default:
 			return fmt.Errorf("%s: %+v", msgs.InvalidOutbound, outbound)
 		}

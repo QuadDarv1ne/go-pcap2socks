@@ -197,6 +197,7 @@ type Outbound struct {
 	Reject *OutboundReject `json:"reject,omitempty"`
 	DNS    *OutboundDNS    `json:"dns,omitempty"`
 	Group  *OutboundGroup  `json:"group,omitempty"`
+	HTTP3  *OutboundHTTP3  `json:"http3,omitempty"`
 	Tag    string          `json:"tag,omitempty"`
 }
 
@@ -210,6 +211,12 @@ type OutboundSocks struct {
 }
 
 type OutboundDNS struct{}
+
+// OutboundHTTP3 represents HTTP/3 (QUIC) proxy configuration
+type OutboundHTTP3 struct {
+	Address    string `json:"address"`              // e.g. "https://proxy.example.com:443"
+	SkipVerify bool   `json:"skip_verify,omitempty"` // Skip TLS verification
+}
 
 // OutboundGroup represents a group of proxies with load balancing
 type OutboundGroup struct {
