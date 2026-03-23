@@ -101,7 +101,7 @@
 
 ### Безопасность (MEDIUM priority)
 - [x] Rate limiting на API endpoints - реализован token bucket per IP (100 req/min)
-- [ ] Валидация размера запроса (http.MaxBytesReader)
+- [x] Валидация размера запроса (http.MaxBytesReader) - реализовано с лимитами 1MB/10MB
 - [ ] Опциональная поддержка HTTPS для Web UI
 - [ ] Поддержка переменных окружения для токенов (${TELEGRAM_TOKEN})
 
