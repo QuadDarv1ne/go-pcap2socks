@@ -16,6 +16,7 @@
 - [x] dns/pool.go - dns.Conn pointer
 - [x] api/server_test.go - helper функции
 - [x] profiles/manager_test.go - импорты и методы
+- [x] asynclogger/async_handler.go - go vet warnings (atomic/sync pointers)
 
 ---
 

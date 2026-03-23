@@ -21,12 +21,12 @@ const (
 // AsyncHandler wraps slog.Handler and processes records asynchronously
 type AsyncHandler struct {
 	queue     chan *slog.Record
-	wg        sync.WaitGroup
+	wg        *sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
 	handler   slog.Handler
-	dropped   atomic.Int64
-	stopped   atomic.Bool
+	dropped   *atomic.Int64
+	stopped   *atomic.Bool
 	flushCh   chan chan struct{}
 }
 
@@ -38,18 +38,21 @@ func NewAsyncHandler(handler slog.Handler) *AsyncHandler {
 // NewAsyncHandlerWithSize creates a new async handler with custom queue size
 func NewAsyncHandlerWithSize(handler slog.Handler, queueSize int, flushInterval time.Duration) *AsyncHandler {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	h := &AsyncHandler{
 		queue:     make(chan *slog.Record, queueSize),
+		wg:        &sync.WaitGroup{},
 		ctx:       ctx,
 		cancel:    cancel,
 		handler:   handler,
+		dropped:   &atomic.Int64{},
+		stopped:   &atomic.Bool{},
 		flushCh:   make(chan chan struct{}, 1),
 	}
-	
+
 	h.wg.Add(1)
 	go h.processLoop(flushInterval)
-	
+
 	return h
 }
 
@@ -80,7 +83,7 @@ func (h *AsyncHandler) Handle(ctx context.Context, rec slog.Record) error {
 
 // WithAttrs implements slog.Handler
 func (h *AsyncHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &AsyncHandler{
+	newHandler := &AsyncHandler{
 		queue:     h.queue,
 		handler:   h.handler.WithAttrs(attrs),
 		ctx:       h.ctx,
@@ -89,11 +92,13 @@ func (h *AsyncHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		stopped:   h.stopped,
 		flushCh:   h.flushCh,
 	}
+	newHandler.wg = h.wg
+	return newHandler
 }
 
 // WithGroup implements slog.Handler
 func (h *AsyncHandler) WithGroup(name string) slog.Handler {
-	return &AsyncHandler{
+	newHandler := &AsyncHandler{
 		queue:     h.queue,
 		handler:   h.handler.WithGroup(name),
 		ctx:       h.ctx,
@@ -102,6 +107,8 @@ func (h *AsyncHandler) WithGroup(name string) slog.Handler {
 		stopped:   h.stopped,
 		flushCh:   h.flushCh,
 	}
+	newHandler.wg = h.wg
+	return newHandler
 }
 
 // processLoop processes log records in background
