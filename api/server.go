@@ -834,6 +834,22 @@ func (s *Server) sendError(w http.ResponseWriter, message string, status int) {
 	})
 }
 
+// SuccessResponse creates a success API response
+func SuccessResponse(data interface{}) APIResponse {
+	return APIResponse{
+		Success: true,
+		Data:    data,
+	}
+}
+
+// ErrorResponse creates an error API response
+func ErrorResponse(message string) APIResponse {
+	return APIResponse{
+		Success: false,
+		Error:   message,
+	}
+}
+
 func (s *Server) getDevices() []Device {
 	if s.statsStore == nil {
 		return []Device{}
