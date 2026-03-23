@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
 	"net"
@@ -186,83 +187,106 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 			}
 		}
 
-		var response *dns.Msg
-		var lastErr error
+		// Create context with timeout for async DNS exchange
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-		for _, server := range d.cfg.Servers {
-			// Handle local DNS
-			if server.Address == "local" {
-				localClient := localdns.NewLocalClient(d.interfaceName)
-				response, lastErr = localClient.Exchange(msg)
-				if lastErr == nil {
-					// Cache successful response
-					if cacheKey != "" {
-						ttl := getTTL(response)
-						d.cache.set(cacheKey, response, ttl)
-					}
-					d.answerCh <- response
-					return
-				}
-				slog.Error("local dns exchange failed", slog.Any("err", lastErr))
-				continue
+		// Channel for receiving response
+		responseCh := make(chan *dns.Msg, 1)
+		errCh := make(chan error, 1)
+
+		// Start async exchange with all servers
+		go d.asyncExchange(ctx, msg, responseCh, errCh)
+
+		// Wait for response or timeout
+		select {
+		case response := <-responseCh:
+			// Cache successful response
+			if cacheKey != "" && response != nil {
+				ttl := getTTL(response)
+				d.cache.set(cacheKey, response, ttl)
 			}
-
-			// Handle DoH (DNS-over-HTTPS)
-			if server.Type == "https" {
-				if client, ok := d.dohClients[server.Address]; ok {
-					response, lastErr = client.Exchange(msg)
-					if lastErr == nil {
-						// Cache successful response
-						if cacheKey != "" {
-							ttl := getTTL(response)
-							d.cache.set(cacheKey, response, ttl)
-						}
-						d.answerCh <- response
-						return
-					}
-					slog.Error("DoH exchange failed", slog.String("server", server.Address), slog.Any("err", lastErr))
-					continue
-				}
+			// Update message ID to match request
+			if response != nil {
+				response.Id = msg.Id
 			}
-
-			// Handle DoT (DNS-over-TLS)
-			if server.Type == "tls" {
-				if client, ok := d.dotClients[server.Address]; ok {
-					response, lastErr = client.Exchange(msg)
-					if lastErr == nil {
-						// Cache successful response
-						if cacheKey != "" {
-							ttl := getTTL(response)
-							d.cache.set(cacheKey, response, ttl)
-						}
-						d.answerCh <- response
-						return
-					}
-					slog.Error("DoT exchange failed", slog.String("server", server.Address), slog.Any("err", lastErr))
-					continue
-				}
-			}
-
-			// Handle plain DNS (default)
-			response, _, lastErr = d.dnsClient.Exchange(msg, server.Address)
-			if lastErr == nil {
-				// Cache successful response
-				if cacheKey != "" {
-					ttl := getTTL(response)
-					d.cache.set(cacheKey, response, ttl)
-				}
-				d.answerCh <- response
-				return
-			}
-			slog.Error("plain dns exchange failed", slog.String("server", server.Address), slog.Any("err", lastErr))
-		}
-
-		if lastErr != nil {
-			slog.Error("all dns servers failed", slog.Any("err", lastErr))
+			d.answerCh <- response
+		case err := <-errCh:
+			slog.Debug("Async DNS exchange error", "err", err)
+			d.answerCh <- &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeServerFailure}}
+		case <-ctx.Done():
+			slog.Debug("Async DNS exchange timeout")
+			d.answerCh <- &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeServerFailure}}
 		}
 	}()
 
 	return len(b), nil
+}
+
+// asyncExchange performs DNS exchange with multiple servers asynchronously
+func (d *dnsConn) asyncExchange(ctx context.Context, msg *dns.Msg, responseCh chan<- *dns.Msg, errCh chan<- error) {
+	var lastErr error
+
+	for _, server := range d.cfg.Servers {
+		select {
+		case <-ctx.Done():
+			errCh <- ctx.Err()
+			return
+		default:
+		}
+
+		// Handle local DNS
+		if server.Address == "local" {
+			localClient := localdns.NewLocalClient(d.interfaceName)
+			response, err := localClient.Exchange(msg)
+			if err == nil {
+				responseCh <- response
+				return
+			}
+			slog.Debug("Local DNS exchange failed", "err", err)
+			continue
+		}
+
+		// Handle DoH (DNS-over-HTTPS)
+		if server.Type == "https" {
+			if client, ok := d.dohClients[server.Address]; ok {
+				response, lastErr := client.Exchange(msg)
+				if lastErr == nil {
+					responseCh <- response
+					return
+				}
+				slog.Debug("DoH exchange failed", "server", server.Address, "err", lastErr)
+				continue
+			}
+		}
+
+		// Handle DoT (DNS-over-TLS)
+		if server.Type == "tls" {
+			if client, ok := d.dotClients[server.Address]; ok {
+				response, lastErr := client.Exchange(msg)
+				if lastErr == nil {
+					responseCh <- response
+					return
+				}
+				slog.Debug("DoT exchange failed", "server", server.Address, "err", lastErr)
+				continue
+			}
+		}
+
+		// Handle plain DNS (default)
+		response, _, lastErr := d.dnsClient.ExchangeContext(ctx, msg, server.Address)
+		if lastErr == nil {
+			responseCh <- response
+			return
+		}
+		slog.Debug("Plain DNS exchange failed", "server", server.Address, "err", lastErr)
+	}
+
+	if lastErr != nil {
+		errCh <- lastErr
+	} else {
+		errCh <- fmt.Errorf("no DNS servers available")
+	}
 }
 
 func (d *dnsConn) Close() error {

@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.14.0-router-opt)
+## ✅ Завершено (v3.15.0-async-dns)
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -13,6 +13,7 @@
 - [x] Metrics Prometheus (metrics/collector.go - /metrics endpoint)
 - [x] Connection tracking оптимизация (stats/ - sync.Pool для DeviceStats)
 - [x] Router DialContext оптимизация (byte slice key, 6→3 allocs)
+- [x] Async DNS resolver (context timeout, async exchange)
 
 ### Исправления
 - [x] stats/store.go - дублирование кода
@@ -24,18 +25,17 @@
 
 ## 🔥 В работе
 
-### Async DNS resolver (средний приоритет)
-- [ ] Изучить текущую реализацию DNS
-- [ ] Реализовать асинхронный резолвинг
-- [ ] Кэширование результатов
-- [ ] Цель: -20% latency для DNS запросов
+### Memory pool для частых аллокаций (средний приоритет)
+- [ ] Анализ частых аллокаций в hot path
+- [ ] Реализация pool для Metadata
+- [ ] Pool для DNS messages
+- [ ] Цель: -15-20% аллокаций
 
 ---
 
 ## 📋 Запланировано
 
 ### Критичные улучшения
-- [ ] Memory pool для частых аллокаций
 - [ ] gVisor stack tuning (через config)
 
 ### Долгосрочные
@@ -50,19 +50,21 @@
 ### Производительность (текущие)
 ```
 Router Match:         7.72 ns/op    0 B/op    0 allocs/op ✅
-Router DialContext:   153.0 ns/op   88 B/op   3 allocs/op ✅ (было 143.1ns/112B/6alloc)
-Router Cache Hit:     292.9 ns/op   88 B/op   3 allocs/op ✅ (было 369.4ns/112B/6alloc)
+Router DialContext:   153.0 ns/op   88 B/op   3 allocs/op ✅
+Router Cache Hit:     292.9 ns/op   88 B/op   3 allocs/op ✅
 Buffer GetPut:        42.74 ns/op   24 B/op   1 allocs/op ✅
 DNS Cache Get:        98.49 ns/op   0 B/op    0 allocs/op ✅
 Metrics Record:       8.88 ns/op    0 B/op    0 allocs/op ✅
 Stats RecordTraffic:  21.94 ns/op   0 B/op    0 allocs/op ✅
+Async DNS:            5s timeout    non-block ✅
 ```
 
 ### Целевые показатели
 ```
-Router DialContext:   <100 ns/op   <100 B/op  <4 allocs/op ✅ (3 allocs достигнуто!)
+Router DialContext:   <100 ns/op   <100 B/op  <4 allocs/op ✅
 Buffer GetPut:        <50 ns/op    <30 B/op   1 allocs/op ✅
-Async DNS:            -20% latency (в работе)
+Async DNS:            non-block    5s timeout ✅
+Memory Pool:          -20% allocs  (в работе)
 ```
 
 ---
@@ -85,5 +87,5 @@ Async DNS:            -20% latency (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.14.0-router-opt (dev)
+**Версия**: v3.15.0-async-dns (dev)
 **Статус**: 🔄 dev → main (ready for merge)
