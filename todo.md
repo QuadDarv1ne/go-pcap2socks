@@ -42,6 +42,12 @@
 - [x] `go vet` — без замечаний
 - [x] `go test -race` — без гонок
 
+### 🔥 Оптимизация goroutine (v3.2.3) — 23.03.2026
+- [x] `updater/updater.go` — добавлен `StopAutoCheck()` для остановки проверки обновлений
+- [x] `updater/updater.go` — улучшена обработка ошибок в background goroutine
+- [x] `proxy/socks5.go` — исправлена goroutine утечка в `DialUDP` (передача параметров)
+- [x] Добавлена защита от повторного запуска в `StartAutoCheck()`
+
 ---
 
 ## 📊 Аудит кода (v3.2.2)
@@ -149,7 +155,13 @@ Go версия: 1.25.0
 
 ## 📅 История версий
 
-### v3.2.2 (23.03.2026) — текущая
+### v3.2.3 (23.03.2026) — текущая
+- ✅ Добавлен `StopAutoCheck()` в updater
+- ✅ Исправлена goroutine утечка в `proxy/socks5.go`
+- ✅ Улучшена обработка ошибок в background goroutine
+- ✅ Защита от повторного запуска `StartAutoCheck()`
+
+### v3.2.2 (23.03.2026)
 - ✅ Исправлен `panic` в `proxy/dns.go` (Addr/Mode)
 - ✅ Добавлен `ModeDNS` в `proxy/mode.go`
 - ✅ Исправлен `panic` в `arpr/arp.go` на возврат ошибки

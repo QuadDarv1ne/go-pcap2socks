@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
@@ -113,13 +114,17 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 		return nil, fmt.Errorf("listen packet: %w", err)
 	}
 
-	go func() {
-		io.Copy(io.Discard, c)
-		c.Close()
+	// Monitor TCP connection and cleanup UDP association when it closes
+	go func(tcpConn net.Conn, packetConn net.PacketConn) {
+		_, copyErr := io.Copy(io.Discard, tcpConn)
+		if copyErr != nil && !errors.Is(copyErr, io.EOF) {
+			slog.Debug("UDP association copy error", "err", copyErr)
+		}
+		tcpConn.Close()
 		// A UDP association terminates when the TCP connection that the UDP
 		// ASSOCIATE request arrived on terminates. RFC1928
-		pc.Close()
-	}()
+		packetConn.Close()
+	}(c, pc)
 
 	bindAddr := addr.UDPAddr()
 	if bindAddr == nil {

@@ -45,6 +45,8 @@ type Updater struct {
 	checkInterval  time.Duration
 	httpClient     *http.Client
 	onUpdate       func(oldVersion, newVersion string)
+	checkStop      chan struct{}
+	checkRunning   bool
 }
 
 // NewUpdater creates a new Updater instance
@@ -207,10 +209,12 @@ func (u *Updater) ApplyUpdate(newVersion string) error {
 
 	slog.Info("Update applied successfully", "new_version", newVersion)
 
-	// Remove backup after successful update
+	// Remove backup after successful update (in background with error handling)
 	go func() {
 		time.Sleep(5 * time.Minute)
-		os.Remove(backupFile)
+		if err := os.Remove(backupFile); err != nil {
+			slog.Debug("Failed to remove backup file", "file", backupFile, "err", err)
+		}
 	}()
 
 	return nil
@@ -218,29 +222,52 @@ func (u *Updater) ApplyUpdate(newVersion string) error {
 
 // StartAutoCheck starts periodic update checking in background
 func (u *Updater) StartAutoCheck() {
+	if u.checkRunning {
+		return
+	}
+
+	u.checkStop = make(chan struct{})
+	u.checkRunning = true
+
 	go func() {
 		ticker := time.NewTicker(u.checkInterval)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			release, isNewer, err := u.CheckForUpdates()
-			if err != nil {
-				slog.Debug("Update check failed", "err", err)
-				continue
-			}
-
-			if isNewer {
-				slog.Info("New version available",
-					"current", u.currentVersion,
-					"latest", release.TagName,
-					"url", release.HTMLURL)
-
-				if u.onUpdate != nil {
-					u.onUpdate(u.currentVersion, release.TagName)
+		for {
+			select {
+			case <-ticker.C:
+				release, isNewer, err := u.CheckForUpdates()
+				if err != nil {
+					slog.Debug("Update check failed", "err", err)
+					continue
 				}
+
+				if isNewer {
+					slog.Info("New version available",
+						"current", u.currentVersion,
+						"latest", release.TagName,
+						"url", release.HTMLURL)
+
+					if u.onUpdate != nil {
+						u.onUpdate(u.currentVersion, release.TagName)
+					}
+				}
+			case <-u.checkStop:
+				slog.Info("Update autocheck stopped")
+				return
 			}
 		}
 	}()
+}
+
+// StopAutoCheck stops periodic update checking
+func (u *Updater) StopAutoCheck() {
+	if !u.checkRunning {
+		return
+	}
+
+	close(u.checkStop)
+	u.checkRunning = false
 }
 
 // isNewerVersion compares versions and returns true if latest is newer
