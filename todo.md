@@ -37,7 +37,8 @@
 ### Критичные улучшения
 - [ ] Async DNS resolver
 - [ ] Memory pool для частых аллокаций
-- [ ] gVisor stack tuning (через config)
+- [ ] gVisor stack tuning (MTU/MSS через config)
+  - ⚠️ Ограничение: gVisor не предоставляет API для TCP congestion control
 
 ### Долгосрочные
 - [ ] HTTP/3 (QUIC) поддержка
