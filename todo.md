@@ -226,9 +226,10 @@
   - **Время**: 1-2 часа
 
 ### Технические долги (LOW priority) - 🟢 МЕСЯЦ
-- [ ] Удалить мёртвый код в api/server.go:567-590
+- [x] Удалить мёртвый код в api/server.go:567-590
   - **Проблема**: Handlers определены, но не зарегистрированы
-  - **Время**: 30 минут
+  - **Решение**: Удалены handleProfileCreate, handleProfileDelete, handleProfileGet (не используются)
+  - **Статус**: ✅ Исправлено (23.03.2026)
 
 - [ ] Вынести общую DHCP логику из dhcp/ и windivert/
   - **Проблема**: Дублирование handleDiscover, handleRequest, handleRelease, handleInform
