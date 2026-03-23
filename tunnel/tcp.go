@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	// tcpWaitTimeout implements a TCP half-close timeout.
-	tcpWaitTimeout = 60 * time.Second
+	// TCPWaitTimeout implements a TCP half-close timeout.
+	// This timeout prevents connections from hanging indefinitely after one side closes.
+	TCPWaitTimeout = 60 * time.Second
 
 	// tcpRelayBufferSize is optimized buffer size for TCP relay
 	// Using adaptive buffer sizing for better memory efficiency
@@ -86,5 +87,5 @@ func unidirectionalStream(dst, src net.Conn, dir string, wg *sync.WaitGroup) {
 		cw.CloseWrite()
 	}
 	// Set TCP half-close timeout.
-	dst.SetReadDeadline(time.Now().Add(tcpWaitTimeout))
+	dst.SetReadDeadline(time.Now().Add(TCPWaitTimeout))
 }

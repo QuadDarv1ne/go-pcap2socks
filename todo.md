@@ -231,13 +231,14 @@
   - **Решение**: Удалены handleProfileCreate, handleProfileDelete, handleProfileGet (не используются)
   - **Статус**: ✅ Исправлено (23.03.2026)
 
-- [ ] Вынести общую DHCP логику из dhcp/ и windivert/
+- [x] Вынести общую DHCP логику из dhcp/ и windivert/
   - **Проблема**: Дублирование handleDiscover, handleRequest, handleRelease, handleInform
   - **Время**: 6-8 часов
 
-- [ ] Заменить магические числа на константы
+- [x] Заменить магические числа на константы
   - **Файл**: tunnel/tcp.go:14 (tcpWaitTimeout = 60s)
-  - **Время**: 1 час
+  - **Решение**: Экспортирован TCPWaitTimeout с документацией
+  - **Статус**: ✅ Исправлено (23.03.2026)
 
 ### Долгосрочные (FUTURE)
 - [ ] HTTP/3 CONNECT для TCP proxying
