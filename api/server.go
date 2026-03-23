@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"sync"
 	"time"
@@ -18,14 +19,14 @@ import (
 )
 
 type Server struct {
-	mux          *http.ServeMux
-	statsStore   *stats.Store
-	profileMgr   *profiles.Manager
-	upnpMgr      *upnpmanager.Manager
-	metrics      *metrics.Collector
-	configPath   string
-	mu           sync.RWMutex
-	enabled      bool
+	mux        *http.ServeMux
+	statsStore *stats.Store
+	profileMgr *profiles.Manager
+	upnpMgr    *upnpmanager.Manager
+	metrics    *metrics.Collector
+	configPath string
+	mu         sync.RWMutex
+	enabled    bool
 }
 
 type APIResponse struct {
@@ -35,13 +36,13 @@ type APIResponse struct {
 }
 
 type Status struct {
-	Running       bool      `json:"running"`
-	ProxyMode     string    `json:"proxy_mode"` // "socks5" or "direct"
-	Devices       []Device  `json:"devices"`
-	Traffic       Traffic   `json:"traffic"`
-	Uptime        string    `json:"uptime"`
-	StartTime     time.Time `json:"start_time"`
-	SocksAvailable bool     `json:"socks_available"`
+	Running        bool      `json:"running"`
+	ProxyMode      string    `json:"proxy_mode"` // "socks5" or "direct"
+	Devices        []Device  `json:"devices"`
+	Traffic        Traffic   `json:"traffic"`
+	Uptime         string    `json:"uptime"`
+	StartTime      time.Time `json:"start_time"`
+	SocksAvailable bool      `json:"socks_available"`
 }
 
 type Device struct {
@@ -52,10 +53,10 @@ type Device struct {
 }
 
 type Traffic struct {
-	Total     uint64 `json:"total_bytes"`
-	Upload    uint64 `json:"upload_bytes"`
-	Download  uint64 `json:"download_bytes"`
-	Packets   uint64 `json:"packets"`
+	Total    uint64 `json:"total_bytes"`
+	Upload   uint64 `json:"upload_bytes"`
+	Download uint64 `json:"download_bytes"`
+	Packets  uint64 `json:"packets"`
 }
 
 func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager) *Server {
@@ -72,13 +73,13 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	metricsCollector := metrics.NewCollector(statsStore)
 
 	s := &Server{
-		mux:          http.NewServeMux(),
-		statsStore:   statsStore,
-		profileMgr:   profileMgr,
-		upnpMgr:      upnpMgr,
-		metrics:      metricsCollector,
-		configPath:   cfgFile,
-		enabled:      true,
+		mux:        http.NewServeMux(),
+		statsStore: statsStore,
+		profileMgr: profileMgr,
+		upnpMgr:    upnpMgr,
+		metrics:    metricsCollector,
+		configPath: cfgFile,
+		enabled:    true,
 	}
 
 	s.setupRoutes()
@@ -96,7 +97,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/status", s.handleStatus)
 	s.mux.HandleFunc("/api/start", s.handleStart)
 	s.mux.HandleFunc("/api/stop", s.handleStop)
-	
+
 	// Traffic endpoints
 	s.mux.HandleFunc("/api/traffic", s.handleTraffic)
 	s.mux.HandleFunc("/api/traffic/export", s.handleTrafficExport)
@@ -112,6 +113,11 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/config", s.handleConfig)
 	s.mux.HandleFunc("/api/config/update", s.handleConfigUpdate)
 	s.mux.HandleFunc("/api/config/reload", s.handleConfigReload)
+	s.mux.HandleFunc("/api/config/auto", s.handleAutoConfig)
+
+	// DHCP endpoints
+	s.mux.HandleFunc("/api/dhcp", s.handleDHCP)
+	s.mux.HandleFunc("/api/dhcp/leases", s.handleDHCPLeases)
 
 	// Profile endpoints
 	s.mux.HandleFunc("/api/profiles", s.handleProfiles)
@@ -331,11 +337,11 @@ func (s *Server) handleConfigReload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("Config reload requested via API")
-	
+
 	// Send success response
 	s.sendSuccess(w, map[string]interface{}{
 		"message": "Config reload requested. Restart service to apply changes.",
-		"status": "pending_restart",
+		"status":  "pending_restart",
 	})
 }
 
@@ -411,8 +417,8 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 		currentProfile := s.profileMgr.GetCurrentProfile()
 
 		s.sendSuccess(w, map[string]interface{}{
-			"profiles":      profileList,
-			"current":       currentProfile,
+			"profiles": profileList,
+			"current":  currentProfile,
 		})
 		return
 	}
@@ -463,9 +469,9 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 
 		slog.Info("Profile switched via API", "profile", req.Profile)
 		s.sendSuccess(w, map[string]interface{}{
-			"message":  "Profile switched: " + req.Profile,
-			"profile":  req.Profile,
-			"restart":  true,
+			"message": "Profile switched: " + req.Profile,
+			"profile": req.Profile,
+			"restart": true,
 		})
 		return
 	}
@@ -700,11 +706,11 @@ func (s *Server) handleUPnPAddPort(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendSuccess(w, map[string]interface{}{
-		"message":          "Port mapping added",
-		"protocol":         protocol,
-		"external_port":    req.ExternalPort,
-		"internal_port":    req.InternalPort,
-		"active_mappings":  s.upnpMgr.GetActiveMappings(),
+		"message":         "Port mapping added",
+		"protocol":        protocol,
+		"external_port":   req.ExternalPort,
+		"internal_port":   req.InternalPort,
+		"active_mappings": s.upnpMgr.GetActiveMappings(),
 	})
 }
 
@@ -736,10 +742,10 @@ func (s *Server) handleUPnPRemovePort(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendSuccess(w, map[string]interface{}{
-		"message":          "Port mapping removed",
-		"protocol":         req.Protocol,
-		"port":             req.Port,
-		"active_mappings":  s.upnpMgr.GetActiveMappings(),
+		"message":         "Port mapping removed",
+		"protocol":        req.Protocol,
+		"port":            req.Port,
+		"active_mappings": s.upnpMgr.GetActiveMappings(),
 	})
 }
 
@@ -761,8 +767,8 @@ func (s *Server) handleUPnPApplyMappings(w http.ResponseWriter, r *http.Request)
 	}
 
 	s.sendSuccess(w, map[string]interface{}{
-		"message":          "Port mappings applied",
-		"active_mappings":  s.upnpMgr.GetActiveMappings(),
+		"message":         "Port mappings applied",
+		"active_mappings": s.upnpMgr.GetActiveMappings(),
 	})
 }
 
@@ -775,7 +781,7 @@ func (s *Server) handleHotkey(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement hotkey status
 	s.sendSuccess(w, map[string]interface{}{
 		"enabled": false,
-		"toggle": "Ctrl+Alt+P",
+		"toggle":  "Ctrl+Alt+P",
 	})
 }
 
@@ -793,24 +799,24 @@ func (s *Server) handleHotkeyToggle(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	// Serve web UI files
 	webPath := path.Join(path.Dir(s.configPath), "web")
-	
+
 	// Handle root path
 	if r.URL.Path == "/" {
 		filePath := path.Join(webPath, "index.html")
 		http.ServeFile(w, r, filePath)
 		return
 	}
-	
+
 	// Clean and validate path to prevent directory traversal
 	cleanPath := path.Clean(r.URL.Path)
 	filePath := path.Join(webPath, cleanPath)
-	
+
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		// File not found, serve index.html for SPA routing
 		filePath = path.Join(webPath, "index.html")
 	}
-	
+
 	// Set content type based on file extension
 	ext := path.Ext(filePath)
 	switch ext {
@@ -833,7 +839,7 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	case ".ico":
 		w.Header().Set("Content-Type", "image/x-icon")
 	}
-	
+
 	http.ServeFile(w, r, filePath)
 }
 
@@ -1081,4 +1087,144 @@ func readLastLines(filePath string, n int) ([]string, error) {
 	}
 
 	return lines[len(lines)-n:], scanner.Err()
+}
+
+// handleAutoConfig runs automatic configuration
+func (s *Server) handleAutoConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Run auto-config command
+	cmd := exec.Command(os.Args[0], "auto-config")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Error("auto-config error", slog.Any("err", err), slog.String("output", string(output)))
+		s.sendError(w, "Auto-config failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("Auto-config completed successfully")
+	s.sendSuccess(w, map[string]string{
+		"message": "Auto-config completed successfully",
+		"output":  string(output),
+	})
+}
+
+// handleDHCP returns DHCP server status
+func (s *Server) handleDHCP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleDHCPGet(w, r)
+	case http.MethodPost:
+		s.handleDHCPUpdate(w, r)
+	default:
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleDHCPGet returns DHCP configuration
+func (s *Server) handleDHCPGet(w http.ResponseWriter, r *http.Request) {
+	config, err := cfg.Load(s.configPath)
+	if err != nil {
+		s.sendError(w, "Failed to load config", http.StatusInternalServerError)
+		return
+	}
+
+	dhcpEnabled := false
+	poolStart := ""
+	poolEnd := ""
+	leaseDuration := 0
+
+	if config.DHCP != nil {
+		dhcpEnabled = config.DHCP.Enabled
+		poolStart = config.DHCP.PoolStart
+		poolEnd = config.DHCP.PoolEnd
+		leaseDuration = config.DHCP.LeaseDuration
+	}
+
+	s.sendSuccess(w, map[string]interface{}{
+		"enabled":        dhcpEnabled,
+		"pool_start":     poolStart,
+		"pool_end":       poolEnd,
+		"lease_duration": leaseDuration,
+	})
+}
+
+// handleDHCPUpdate updates DHCP configuration
+func (s *Server) handleDHCPUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled       bool   `json:"enabled"`
+		PoolStart     string `json:"pool_start"`
+		PoolEnd       string `json:"pool_end"`
+		LeaseDuration int    `json:"lease_duration"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	config, err := cfg.Load(s.configPath)
+	if err != nil {
+		s.sendError(w, "Failed to load config", http.StatusInternalServerError)
+		return
+	}
+
+	if config.DHCP == nil {
+		config.DHCP = &cfg.DHCP{}
+	}
+
+	config.DHCP.Enabled = req.Enabled
+	if req.PoolStart != "" {
+		config.DHCP.PoolStart = req.PoolStart
+	}
+	if req.PoolEnd != "" {
+		config.DHCP.PoolEnd = req.PoolEnd
+	}
+	if req.LeaseDuration > 0 {
+		config.DHCP.LeaseDuration = req.LeaseDuration
+	}
+
+	// Save config
+	if err := saveConfig(s.configPath, config); err != nil {
+		s.sendError(w, "Failed to save config", http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("DHCP configuration updated", "enabled", req.Enabled)
+	s.sendSuccess(w, "DHCP configuration updated")
+}
+
+// saveConfig saves the configuration to a file
+func saveConfig(filePath string, config *cfg.Config) error {
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// handleDHCPLeases returns current DHCP leases
+func (s *Server) handleDHCPLeases(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get leases from global DHCP server if available
+	leases := getDHCPLeases()
+	s.sendSuccess(w, map[string]interface{}{
+		"leases": leases,
+	})
+}
+
+// getDHCPLeases returns current DHCP leases from global server
+// This is set from main package
+var getDHCPLeases func() []map[string]interface{}
+
+// SetGetDHCPLeasesFn sets the function to get DHCP leases
+func SetGetDHCPLeasesFn(fn func() []map[string]interface{}) {
+	getDHCPLeases = fn
 }

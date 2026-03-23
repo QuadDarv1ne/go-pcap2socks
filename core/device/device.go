@@ -29,4 +29,6 @@ type NetworkConfig struct {
 // DHCPServer defines the interface for DHCP server implementations
 type DHCPServer interface {
 	HandleRequest(data []byte) ([]byte, error)
+	Start() error
+	Stop()
 }

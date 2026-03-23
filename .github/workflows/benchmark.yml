@@ -1,0 +1,118 @@
+name: Benchmark Comparison
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+    types: [ opened, synchronize, reopened ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Compare Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpcap-dev
+          go install github.com/codahale/hdrhistogram@latest
+          go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run benchmarks on base branch
+        run: |
+          git checkout ${{ github.base_ref }}
+          go test -bench=. -benchmem -run=^$ ./... > base-benchmarks.txt 2>&1 || true
+          git checkout ${{ github.head_ref }}
+
+      - name: Run benchmarks on PR branch
+        run: |
+          go test -bench=. -benchmem -run=^$ ./... > pr-benchmarks.txt 2>&1
+
+      - name: Compare benchmarks
+        id: compare
+        run: |
+          echo "## Benchmark Comparison Results" > benchmark-comment.md
+          echo "" >> benchmark-comment.md
+          echo '```' >> benchmark-comment.md
+          benchstat base-benchmarks.txt pr-benchmarks.txt >> benchmark-comment.md 2>&1 || echo "No significant differences found" >> benchmark-comment.md
+          echo '```' >> benchmark-comment.md
+          echo "" >> benchmark-comment.md
+          
+          # Extract key metrics
+          echo "### Key Metrics" >> benchmark-comment.md
+          echo "" >> benchmark-comment.md
+          
+          # Check for regressions (>10% slower)
+          if benchstat base-benchmarks.txt pr-benchmarks.txt | grep -E '\+[0-9]{2,}\.%' > regressions.txt 2>&1; then
+            echo "⚠️ **Potential regressions detected:**" >> benchmark-comment.md
+            echo "" >> benchmark-comment.md
+            cat regressions.txt >> benchmark-comment.md
+            echo "" >> benchmark-comment.md
+          else
+            echo "✅ No significant regressions detected" >> benchmark-comment.md
+          fi
+          
+          # Check for improvements (>10% faster)
+          if benchstat base-benchmarks.txt pr-benchmarks.txt | grep -E '\-[0-9]{2,}\.%' > improvements.txt 2>&1; then
+            echo "" >> benchmark-comment.md
+            echo "🚀 **Performance improvements:**" >> benchmark-comment.md
+            echo "" >> benchmark-comment.md
+            cat improvements.txt >> benchmark-comment.md
+          fi
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v5
+        with:
+          name: benchmark-results
+          path: |
+            base-benchmarks.txt
+            pr-benchmarks.txt
+            benchmark-comment.md
+          retention-days: 30
+
+      - name: Post comment to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('benchmark-comment.md', 'utf8');
+            
+            // Delete previous benchmark comment if exists
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            for (const c of comments) {
+              if (c.user.login === 'github-actions[bot]' && c.body.includes('Benchmark Comparison Results')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: c.id,
+                });
+              }
+            }
+            
+            // Post new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment,
+            });

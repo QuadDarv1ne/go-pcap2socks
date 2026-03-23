@@ -18,7 +18,12 @@
       "Bash(git pull:*)",
       "Bash(dir go-pcap2socks.exe)",
       "Bash(findstr /C:\"go-pcap2socks.exe\")",
-      "Bash(findstr \"Benchmark\")"
+      "Bash(findstr \"Benchmark\")",
+      "Bash(./go-pcap2socks.exe --help)",
+      "Bash(./go-pcap2socks.exe --version)",
+      "Bash(curl -s http://localhost:8080/api/status)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool)"
     ]
   }
 }

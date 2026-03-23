@@ -14,21 +14,21 @@ import (
 
 // ARPMonitor monitors ARP table for device discovery
 type ARPMonitor struct {
-	mu         sync.RWMutex
-	network    *net.IPNet
-	localIP    net.IP
-	devices    map[string]*DeviceStats
-	stopChan   chan struct{}
-	interval   time.Duration
-	callbacks  []func(DeviceChange)
+	mu        sync.RWMutex
+	network   *net.IPNet
+	localIP   net.IP
+	devices   map[string]*DeviceStats
+	stopChan  chan struct{}
+	interval  time.Duration
+	callbacks []func(DeviceChange)
 }
 
 // DeviceChange represents a device connection change
 type DeviceChange struct {
-	Type    string // "connected" or "disconnected"
-	IP      string
-	MAC     string
-	Device  *DeviceStats
+	Type   string // "connected" or "disconnected"
+	IP     string
+	MAC    string
+	Device *DeviceStats
 }
 
 // NewARPMonitor creates a new ARP monitor
@@ -45,11 +45,11 @@ func NewARPMonitor(network *net.IPNet, localIP net.IP) *ARPMonitor {
 // Start starts the ARP monitoring
 func (m *ARPMonitor) Start(store *Store) {
 	slog.Info("Starting ARP monitor", "network", m.network.String())
-	
+
 	go func() {
 		ticker := time.NewTicker(m.interval)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -267,6 +267,26 @@ func (m *ARPMonitor) GetDevices() []*DeviceStats {
 		devices = append(devices, device)
 	}
 	return devices
+}
+
+// GetDeviceByMAC returns a device by its MAC address
+func (m *ARPMonitor) GetDeviceByMAC(mac string) *DeviceStats {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, device := range m.devices {
+		if strings.EqualFold(device.MAC, mac) {
+			return device
+		}
+	}
+	return nil
+}
+
+// GetDeviceByIP returns a device by its IP address
+func (m *ARPMonitor) GetDeviceByIP(ip string) *DeviceStats {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.devices[ip]
 }
 
 // Helper functions to detect OS

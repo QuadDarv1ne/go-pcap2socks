@@ -22,10 +22,10 @@ import (
 
 // Global state
 var (
-	trayRunning      bool
-	trayStartTime    time.Time
-	trayStatsStore   *stats.Store
-	trayProfileMgr   *profiles.Manager
+	trayRunning    bool
+	trayStartTime  time.Time
+	trayStatsStore *stats.Store
+	trayProfileMgr *profiles.Manager
 )
 
 // Run starts the system tray application
@@ -217,29 +217,41 @@ func openConfig(cfgFile string) {
 }
 
 func runAutoConfig() {
-	// Import and run autoConfigure from main
-	// For now, just show notification
 	notify.Show("Авто-конфигурация", "Запуск авто-конфигурации...", notify.NotifyInfo)
-	
-	// Run auto-config logic here
+
+	// Run auto-config command
+	cmd := exec.Command(os.Args[0], "auto-config")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		slog.Error("auto-config error", slog.Any("err", err))
+		notify.Show("Ошибка", "Не удалось выполнить авто-конфигурацию: "+err.Error(), notify.NotifyError)
+		return
+	}
+
+	// Load and display config
 	executable, err := os.Executable()
 	if err != nil {
 		slog.Error("get executable error", slog.Any("err", err))
 		return
 	}
 	cfgFile := path.Join(path.Dir(executable), "config.json")
-	
-	// Check if config exists and load it
+
 	config, err := cfg.Load(cfgFile)
 	if err != nil {
 		slog.Error("load config error", slog.Any("err", err))
 		notify.Show("Ошибка", "Не удалось загрузить конфиг", notify.NotifyError)
 		return
 	}
-	
+
 	notify.Show(
-		"Конфигурация",
-		fmt.Sprintf("Сеть: %s\nШлюз: %s", config.PCAP.Network, config.PCAP.LocalIP),
+		"Конфигурация создана",
+		fmt.Sprintf("Сеть: %s\nШлюз: %s\nDHCP: %s",
+			config.PCAP.Network,
+			config.PCAP.LocalIP,
+			map[bool]string{true: "включен", false: "выключен"}[config.DHCP != nil && config.DHCP.Enabled]),
 		notify.NotifySuccess,
 	)
 }

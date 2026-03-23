@@ -38,7 +38,7 @@
     "toggle": "Ctrl+Alt+P"
   },
   "windivert": {
-    "enabled": false,
+    "enabled": true,
     "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
   },
   "upnp": {

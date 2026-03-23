@@ -2,14 +2,15 @@ package main
 
 import (
 	"bytes"
-	_ "embed"
 	"context"
+	_ "embed"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,30 +19,32 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
-	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
+	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/discord"
-	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
-	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
+	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/telegram"
-	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	"github.com/QuadDarv1ne/go-pcap2socks/windivert"
 	"github.com/jackpal/gateway"
+	"golang.org/x/sys/windows"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
@@ -70,7 +73,7 @@ func main() {
 	opts := &slog.HandlerOptions{
 		Level: logLevel,
 	}
-	
+
 	// Use async handler for better performance
 	syncHandler := slog.NewTextHandler(os.Stdout, opts)
 	asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
@@ -170,7 +173,7 @@ func main() {
 		_arpMonitor = stats.NewARPMonitor(network, localIP)
 		_arpMonitor.Start(_statsStore)
 		slog.Info("ARP monitor started", "network", network.String())
-		
+
 		// Register ARP change callbacks for Discord notifications
 		_arpMonitor.OnChange(func(change stats.DeviceChange) {
 			if _discordWebhook != nil {
@@ -194,7 +197,7 @@ func main() {
 	// Initialize Telegram bot if configured
 	if config.Telegram != nil && config.Telegram.Token != "" {
 		_telegramBot = telegram.NewBot(config.Telegram.Token, config.Telegram.ChatID)
-		
+
 		// Set up handlers with real data
 		_telegramBot.SetStatusHandler(func() string {
 			status := "🟢 Запущен"
@@ -216,7 +219,7 @@ func main() {
 				formatBytes(total),
 				_statsStore.GetActiveDeviceCount())
 		})
-		
+
 		_telegramBot.SetTrafficHandler(func() string {
 			total, upload, download, packets := _statsStore.GetTotalTraffic()
 			return fmt.Sprintf("📈 *Трафик*\n\n"+
@@ -229,13 +232,13 @@ func main() {
 				formatBytes(total),
 				packets)
 		})
-		
+
 		_telegramBot.SetDevicesHandler(func() string {
 			devices := _statsStore.GetAllDevices()
 			if len(devices) == 0 {
 				return "📱 *Устройства*\n\nНет подключенных устройств"
 			}
-			
+
 			msg := "📱 *Устройства*\n\n"
 			for _, d := range devices {
 				d.RLock()
@@ -248,7 +251,7 @@ func main() {
 			}
 			return msg
 		})
-		
+
 		_telegramBot.SetServiceHandlers(
 			func() string {
 				return "✅ Сервис запущен"
@@ -257,7 +260,7 @@ func main() {
 				return "⏹ Сервис остановлен"
 			},
 		)
-		
+
 		_telegramBot.Start()
 		slog.Info("Telegram bot initialized")
 
@@ -402,6 +405,44 @@ func main() {
 			return _running
 		})
 
+		// Set DHCP leases getter for API
+		api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
+			if _dhcpServer == nil {
+				return nil
+			}
+
+			// Try to get leases from DHCP server
+			var leases []map[string]interface{}
+
+			// Check if it's WinDivert DHCP server
+			if wdDHCP, ok := _dhcpServer.(*windivert.DHCPServer); ok {
+				dhcpLeases := wdDHCP.GetLeases()
+				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+				for mac, lease := range dhcpLeases {
+					leases = append(leases, map[string]interface{}{
+						"mac":        mac,
+						"ip":         lease.IP.String(),
+						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+					})
+				}
+			}
+
+			// Check if it's standard DHCP server
+			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+				dhcpLeases := stdDHCP.GetLeases()
+				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+				for mac, lease := range dhcpLeases {
+					leases = append(leases, map[string]interface{}{
+						"mac":        mac,
+						"ip":         lease.IP.String(),
+						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+					})
+				}
+			}
+
+			return leases
+		})
+
 		// Set service control callbacks for API
 		api.SetServiceCallbacks(
 			func() error {
@@ -470,14 +511,14 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	displayNetworkConfig(netConfig, localizer)
 
 	proxies := make(map[string]proxy.Proxy)
-	
+
 	// First pass: create individual proxies
 	for _, outbound := range cfg.Outbounds {
 		// Skip groups in first pass
 		if outbound.Group != nil {
 			continue
 		}
-		
+
 		var p proxy.Proxy
 		switch {
 		case outbound.Direct != nil:
@@ -500,13 +541,13 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		p = proxy.NewStatsProxy(p, _statsStore)
 		proxies[outbound.Tag] = p
 	}
-	
+
 	// Second pass: create proxy groups
 	for _, outbound := range cfg.Outbounds {
 		if outbound.Group == nil {
 			continue
 		}
-		
+
 		// Resolve proxy references
 		groupProxies := make([]proxy.Proxy, 0, len(outbound.Group.Proxies))
 		for _, proxyTag := range outbound.Group.Proxies {
@@ -516,12 +557,12 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 				slog.Warn("Proxy group references unknown proxy", "group", outbound.Tag, "proxy", proxyTag)
 			}
 		}
-		
+
 		if len(groupProxies) == 0 {
 			slog.Warn("Proxy group has no valid proxies", "group", outbound.Tag)
 			continue
 		}
-		
+
 		// Determine policy
 		policy := proxy.Failover
 		switch outbound.Group.Policy {
@@ -530,7 +571,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		case "least-load":
 			policy = proxy.LeastLoad
 		}
-		
+
 		// Create proxy group
 		groupCfg := &proxy.ProxyGroupConfig{
 			Name:     outbound.Tag,
@@ -541,7 +582,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		if outbound.Group.CheckInterval > 0 {
 			groupCfg.CheckInterval = time.Duration(outbound.Group.CheckInterval) * time.Second
 		}
-		
+
 		group := proxy.NewProxyGroup(groupCfg)
 		proxies[outbound.Tag] = group
 		slog.Info("Created proxy group", "name", outbound.Tag, "policy", policy.String(), "proxies", len(groupProxies))
@@ -679,7 +720,10 @@ var (
 	_upnpManager *upnpmanager.Manager
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server or *windivert.DHCPServer)
-	_dhcpServer interface{ Start() error; Stop() }
+	_dhcpServer interface {
+		Start() error
+		Stop()
+	}
 )
 
 // GetStatsStore returns the global statistics store
@@ -1001,6 +1045,16 @@ func autoConfigure() {
 
 	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC)
 
+	// Get system DNS servers
+	dnsServers := getSystemDNSServers(interfaceConfig.Name)
+	if len(dnsServers) == 0 {
+		// Fallback to public DNS
+		dnsServers = []string{"8.8.8.8", "1.1.1.1"}
+		slog.Info("Системные DNS не найдены, используем публичные DNS", "servers", dnsServers)
+	} else {
+		slog.Info("Найдены системные DNS серверы", "servers", dnsServers)
+	}
+
 	// Get executable path
 	executable, err := os.Executable()
 	if err != nil {
@@ -1009,12 +1063,23 @@ func autoConfigure() {
 	}
 	cfgFile := path.Join(path.Dir(executable), "config.json")
 
+	// Build DNS servers JSON
+	dnsJSON := "["
+	for i, dns := range dnsServers {
+		if i > 0 {
+			dnsJSON += ","
+		}
+		dnsJSON += fmt.Sprintf(`{"address": "%s:53"}`, dns)
+	}
+	dnsJSON += "]"
+
 	// Create clean JSON config manually - Direct mode for VPN sharing
 	configJSON := fmt.Sprintf(`{
   "pcap": {
     "interfaceGateway": "%s",
     "network": "192.168.137.0/24",
     "localIP": "192.168.137.1",
+    "localMAC": "%s",
     "mtu": %d
   },
   "dhcp": {
@@ -1024,10 +1089,7 @@ func autoConfigure() {
     "leaseDuration": 86400
   },
   "dns": {
-    "servers": [
-      {"address": "8.8.8.8:53"},
-      {"address": "1.1.1.1:53"}
-    ]
+    "servers": %s
   },
   "routing": {
     "rules": [
@@ -1050,7 +1112,7 @@ func autoConfigure() {
     "toggle": "Ctrl+Alt+P"
   },
   "windivert": {
-    "enabled": false,
+    "enabled": true,
     "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
   },
   "upnp": {
@@ -1065,7 +1127,7 @@ func autoConfigure() {
     }
   },
   "language": "ru"
-}`, interfaceConfig.IP, interfaceConfig.RecommendedMTU)
+}`, interfaceConfig.IP, interfaceConfig.MAC, interfaceConfig.RecommendedMTU, dnsJSON)
 
 	// Write config file
 	err = os.WriteFile(cfgFile, []byte(configJSON), 0666)
@@ -1224,6 +1286,86 @@ func isPrivateIP(ip net.IP) bool {
 	return false
 }
 
+// getSystemDNSServers retrieves DNS servers for a specific network interface
+func getSystemDNSServers(interfaceName string) []string {
+	dnsServers := make([]string, 0, 2)
+
+	addresses, err := adapterAddresses()
+	if err != nil {
+		slog.Debug("Failed to get adapter addresses", "err", err)
+		return dnsServers
+	}
+
+	for _, aa := range addresses {
+		if aa.OperStatus != windows.IfOperStatusUp {
+			continue
+		}
+
+		ifName := windows.UTF16PtrToString(aa.FriendlyName)
+		if ifName != interfaceName {
+			continue
+		}
+
+		for dns := aa.FirstDnsServerAddress; dns != nil; dns = dns.Next {
+			rawSockaddr, err := dns.Address.Sockaddr.Sockaddr()
+			if err != nil {
+				continue
+			}
+
+			var dnsServerAddr netip.Addr
+			switch sockaddr := rawSockaddr.(type) {
+			case *syscall.SockaddrInet4:
+				dnsServerAddr = netip.AddrFrom4(sockaddr.Addr)
+			case *syscall.SockaddrInet6:
+				// Skip fec0/10 IPv6 addresses (deprecated site local anycast)
+				if sockaddr.Addr[0] == 0xfe && sockaddr.Addr[1] == 0xc0 {
+					continue
+				}
+				dnsServerAddr = netip.AddrFrom16(sockaddr.Addr)
+			default:
+				continue
+			}
+
+			ipStr := dnsServerAddr.String()
+			// Only add IPv4 DNS servers
+			if dnsServerAddr.Is4() {
+				dnsServers = append(dnsServers, ipStr)
+			}
+		}
+		break
+	}
+
+	return dnsServers
+}
+
+// adapterAddresses retrieves adapter addresses for DNS lookup
+func adapterAddresses() ([]*windows.IpAdapterAddresses, error) {
+	var b []byte
+	l := uint32(15000) // recommended initial size
+	for {
+		b = make([]byte, l)
+		const flags = windows.GAA_FLAG_INCLUDE_PREFIX | windows.GAA_FLAG_INCLUDE_GATEWAYS
+		err := windows.GetAdaptersAddresses(syscall.AF_UNSPEC, flags, 0, (*windows.IpAdapterAddresses)(unsafe.Pointer(&b[0])), &l)
+		if err == nil {
+			if l == 0 {
+				return nil, nil
+			}
+			break
+		}
+		if err.(syscall.Errno) != syscall.ERROR_BUFFER_OVERFLOW {
+			return nil, os.NewSyscallError("getadaptersaddresses", err)
+		}
+		if l <= uint32(len(b)) {
+			return nil, os.NewSyscallError("getadaptersaddresses", err)
+		}
+	}
+	var aas []*windows.IpAdapterAddresses
+	for aa := (*windows.IpAdapterAddresses)(unsafe.Pointer(&b[0])); aa != nil; aa = aa.Next {
+		aas = append(aas, aa)
+	}
+	return aas, nil
+}
+
 // formatBytes formats bytes into human-readable format
 func formatBytes(bytes uint64) string {
 	const (
@@ -1307,7 +1449,7 @@ func runAPIServer() {
 			slog.Warn("Create default profiles error", "err", err)
 		}
 	}
-	
+
 	// Create API server with profile manager (UPnP not available in standalone mode)
 	apiServer := api.NewServer(statsStore, profileMgr, nil)
 
@@ -1321,7 +1463,7 @@ func runAPIServer() {
 // discoverUPnP discovers UPnP devices on the network
 func discoverUPnP() {
 	slog.Info("Discovering UPnP devices...")
-	
+
 	u := upnp.New()
 	devices, err := u.Discover()
 	if err != nil {
@@ -1329,13 +1471,13 @@ func discoverUPnP() {
 		fmt.Println("Error:", err)
 		return
 	}
-	
+
 	if len(devices) == 0 {
 		slog.Info("No UPnP devices found")
 		fmt.Println("No UPnP devices found")
 		return
 	}
-	
+
 	fmt.Printf("Found %d UPnP device(s):\n\n", len(devices))
 	for i, device := range devices {
 		fmt.Printf("%d. %s\n", i+1, device.FriendlyName)
@@ -1347,7 +1489,7 @@ func discoverUPnP() {
 		}
 		fmt.Println()
 	}
-	
+
 	// Try to get external IP
 	if len(devices) > 0 {
 		slog.Info("Attempting to get external IP...")
@@ -1484,7 +1626,7 @@ func runWithRecovery(config *cfg.Config, localizer *i18n.Localizer) (err error) 
 // checkUpdate checks for available updates
 func checkUpdate() {
 	updater := updaterpkg.NewUpdater("v3.1")
-	
+
 	slog.Info("Checking for updates...")
 	release, isNewer, err := updater.CheckForUpdates()
 	if err != nil {
@@ -1507,7 +1649,7 @@ func checkUpdate() {
 // doUpdate downloads and installs the latest update
 func doUpdate() {
 	updater := updaterpkg.NewUpdater("v3.1")
-	
+
 	slog.Info("Checking for updates...")
 	release, isNewer, err := updater.CheckForUpdates()
 	if err != nil {
@@ -1522,7 +1664,7 @@ func doUpdate() {
 	}
 
 	fmt.Printf("\n📥 Downloading update %s...\n", release.TagName)
-	
+
 	tempFile, err := updater.DownloadUpdate(release)
 	if err != nil {
 		slog.Error("Download failed", slog.Any("err", err))
@@ -1531,7 +1673,7 @@ func doUpdate() {
 	}
 
 	fmt.Println("📦 Applying update...")
-	
+
 	if err := updater.ApplyUpdate(release.TagName); err != nil {
 		slog.Error("Update apply failed", slog.Any("err", err))
 		fmt.Printf("Error applying update: %v\n", err)
@@ -1541,10 +1683,10 @@ func doUpdate() {
 
 	fmt.Println("✅ Update installed successfully!")
 	fmt.Println("   Restarting application...")
-	
+
 	// Small delay before restart
 	time.Sleep(2 * time.Second)
-	
+
 	if err := updaterpkg.Restart(); err != nil {
 		slog.Error("Restart failed", slog.Any("err", err))
 		fmt.Printf("Update installed but restart failed: %v\n", err)

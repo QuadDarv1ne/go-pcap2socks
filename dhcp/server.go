@@ -19,6 +19,7 @@ type Server struct {
 	leases   map[string]*DHCPLease // MAC -> Lease
 	nextIP   net.IP
 	stopChan chan struct{}
+	reserved map[string]bool // Track reserved IPs to prevent conflicts
 }
 
 // NewServer creates a new DHCP server
@@ -28,7 +29,11 @@ func NewServer(config *ServerConfig) *Server {
 		leases:   make(map[string]*DHCPLease),
 		nextIP:   config.FirstIP,
 		stopChan: make(chan struct{}),
+		reserved: make(map[string]bool),
 	}
+
+	// Reserve gateway IP
+	s.reserved[config.ServerIP.String()] = true
 
 	// Start lease cleanup goroutine
 	go s.cleanupLoop()
@@ -200,53 +205,64 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 	// Check if MAC already has a lease
 	if lease, exists := s.leases[mac.String()]; exists {
 		if time.Now().Before(lease.ExpiresAt) {
+			slog.Debug("DHCP: reusing existing lease", "mac", mac.String(), "ip", lease.IP.String())
 			return lease.IP, nil
 		}
 	}
 
-	// Find next available IP
+	// Start from nextIP and find first available IP
 	startIP := s.nextIP
-	for {
-		// Check if IP is available
+	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -
+		binary.BigEndian.Uint32(s.config.FirstIP.To4()) + 1)
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		currentIP := s.nextIP
+		ipStr := currentIP.String()
+
+		// Check if IP is reserved or already leased
 		available := true
-		for macStr, lease := range s.leases {
-			if lease.IP.Equal(s.nextIP) && time.Now().Before(lease.ExpiresAt) {
-				available = false
-				_ = macStr
-				break
+		if s.reserved[ipStr] {
+			available = false
+			slog.Debug("DHCP: IP is reserved", "ip", ipStr)
+		}
+
+		// Check all active leases
+		if available {
+			for macStr, lease := range s.leases {
+				if lease.IP.Equal(currentIP) && time.Now().Before(lease.ExpiresAt) {
+					available = false
+					slog.Debug("DHCP: IP already leased", "ip", ipStr, "mac", macStr)
+					break
+				}
 			}
+		}
+
+		// Move to next IP for next iteration
+		s.nextIP = s.incrementIP(s.nextIP)
+		if !s.config.Network.Contains(s.nextIP) || s.nextIP.Equal(s.config.LastIP) {
+			s.nextIP = s.config.FirstIP
 		}
 
 		if available {
 			// Create lease
 			lease := &DHCPLease{
-				IP:          s.nextIP,
+				IP:          currentIP,
 				MAC:         mac,
 				ExpiresAt:   time.Now().Add(s.config.LeaseDuration),
 				Transaction: 0,
 			}
 			s.leases[mac.String()] = lease
-
-			// Move to next IP
-			s.nextIP = s.incrementIP(s.nextIP)
-			if !s.config.Network.Contains(s.nextIP) || s.nextIP.Equal(s.config.LastIP) {
-				s.nextIP = s.config.FirstIP
-			}
-
-			return lease.IP, nil
-		}
-
-		// Move to next IP
-		s.nextIP = s.incrementIP(s.nextIP)
-		if !s.config.Network.Contains(s.nextIP) {
-			s.nextIP = s.config.FirstIP
+			slog.Info("DHCP: IP allocated", "mac", mac.String(), "ip", currentIP.String())
+			return currentIP, nil
 		}
 
 		// Prevent infinite loop
 		if s.nextIP.Equal(startIP) {
-			return nil, ErrNoAvailableIPs
+			break
 		}
 	}
+
+	return nil, ErrNoAvailableIPs
 }
 
 func (s *Server) incrementIP(ip net.IP) net.IP {
