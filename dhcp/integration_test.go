@@ -163,47 +163,59 @@ func TestDHCPServer_MultipleClients(t *testing.T) {
 	
 	for _, macStr := range clientMACs {
 		clientMAC, _ := net.ParseMAC(macStr)
-		
+
 		// Discover
 		discoverMsg := &DHCPMessage{
-			MessageType:    DHCPDiscover,
+			OpCode:         1,
+			HardwareType:   1,
+			HardwareLength: 6,
 			ClientHardware: clientMAC,
 			TransactionID:  0x11111111,
-			Options:        make(map[Option][]byte),
+			ClientIP:       net.IPv4zero,
+			YourIP:         net.IPv4zero,
+			ServerIP:       net.IPv4zero,
+			GatewayIP:      net.IPv4zero,
+			Options:        make(map[uint8][]byte),
 		}
 		discoverMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPDiscover)}
-		
+
 		offer, err := server.HandleRequest(discoverMsg.Marshal())
 		if err != nil {
 			t.Fatalf("HandleRequest(Discover) error for %s: %v", macStr, err)
 		}
-		
+
 		offerMsg, _ := ParseDHCPMessage(offer)
-		ipStr := offerMsg.YourIPAddr.String()
-		
+		ipStr := offerMsg.YourIP.String()
+
 		if assignedIPs[ipStr] {
 			t.Errorf("IP %s assigned to multiple clients", ipStr)
 		}
 		assignedIPs[ipStr] = true
-		
+
 		// Request
 		requestMsg := &DHCPMessage{
-			MessageType:    DHCPRequest,
+			OpCode:         1,
+			HardwareType:   1,
+			HardwareLength: 6,
 			ClientHardware: clientMAC,
 			TransactionID:  0x22222222,
-			Options:        make(map[Option][]byte),
+			ClientIP:       net.IPv4zero,
+			YourIP:         net.IPv4zero,
+			ServerIP:       net.IPv4zero,
+			GatewayIP:      net.IPv4zero,
+			Options:        make(map[uint8][]byte),
 		}
 		requestMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRequest)}
-		requestMsg.Options[OptionRequestedIP] = offerMsg.YourIPAddr.To4()
-		
+		requestMsg.Options[OptionRequestedIP] = offerMsg.YourIP.To4()
+
 		ack, err := server.HandleRequest(requestMsg.Marshal())
 		if err != nil {
 			t.Fatalf("HandleRequest(Request) error for %s: %v", macStr, err)
 		}
-		
+
 		ackMsg, _ := ParseDHCPMessage(ack)
-		if ackMsg.MessageType != DHCPAck {
-			t.Errorf("Expected ACK for %s, got %v", macStr, ackMsg.MessageType)
+		if getDHCPMessageType(ackMsg.Options) != DHCPAck {
+			t.Errorf("Expected ACK for %s, got %v", macStr, getDHCPMessageType(ackMsg.Options))
 		}
 	}
 	
@@ -245,29 +257,41 @@ func TestDHCPServer_LeaseRenewal(t *testing.T) {
 	
 	// Initial Discover/Request
 	discoverMsg := &DHCPMessage{
-		MessageType:    DHCPDiscover,
+		OpCode:         1,
+		HardwareType:   1,
+		HardwareLength: 6,
 		ClientHardware: clientMAC,
 		TransactionID:  0x33333333,
-		Options:        make(map[Option][]byte),
+		ClientIP:       net.IPv4zero,
+		YourIP:         net.IPv4zero,
+		ServerIP:       net.IPv4zero,
+		GatewayIP:      net.IPv4zero,
+		Options:        make(map[uint8][]byte),
 	}
 	discoverMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPDiscover)}
-	
+
 	offer, _ := server.HandleRequest(discoverMsg.Marshal())
 	offerMsg, _ := ParseDHCPMessage(offer)
-	
+
 	requestMsg := &DHCPMessage{
-		MessageType:    DHCPRequest,
+		OpCode:         1,
+		HardwareType:   1,
+		HardwareLength: 6,
 		ClientHardware: clientMAC,
 		TransactionID:  0x44444444,
-		Options:        make(map[Option][]byte),
+		ClientIP:       net.IPv4zero,
+		YourIP:         net.IPv4zero,
+		ServerIP:       net.IPv4zero,
+		GatewayIP:      net.IPv4zero,
+		Options:        make(map[uint8][]byte),
 	}
 	requestMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRequest)}
-	requestMsg.Options[OptionRequestedIP] = offerMsg.YourIPAddr.To4()
-	
+	requestMsg.Options[OptionRequestedIP] = offerMsg.YourIP.To4()
+
 	ack, _ := server.HandleRequest(requestMsg.Marshal())
 	ackMsg, _ := ParseDHCPMessage(ack)
-	
-	initialIP := ackMsg.YourIPAddr.String()
+
+	initialIP := ackMsg.YourIP.String()
 	
 	// Get initial lease
 	leases := server.GetLeases()
@@ -280,22 +304,28 @@ func TestDHCPServer_LeaseRenewal(t *testing.T) {
 	
 	// Simulate renewal (Request same IP)
 	renewalMsg := &DHCPMessage{
-		MessageType:    DHCPRequest,
+		OpCode:         1,
+		HardwareType:   1,
+		HardwareLength: 6,
 		ClientHardware: clientMAC,
 		TransactionID:  0x55555555,
-		Options:        make(map[Option][]byte),
+		ClientIP:       net.IPv4zero,
+		YourIP:         net.IPv4zero,
+		ServerIP:       net.IPv4zero,
+		GatewayIP:      net.IPv4zero,
+		Options:        make(map[uint8][]byte),
 	}
 	renewalMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRequest)}
 	renewalMsg.Options[OptionRequestedIP] = net.ParseIP(initialIP).To4()
-	
+
 	renewalAck, err := server.HandleRequest(renewalMsg.Marshal())
 	if err != nil {
 		t.Fatalf("HandleRequest(Renewal) error: %v", err)
 	}
-	
+
 	renewalAckMsg, _ := ParseDHCPMessage(renewalAck)
-	if renewalAckMsg.MessageType != DHCPAck {
-		t.Errorf("Expected ACK for renewal, got %v", renewalAckMsg.MessageType)
+	if getDHCPMessageType(renewalAckMsg.Options) != DHCPAck {
+		t.Errorf("Expected ACK for renewal, got %v", getDHCPMessageType(renewalAckMsg.Options))
 	}
 	
 	// Verify lease was updated
@@ -335,12 +365,18 @@ func TestDHCPServer_IPPoolExhaustion(t *testing.T) {
 	// Exhaust the pool
 	for i := 0; i < 3; i++ {
 		clientMAC, _ := net.ParseMAC(fmt.Sprintf("11:22:33:44:55:%02x", i))
-		
+
 		discoverMsg := &DHCPMessage{
-			MessageType:    DHCPDiscover,
+			OpCode:         1,
+			HardwareType:   1,
+			HardwareLength: 6,
 			ClientHardware: clientMAC,
 			TransactionID:  uint32(0x66666666 + i),
-			Options:        make(map[Option][]byte),
+			ClientIP:       net.IPv4zero,
+			YourIP:         net.IPv4zero,
+			ServerIP:       net.IPv4zero,
+			GatewayIP:      net.IPv4zero,
+			Options:        make(map[uint8][]byte),
 		}
 		discoverMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPDiscover)}
 		
@@ -387,39 +423,57 @@ func TestDHCPServer_LeaseRelease(t *testing.T) {
 	
 	// Initial Discover/Request
 	discoverMsg := &DHCPMessage{
-		MessageType:    DHCPDiscover,
+		OpCode:         1,
+		HardwareType:   1,
+		HardwareLength: 6,
 		ClientHardware: clientMAC,
 		TransactionID:  0x77777777,
-		Options:        make(map[Option][]byte),
+		ClientIP:       net.IPv4zero,
+		YourIP:         net.IPv4zero,
+		ServerIP:       net.IPv4zero,
+		GatewayIP:      net.IPv4zero,
+		Options:        make(map[uint8][]byte),
 	}
 	discoverMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPDiscover)}
-	
+
 	offer, _ := server.HandleRequest(discoverMsg.Marshal())
 	offerMsg, _ := ParseDHCPMessage(offer)
-	
+
 	requestMsg := &DHCPMessage{
-		MessageType:    DHCPRequest,
+		OpCode:         1,
+		HardwareType:   1,
+		HardwareLength: 6,
 		ClientHardware: clientMAC,
 		TransactionID:  0x88888888,
-		Options:        make(map[Option][]byte),
+		ClientIP:       net.IPv4zero,
+		YourIP:         net.IPv4zero,
+		ServerIP:       net.IPv4zero,
+		GatewayIP:      net.IPv4zero,
+		Options:        make(map[uint8][]byte),
 	}
 	requestMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRequest)}
-	requestMsg.Options[OptionRequestedIP] = offerMsg.YourIPAddr.To4()
-	
+	requestMsg.Options[OptionRequestedIP] = offerMsg.YourIP.To4()
+
 	server.HandleRequest(requestMsg.Marshal())
-	
+
 	// Verify lease exists
 	leases := server.GetLeases()
 	if len(leases) != 1 {
 		t.Fatalf("Expected 1 lease, got %d", len(leases))
 	}
-	
+
 	// Release
 	releaseMsg := &DHCPMessage{
-		MessageType:    DHCPRelease,
+		OpCode:         1,
+		HardwareType:   1,
+		HardwareLength: 6,
 		ClientHardware: clientMAC,
 		TransactionID:  0x99999999,
-		Options:        make(map[Option][]byte),
+		ClientIP:       net.IPv4zero,
+		YourIP:         net.IPv4zero,
+		ServerIP:       net.IPv4zero,
+		GatewayIP:      net.IPv4zero,
+		Options:        make(map[uint8][]byte),
 	}
 	releaseMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRelease)}
 	
@@ -460,48 +514,60 @@ func TestDHCPServer_ConcurrentRequests(t *testing.T) {
 	for i := 0; i < numClients; i++ {
 		go func(clientNum int) {
 			defer wg.Done()
-			
+
 			clientMAC, _ := net.ParseMAC(fmt.Sprintf("aa:bb:cc:dd:%02x:%02x", clientNum/256, clientNum%256))
-			
+
 			discoverMsg := &DHCPMessage{
-				MessageType:    DHCPDiscover,
+				OpCode:         1,
+				HardwareType:   1,
+				HardwareLength: 6,
 				ClientHardware: clientMAC,
 				TransactionID:  uint32(0xAAAA0000 + clientNum),
-				Options:        make(map[Option][]byte),
+				ClientIP:       net.IPv4zero,
+				YourIP:         net.IPv4zero,
+				ServerIP:       net.IPv4zero,
+				GatewayIP:      net.IPv4zero,
+				Options:        make(map[uint8][]byte),
 			}
 			discoverMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPDiscover)}
-			
+
 			offer, err := server.HandleRequest(discoverMsg.Marshal())
 			if err != nil {
 				t.Errorf("Client %d: HandleRequest error: %v", clientNum, err)
 				return
 			}
-			
+
 			if offer == nil {
 				t.Errorf("Client %d: Expected OFFER", clientNum)
 				return
 			}
-			
+
 			offerMsg, _ := ParseDHCPMessage(offer)
-			
+
 			requestMsg := &DHCPMessage{
-				MessageType:    DHCPRequest,
+				OpCode:         1,
+				HardwareType:   1,
+				HardwareLength: 6,
 				ClientHardware: clientMAC,
 				TransactionID:  uint32(0xBBBB0000 + clientNum),
-				Options:        make(map[Option][]byte),
+				ClientIP:       net.IPv4zero,
+				YourIP:         net.IPv4zero,
+				ServerIP:       net.IPv4zero,
+				GatewayIP:      net.IPv4zero,
+				Options:        make(map[uint8][]byte),
 			}
 			requestMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRequest)}
-			requestMsg.Options[OptionRequestedIP] = offerMsg.YourIPAddr.To4()
-			
+			requestMsg.Options[OptionRequestedIP] = offerMsg.YourIP.To4()
+
 			ack, err := server.HandleRequest(requestMsg.Marshal())
 			if err != nil {
 				t.Errorf("Client %d: HandleRequest error: %v", clientNum, err)
 				return
 			}
-			
+
 			ackMsg, _ := ParseDHCPMessage(ack)
-			if ackMsg.MessageType != DHCPAck {
-				t.Errorf("Client %d: Expected ACK, got %v", clientNum, ackMsg.MessageType)
+			if getDHCPMessageType(ackMsg.Options) != DHCPAck {
+				t.Errorf("Client %d: Expected ACK, got %v", clientNum, getDHCPMessageType(ackMsg.Options))
 			}
 		}(i)
 	}

@@ -5,6 +5,9 @@ package service
 import (
 	"testing"
 	"time"
+
+	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 func TestServiceName(t *testing.T) {

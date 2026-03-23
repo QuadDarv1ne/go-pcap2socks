@@ -239,7 +239,11 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 
 		// Move to next IP for next iteration
 		s.nextIP = s.incrementIP(s.nextIP)
-		if !s.config.Network.Contains(s.nextIP) || s.nextIP.Equal(s.config.LastIP) {
+
+		// Reset to first IP if we've gone past the last IP in the pool
+		nextIPInt := binary.BigEndian.Uint32(s.nextIP.To4())
+		lastIPInt := binary.BigEndian.Uint32(s.config.LastIP.To4())
+		if !s.config.Network.Contains(s.nextIP) || nextIPInt > lastIPInt {
 			s.nextIP = s.config.FirstIP
 		}
 

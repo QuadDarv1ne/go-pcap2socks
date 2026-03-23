@@ -142,13 +142,11 @@ func TestSendNotification_Disabled(t *testing.T) {
 
 func TestRegisterCommand(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
-	
-	handlerCalled := false
+
 	testHandler := func(b *Bot, args []string) string {
-		handlerCalled = true
 		return "response"
 	}
-	
+
 	bot.RegisterCommand("/test", testHandler)
 	
 	bot.mu.RLock()
