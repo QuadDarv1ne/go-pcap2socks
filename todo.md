@@ -102,5 +102,5 @@ HTTP/2 Pool:        -30% latency (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.9.0-adaptive-buffer (dev)
-**Статус**: 🔄 dev → main (ready for merge)
+**Версия**: v3.9.0-adaptive-buffer (в main)
+**Статус**: ✅ main и dev синхронизированы с origin
