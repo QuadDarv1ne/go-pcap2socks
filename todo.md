@@ -85,5 +85,31 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.17.0-stack-tuning (dev)
-**Статус**: ✅ готов к merge в main
+**Версия**: v3.17.0-stack-tuning (в main)
+**Статус**: ✅ main и dev синхронизированы с origin
+
+---
+
+## 🏆 Достижения v3.17.0
+
+### Выполнено 13 оптимизаций:
+1. Асинхронное логирование
+2. Rate limiting для логов
+3. Ошибки без аллокаций
+4. DNS connection pooling
+5. Zero-copy UDP
+6. Adaptive buffer sizing
+7. HTTP/2 connection pooling
+8. Metrics Prometheus
+9. Connection tracking оптимизация
+10. Router DialContext оптимизация
+11. Async DNS resolver
+12. Metadata pool
+13. gVisor stack tuning
+
+### Итоговые улучшения:
+- Router Match: 7.72 → 4.38 ns/op (**-43%**)
+- Router DialContext: 143.1 → 96.93 ns/op (**-32%**)
+- Router Cache Hit: 369.4 → 160.3 ns/op (**-57%**)
+- Аллокации: 6 → 3 allocs/op (**-50%**)
+- Metadata: 37.45 → 13.15 ns/op (**-65%**, 2.8x быстрее)
