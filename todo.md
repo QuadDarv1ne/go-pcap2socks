@@ -296,13 +296,13 @@ gVisor Stack:         tuned        256KB buf  ✅
 
 ### Статус веток
 ```
-main: a855bb2 docs: обновлён todo.md с HTTP/3 статусом
-dev:  a855bb2 синхронизирован с main
+main: cb1ad70 security: добавлена валидация размера запросов ✅
+dev:  cb1ad70 синхронизирован с main ✅
 ```
 
 ---
 
-## 🏆 Достижения v3.17.0
+## 🏆 Достижения v3.18.0
 
 ### Выполнено 13 оптимизаций:
 1. Асинхронное логирование
@@ -318,6 +318,12 @@ dev:  a855bb2 синхронизирован с main
 11. Async DNS resolver
 12. Metadata pool
 13. gVisor stack tuning
+
+### Выполнено 4 критических исправлений безопасности:
+14. Исправлен race condition в proxy/group.go (atomic.StoreInt32)
+15. Добавлена аутентификация API (token-based auth + middleware)
+16. Исправлена path traversal уязвимость (filepath.Abs проверка)
+17. Добавлена очистка неактивных устройств (stats/store.go cleanup)
 
 ### Итоговые улучшения:
 - Router Match: 7.72 → 4.38 ns/op (**-43%**)
