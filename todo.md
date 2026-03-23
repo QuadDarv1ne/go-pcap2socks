@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.10.0-http2-pool)
+## ✅ Завершено (v3.11.0-metrics)
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -61,7 +61,7 @@ HTTP2 Pool:         реализован    -30% lat  (ожидаемо)
 Router DialContext: <100 ns/op   <100 B/op  <4 allocs/op
 Buffer GetPut:      <50 ns/op    <30 B/op   1 allocs/op ✅
 HTTP/2 Pool:        -30% latency ✅
-Metrics:            full observability (в работе)
+Metrics:            full observability ✅
 ```
 
 ---
