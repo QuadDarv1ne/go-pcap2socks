@@ -1060,9 +1060,20 @@ func runTray() {
 	tray.Run()
 }
 
-// runWebServer starts the web server with API
+// runWebServer starts the web server with API and automatic port selection
 func runWebServer() {
-	slog.Info("Starting web server on :8080...")
+	// Try ports from 8080 to 8090
+	var port int
+	for p := 8080; p <= 8090; p++ {
+		port = p
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err == nil {
+			listener.Close()
+			break
+		}
+	}
+
+	slog.Info("Starting web server", "port", port)
 
 	// Create stats store
 	statsStore := stats.NewStore()
@@ -1082,8 +1093,9 @@ func runWebServer() {
 	apiServer := api.NewServer(statsStore, profileMgr, nil)
 
 	// Start HTTP server
-	err = http.ListenAndServe(":8080", apiServer)
-	if err != nil {
+	addr := fmt.Sprintf(":%d", port)
+	slog.Info("Web server started", "url", fmt.Sprintf("http://localhost:%d", port), "api", fmt.Sprintf("http://localhost:%d/api", port))
+	if err := http.ListenAndServe(addr, apiServer); err != nil {
 		slog.Error("web server error", slog.Any("err", err))
 	}
 }
