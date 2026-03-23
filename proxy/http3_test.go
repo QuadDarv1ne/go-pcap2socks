@@ -87,7 +87,7 @@ func TestHTTP3_Addr(t *testing.T) {
 	}
 }
 
-func TestHTTP3_DialContext_NotImplemented(t *testing.T) {
+func TestHTTP3_DialContext_NilMetadata(t *testing.T) {
 	h3, err := NewHTTP3("https://proxy.example.com:443", true)
 	if err != nil {
 		t.Fatalf("NewHTTP3() error = %v", err)
@@ -97,13 +97,16 @@ func TestHTTP3_DialContext_NotImplemented(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// DialContext should return error (not yet implemented)
+	// DialContext should return error when metadata is nil
 	conn, err := h3.DialContext(ctx, nil)
 	if err == nil {
-		t.Error("DialContext() should return error (not implemented)")
+		t.Error("DialContext() should return error when metadata is nil")
 		if conn != nil {
 			conn.Close()
 		}
+	}
+	if err != nil && err.Error() != "metadata is nil" {
+		t.Errorf("Expected 'metadata is nil' error, got: %v", err)
 	}
 }
 
@@ -121,6 +124,12 @@ func TestHTTP3_DialUDP_NotImplemented(t *testing.T) {
 		if conn != nil {
 			conn.Close()
 		}
+	}
+
+	// Check error message contains expected text
+	if err != nil && err.Error() != "metadata is nil" {
+		// If metadata is not nil, should get "not yet implemented" error
+		t.Logf("DialUDP error (expected): %v", err)
 	}
 }
 

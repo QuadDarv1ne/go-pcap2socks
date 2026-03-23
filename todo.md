@@ -67,7 +67,7 @@
 
 ## 🔥 В работе
 
-### HTTP/3 (QUIC) Support - БАЗОВАЯ РЕАЛИЗАЦИЯ ГОТОВА ✅
+### HTTP/3 (QUIC) Support - TCP PROXYING РЕАЛИЗОВАН ✅
 - [x] Добавлена зависимость quic-go v0.59.0
 - [x] Создан proxy/http3.go с базовой структурой
 - [x] Добавлен ModeHTTP3 в proxy/mode.go
@@ -75,12 +75,14 @@
 - [x] Интеграция в main.go для создания HTTP/3 прокси
 - [x] Unit-тесты для HTTP/3 (5 тестов, все проходят)
 - [x] Пример конфигурации config-http3.json
-- [ ] Реализация TCP proxying через HTTP/3 CONNECT
+- [x] Реализация TCP proxying через HTTP/3 CONNECT (proxy/http3_conn.go)
+- [x] http3Conn wrapper для QUIC streams (реализует net.Conn)
 - [ ] Реализация UDP proxying через QUIC datagrams
 - [ ] Интеграция с ProxyGroup для failover
 - [ ] Документация по использованию HTTP/3
+- [ ] Интеграционные тесты с реальным HTTP/3 прокси-сервером
 
-**Статус**: Базовая инфраструктура HTTP/3 готова. HTTP/3 клиент работает для HTTP запросов. TCP/UDP proxying требует дополнительной реализации CONNECT метода и QUIC datagrams.
+**Статус**: TCP proxying через HTTP/3 CONNECT реализован. DialContext открывает QUIC соединение, создаёт stream и устанавливает CONNECT туннель. UDP proxying требует QUIC datagrams (RFC 9221).
 
 ---
 
