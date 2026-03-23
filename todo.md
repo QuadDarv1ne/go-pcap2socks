@@ -90,8 +90,8 @@
 
 ### Критические исправления (HIGH priority)
 - [x] Исправить race condition в proxy/group.go:157 (запись при RLock) - использован atomic.StoreInt32
+- [x] Исправить path traversal уязвимость (api/server.go:726) - добавлена проверка filepath.Abs
 - [ ] Добавить аутентификацию API (api/server.go)
-- [ ] Исправить path traversal уязвимость (api/server.go:726)
 - [ ] Добавить очистку неактивных устройств в stats/store.go
 
 ### Производительность (MEDIUM priority)

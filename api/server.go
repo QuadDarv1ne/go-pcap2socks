@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -798,23 +800,41 @@ func (s *Server) handleHotkeyToggle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	// Serve web UI files
-	webPath := path.Join(path.Dir(s.configPath), "web")
+	webPath := filepath.Join(filepath.Dir(s.configPath), "web")
 
 	// Handle root path
 	if r.URL.Path == "/" {
-		filePath := path.Join(webPath, "index.html")
+		filePath := filepath.Join(webPath, "index.html")
 		http.ServeFile(w, r, filePath)
 		return
 	}
 
 	// Clean and validate path to prevent directory traversal
-	cleanPath := path.Clean(r.URL.Path)
-	filePath := path.Join(webPath, cleanPath)
+	// Convert URL path to filepath and clean it
+	requestPath := filepath.FromSlash(path.Clean("/" + r.URL.Path))
+	filePath := filepath.Join(webPath, requestPath)
+
+	// Security: verify the resolved path is within webPath
+	absWebPath, err := filepath.Abs(webPath)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !strings.HasPrefix(absFilePath, absWebPath+string(filepath.Separator)) && absFilePath != absWebPath {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		slog.Warn("Path traversal attempt blocked", "path", r.URL.Path, "resolved", absFilePath)
+		return
+	}
 
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		// File not found, serve index.html for SPA routing
-		filePath = path.Join(webPath, "index.html")
+		filePath = filepath.Join(webPath, "index.html")
 	}
 
 	// Set content type based on file extension
