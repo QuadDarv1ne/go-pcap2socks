@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.17.0-stack-tuning)
+## ✅ Завершено (v3.18.0-pool-usage)
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -14,7 +14,7 @@
 - [x] Connection tracking оптимизация (stats/ - sync.Pool для DeviceStats)
 - [x] Router DialContext оптимизация (byte slice key, 6→3 allocs)
 - [x] Async DNS resolver (context timeout, async exchange)
-- [x] Metadata pool (md/pool.go - 2.8x быстрее создания)
+- [x] Metadata pool (md/pool.go - используется в tunnel, proxy, benchmarks)
 - [x] gVisor stack tuning (TCP buffer sizes, keepalive)
 
 ### Исправления
@@ -85,8 +85,8 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.17.0-stack-tuning (в main)
-**Статус**: ✅ main и dev синхронизированы с origin
+**Версия**: v3.18.0-pool-usage (dev)
+**Статус**: ✅ готов к merge в main
 
 ---
 
