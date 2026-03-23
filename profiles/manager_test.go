@@ -1,8 +1,6 @@
 package profiles
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 

@@ -134,6 +134,12 @@ func (m *Manager) GetCurrentProfile() string {
 	return m.current
 }
 
+func (m *Manager) SetCurrentProfile(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.current = name
+}
+
 func (m *Manager) ExportProfile(name string, outputPath string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

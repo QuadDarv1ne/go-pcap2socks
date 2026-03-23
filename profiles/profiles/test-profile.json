@@ -1,0 +1,10 @@
+{
+  "description": "Test profile for unit testing",
+  "name": "test-profile",
+  "pcap": {
+    "interfaceGateway": "192.168.137.1",
+    "localIP": "192.168.137.1",
+    "mtu": 1486,
+    "network": "192.168.137.0/24"
+  }
+}
