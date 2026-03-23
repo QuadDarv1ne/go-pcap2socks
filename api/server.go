@@ -127,7 +127,6 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/macfilter/update", s.handleMACFilterUpdate)
 
 	// Device management endpoints
-	s.mux.HandleFunc("/api/devices", s.handleDevices)
 	s.mux.HandleFunc("/api/devices/names", s.handleDeviceNames)
 	s.mux.HandleFunc("/api/devices/ratelimit", s.handleDeviceRateLimit)
 

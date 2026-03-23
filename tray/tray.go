@@ -175,9 +175,9 @@ func onExit() {
 }
 
 func getIcon() []byte {
-	// Simple icon data (placeholder - should be a real .ico file)
-	// For now, return empty and systray will use default
-	return []byte{}
+	// Use systray default icon (empty = system default)
+	// For custom icon, load from file or embed .ico data
+	return nil // Use system default icon
 }
 
 func openConfig(cfgFile string) {
