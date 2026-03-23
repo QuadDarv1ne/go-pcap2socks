@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
@@ -213,7 +214,8 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 	key = append(key, metadata.DstIP...)
 	key = append(key, ':')
 	key = appendPort(key, metadata.DstPort)
-	cacheKey := string(key)
+	// Use unsafe conversion to avoid allocation - safe here because map copies the key
+	cacheKey := *(*string)(unsafe.Pointer(&key))
 	d.routeCache.putKeyBuilder(key)
 
 	// Check cache first
@@ -265,7 +267,8 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	key = append(key, metadata.DstIP...)
 	key = append(key, ':')
 	key = appendPort(key, metadata.DstPort)
-	cacheKey := string(key)
+	// Use unsafe conversion to avoid allocation - safe here because map copies the key
+	cacheKey := *(*string)(unsafe.Pointer(&key))
 	d.routeCache.putKeyBuilder(key)
 
 	// Check cache first

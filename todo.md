@@ -192,10 +192,11 @@
   - **Решение**: Добавлены TCP connection pools, используются в asyncExchange с fallback на UDP
   - **Статус**: ✅ Исправлено (23.03.2026)
 
-- [ ] Использовать unsafe конверсию []byte→string в router.go:188
+- [x] Использовать unsafe конверсию []byte→string в router.go
   - **Файл**: proxy/router.go
-  - **Проблема**: Избыточные аллокации при конверсии
-  - **Время**: 1-2 часа
+  - **Проблема**: Избыточные аллокации при конверсии cache key
+  - **Решение**: Использован unsafe.Pointer для zero-copy конверсии в DialContext и DialUDP
+  - **Статус**: ✅ Исправлено (23.03.2026)
 
 ### Безопасность (MEDIUM priority) - 🟡 1-2 НЕДЕЛИ
 - [x] Rate limiting на API endpoints - реализован token bucket per IP (100 req/min) ✅
