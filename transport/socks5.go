@@ -399,6 +399,39 @@ func DecodeUDPPacket(packet []byte) (addr Addr, payload []byte, err error) {
 	return
 }
 
+// DecodeUDPPacketInPlace parses SOCKS5 UDP header and returns address and payload length
+// This is a zero-copy version that doesn't allocate separate payload slice
+func DecodeUDPPacketInPlace(packet []byte) (addr Addr, payloadLen int, err error) {
+	if len(packet) < 5 {
+		err = errors.New("insufficient length of packet")
+		return
+	}
+
+	// packet[0] and packet[1] are reserved
+	if !bytes.Equal(packet[:2], []byte{0x00, 0x00}) {
+		err = errors.New("reserved fields should be zero")
+		return
+	}
+
+	// Check fragment field
+	if packet[2] != 0x00 {
+		err = errors.New("discarding fragmented payload")
+		return
+	}
+
+	addr = SplitAddr(packet[3:])
+	if addr == nil {
+		err = errors.New("socks5 UDP addr is nil")
+		return
+	}
+
+	// Calculate payload length
+	headerLen := 3 + len(addr)
+	payloadLen = len(packet) - headerLen
+	
+	return
+}
+
 func EncodeUDPPacket(addr Addr, payload []byte) (packet []byte, err error) {
 	if addr == nil {
 		return nil, errors.New("address is invalid")
