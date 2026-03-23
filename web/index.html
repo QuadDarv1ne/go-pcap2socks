@@ -480,6 +480,111 @@
             padding: 8px 15px;
             font-size: 13px;
         }
+
+        /* PS4 Setup Quick Access */
+        .quick-setup {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .quick-setup h3 {
+            color: var(--primary);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .setup-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .setup-step {
+            background: rgba(255, 255, 255, 0.5);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        body.dark-theme .setup-step {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .setup-step-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .setup-step-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--dark);
+        }
+
+        body.dark-theme .setup-step-title {
+            color: #e0e0e0;
+        }
+
+        .setup-step-desc {
+            font-size: 13px;
+            color: #718096;
+        }
+
+        body.dark-theme .setup-step-desc {
+            color: #a0aec0;
+        }
+
+        .network-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .network-item {
+            background: rgba(102, 126, 234, 0.1);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .network-label {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+
+        .network-value {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 16px;
+        }
+
+        /* Connection indicator */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            background: rgba(72, 187, 120, 0.1);
+            border: 2px solid #48bb78;
+        }
+
+        .connection-status.error {
+            background: rgba(245, 101, 101, 0.1);
+            border-color: #f56565;
+        }
+
+        .connection-icon {
+            font-size: 24px;
+        }
     </style>
 </head>
 <body>
@@ -502,6 +607,51 @@
                 </button>
             </div>
         </header>
+
+        <!-- Quick Setup for PS4 -->
+        <div class="quick-setup">
+            <h3>🎮 Быстрая настройка PS4</h3>
+            <div class="setup-steps">
+                <div class="setup-step">
+                    <div class="setup-step-icon">1️⃣</div>
+                    <div class="setup-step-title">Настройки сети</div>
+                    <div class="setup-step-desc">Настройки → Настройки сети</div>
+                </div>
+                <div class="setup-step">
+                    <div class="setup-step-icon">2️⃣</div>
+                    <div class="setup-step-title">Настроить</div>
+                    <div class="setup-step-desc">Настроить соединение вручную</div>
+                </div>
+                <div class="setup-step">
+                    <div class="setup-step-icon">3️⃣</div>
+                    <div class="setup-step-title">Кабель (LAN)</div>
+                    <div class="setup-step-desc">Использовать LAN-кабель</div>
+                </div>
+                <div class="setup-step">
+                    <div class="setup-step-icon">4️⃣</div>
+                    <div class="setup-step-title">Прокси</div>
+                    <div class="setup-step-desc">Не использовать</div>
+                </div>
+            </div>
+            <div class="network-info" id="networkInfo">
+                <div class="network-item">
+                    <div class="network-label">IP адрес</div>
+                    <div class="network-value" id="localIp">192.168.137.1</div>
+                </div>
+                <div class="network-item">
+                    <div class="network-label">Маска</div>
+                    <div class="network-value">255.255.255.0</div>
+                </div>
+                <div class="network-item">
+                    <div class="network-label">MTU</div>
+                    <div class="network-value" id="mtuValue">1486</div>
+                </div>
+            </div>
+            <div class="connection-status" id="connectionStatus">
+                <span class="connection-icon">✅</span>
+                <span>Готов к подключению! Запустите сервис и подключите PS4 кабелем.</span>
+            </div>
+        </div>
 
         <div class="dashboard">
             <!-- Status Card -->
@@ -600,9 +750,27 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadTheme();
+            loadConfig();
             refreshData();
             startAutoRefresh();
         });
+
+        // Load config
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                if (data.success) {
+                    const config = data.data;
+                    if (config.pcap) {
+                        document.getElementById('localIp').textContent = config.pcap.localIP || '192.168.137.1';
+                        document.getElementById('mtuValue').textContent = config.pcap.mtu || 1486;
+                    }
+                }
+            } catch (error) {
+                console.error('Config load error:', error);
+            }
+        }
 
         // Theme
         function toggleTheme() {
@@ -707,10 +875,32 @@
             
             if (data.success) {
                 const devices = data.data.devices || [];
-                document.getElementById('activeDevices').textContent = devices.filter(d => d.connected).length;
+                const activeCount = devices.filter(d => d.connected).length;
+                document.getElementById('activeDevices').textContent = activeCount;
                 document.getElementById('totalDevices').textContent = devices.length;
                 
                 renderDevices(devices);
+                updateConnectionStatus(activeCount);
+            }
+        }
+
+        function updateConnectionStatus(activeDevices) {
+            const statusEl = document.getElementById('connectionStatus');
+            const iconEl = statusEl.querySelector('.connection-icon');
+            const textEl = statusEl.querySelector('span:last-child');
+            
+            if (activeDevices > 0) {
+                statusEl.className = 'connection-status';
+                iconEl.textContent = '🎮';
+                textEl.textContent = `Подключено устройств: ${activeDevices}. PS4 готова к работе!`;
+            } else if (isRunning) {
+                statusEl.className = 'connection-status';
+                iconEl.textContent = '⏳';
+                textEl.textContent = 'Сервис запущен. Ожидание подключения PS4...';
+            } else {
+                statusEl.className = 'connection-status error';
+                iconEl.textContent = '⚠️';
+                textEl.textContent = 'Запустите сервис для подключения PS4';
             }
         }
 
