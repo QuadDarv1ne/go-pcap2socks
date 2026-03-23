@@ -23,6 +23,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
+	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/discord"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
@@ -365,7 +366,7 @@ func main() {
 		slog.Info("Hotkey message loop started")
 	}
 
-	// Setup HTTP server with graceful shutdown
+	// Setup HTTP server with graceful shutdown on port 8085
 	_httpServer = &http.Server{
 		Addr: ":8085",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,6 +379,51 @@ func main() {
 		slog.Info("HTTP server starting on :8085")
 		if err := _httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server error", slog.Any("err", err))
+		}
+	}()
+
+	// Start web UI server on port 8080
+	go func() {
+		slog.Info("Starting web UI server on :8080")
+
+		// Set start time for API
+		api.SetStartTime(time.Now())
+
+		// Set running state checker for API
+		api.SetIsRunningFn(func() bool {
+			return _running
+		})
+
+		// Set service control callbacks for API
+		api.SetServiceCallbacks(
+			func() error {
+				// Start service: set running flag and reset start time
+				if !_running {
+					_running = true
+					api.SetStartTime(time.Now())
+					slog.Info("Service started via API")
+					// Notify via system notification
+					notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
+				}
+				return nil
+			},
+			func() error {
+				// Stop service: clear running flag
+				if _running {
+					_running = false
+					slog.Info("Service stopped via API")
+					// Notify via system notification
+					notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
+				}
+				return nil
+			},
+		)
+
+		// Create API server with global stats store and profile manager
+		apiServer := api.NewServer(_statsStore, _profileManager, _upnpManager)
+
+		if err := http.ListenAndServe(":8080", apiServer); err != nil {
+			slog.Error("web UI server error", slog.Any("err", err))
 		}
 	}()
 
@@ -491,7 +537,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	}
 
 	_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
-	
+
 	// Set MAC filter if configured
 	if cfg.MACFilter != nil {
 		if router, ok := _defaultProxy.(*proxy.Router); ok {
@@ -499,12 +545,44 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			slog.Info("MAC filter configured", "mode", cfg.MACFilter.Mode, "entries", len(cfg.MACFilter.List))
 		}
 	}
-	
+
 	proxy.SetDialer(_defaultProxy)
 
-	_defaultDevice, err = device.Open(cfg.Capture, ifce, netConfig, func() device.Stacker {
+	// Initialize DHCP server if enabled
+	if cfg.DHCP != nil && cfg.DHCP.Enabled {
+		poolStart := net.ParseIP(cfg.DHCP.PoolStart)
+		poolEnd := net.ParseIP(cfg.DHCP.PoolEnd)
+		localIP := net.ParseIP(cfg.PCAP.LocalIP)
+		_, network, _ := net.ParseCIDR(cfg.PCAP.Network)
+
+		// Parse DNS servers for DHCP
+		dnsServers := make([]net.IP, 0, len(cfg.DNS.Servers))
+		for _, dns := range cfg.DNS.Servers {
+			ipStr := strings.Split(dns.Address, ":")[0]
+			if ip := net.ParseIP(ipStr); ip != nil {
+				dnsServers = append(dnsServers, ip)
+			}
+		}
+
+		dhcpConfig := &dhcp.ServerConfig{
+			ServerIP:      localIP,
+			ServerMAC:     netConfig.LocalMAC,
+			Network:       network,
+			LeaseDuration: time.Duration(cfg.DHCP.LeaseDuration) * time.Second,
+			FirstIP:       poolStart,
+			LastIP:        poolEnd,
+			DNSServers:    dnsServers,
+		}
+
+		_dhcpServer = dhcp.NewServer(dhcpConfig)
+		slog.Info("DHCP server initialized", 
+			"pool", fmt.Sprintf("%s-%s", poolStart, poolEnd),
+			"lease", fmt.Sprintf("%ds", cfg.DHCP.LeaseDuration))
+	}
+
+	_defaultDevice, err = device.OpenWithDHCP(cfg.Capture, ifce, netConfig, func() device.Stacker {
 		return _defaultStack
-	})
+	}, _dhcpServer)
 	if err != nil {
 		return err
 	}
@@ -560,6 +638,9 @@ var (
 
 	// _upnpManager holds the UPnP manager
 	_upnpManager *upnpmanager.Manager
+
+	// _dhcpServer holds the DHCP server
+	_dhcpServer *dhcp.Server
 )
 
 // GetStatsStore returns the global statistics store
@@ -637,6 +718,12 @@ func Stop() {
 	if _upnpManager != nil {
 		_upnpManager.Stop()
 		slog.Info("UPnP manager stopped")
+	}
+
+	// Stop DHCP server
+	if _dhcpServer != nil {
+		_dhcpServer.Stop()
+		slog.Info("DHCP server stopped")
 	}
 
 	// Signal shutdown complete
@@ -851,11 +938,13 @@ func openConfigInEditor() {
 // autoConfigure автоматически конфигурирует сеть
 func autoConfigure() {
 	slog.Info("Автоматическая конфигурация сети...")
+	slog.Info("Поиск VPN адаптера и Ethernet для раздачи интернета")
 
 	// Find best interface for ICS (typically Ethernet with 192.168.137.1)
 	interfaceConfig := findBestInterface()
 	if interfaceConfig.Name == "" {
 		slog.Error("Не найдено подходящего сетевого интерфейса")
+		slog.Info("Убедитесь, что VPN подключён и Ethernet кабель вставлен")
 		return
 	}
 
@@ -869,12 +958,12 @@ func autoConfigure() {
 	}
 	cfgFile := path.Join(path.Dir(executable), "config.json")
 
-	// Create clean JSON config manually
+	// Create clean JSON config manually - Direct mode for VPN sharing
 	configJSON := fmt.Sprintf(`{
   "pcap": {
     "interfaceGateway": "%s",
-    "network": "%s",
-    "localIP": "%s",
+    "network": "192.168.137.0/24",
+    "localIP": "192.168.137.1",
     "mtu": %d
   },
   "dns": {
@@ -889,11 +978,33 @@ func autoConfigure() {
     ]
   },
   "outbounds": [
-    {"socks": {"address": "127.0.0.1:10808"}},
+    {"tag": "", "direct": {}},
     {"tag": "dns-out", "dns": {}}
   ],
+  "telegram": {
+    "token": "",
+    "chat_id": ""
+  },
+  "discord": {
+    "webhook_url": ""
+  },
+  "hotkey": {
+    "enabled": true,
+    "toggle": "Ctrl+Alt+P"
+  },
+  "upnp": {
+    "enabled": false,
+    "autoForward": false,
+    "leaseDuration": 3600,
+    "gamePresets": {
+      "ps4": [3478, 3479, 3480],
+      "ps5": [3478, 3479, 3480],
+      "xbox": [3074, 3075, 3478, 3479, 3480],
+      "switch": [12400, 12401, 12402, 6657, 6667]
+    }
+  },
   "language": "ru"
-}`, interfaceConfig.IP, interfaceConfig.Network, interfaceConfig.IP, interfaceConfig.RecommendedMTU)
+}`, interfaceConfig.IP, interfaceConfig.RecommendedMTU)
 
 	// Write config file
 	err = os.WriteFile(cfgFile, []byte(configJSON), 0666)
@@ -903,13 +1014,31 @@ func autoConfigure() {
 	}
 
 	slog.Info("Конфигурация создана", "file", cfgFile)
+	slog.Info("")
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	slog.Info(fmt.Sprintf("  IP адрес:     %s - %s", interfaceConfig.NetworkStart, strings.Split(interfaceConfig.Network, "/")[0]))
-	slog.Info(fmt.Sprintf("  Маска подсети:    %s", interfaceConfig.Netmask))
-	slog.Info(fmt.Sprintf("  Шлюз:        %s", interfaceConfig.IP))
-	slog.Info(fmt.Sprintf("  MTU:            %d", interfaceConfig.RecommendedMTU))
+	slog.Info("  НАСТРОЙКА СОЗДАНА - Режим раздачи интернета с VPN")
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	slog.Info("Теперь вы можете запустить: go-pcap2socks")
+	slog.Info(fmt.Sprintf("  IP адрес:         192.168.137.1"))
+	slog.Info(fmt.Sprintf("  Маска подсети:    255.255.255.0"))
+	slog.Info(fmt.Sprintf("  Диапазон для PS4: 192.168.137.2 - 192.168.137.254"))
+	slog.Info(fmt.Sprintf("  MTU:              %d", interfaceConfig.RecommendedMTU))
+	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	slog.Info("")
+	slog.Info("📡 СЛЕДУЮЩИЕ ШАГИ:")
+	slog.Info("")
+	slog.Info("  1. Запустите скрипт настройки ICS (от администратора):")
+	slog.Info("     .\\setup-vpn-ics.ps1 -Auto")
+	slog.Info("")
+	slog.Info("  2. Настройте PS4:")
+	slog.Info("     Настройки → Настройки сети → Настроить вручную → Кабель (LAN)")
+	slog.Info("     IP: 192.168.137.100, Маска: 255.255.255.0, Шлюз: 192.168.137.1")
+	slog.Info("     DNS: 8.8.8.8, MTU: 1486, Прокси: Не использовать")
+	slog.Info("")
+	slog.Info("  3. Запустите go-pcap2socks:")
+	slog.Info("     .\\go-pcap2socks.exe")
+	slog.Info("")
+	slog.Info("  Веб-интерфейс: http://localhost:8080")
+	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }
 
 type InterfaceConfig struct {

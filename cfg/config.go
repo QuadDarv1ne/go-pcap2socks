@@ -43,6 +43,7 @@ func Load(filePath string) (*Config, error) {
 type Config struct {
 	ExecuteOnStart []string  `json:"executeOnStart,omitempty"`
 	PCAP           PCAP      `json:"pcap"`
+	DHCP           *DHCP     `json:"dhcp,omitempty"`
 	DNS            DNS       `json:"dns"`
 	Routing        struct {
 		Rules []Rule `json:"rules"`
@@ -88,6 +89,11 @@ func (c *Config) Validate() error {
 
 	if c.PCAP.MTU == 0 {
 		c.PCAP.MTU = 1500 // Default MTU
+	}
+
+	// Validate DHCP config
+	if err := c.validateDHCP(); err != nil {
+		return err
 	}
 
 	// Validate DNS config
@@ -347,5 +353,59 @@ func (f *MACFilter) IsAllowed(mac string) bool {
 	default:
 		return true
 	}
+}
+
+// DHCP holds DHCP server configuration
+type DHCP struct {
+	Enabled       bool   `json:"enabled"`
+	PoolStart     string `json:"poolStart"`
+	PoolEnd       string `json:"poolEnd"`
+	LeaseDuration int    `json:"leaseDuration"` // seconds
+}
+
+// Validate validates the DHCP configuration
+func (c *Config) validateDHCP() error {
+	if c.DHCP == nil || !c.DHCP.Enabled {
+		return nil
+	}
+
+	// Validate pool start IP
+	if c.DHCP.PoolStart == "" {
+		return fmt.Errorf("dhcp.poolStart is required when DHCP is enabled")
+	}
+	if ip := net.ParseIP(c.DHCP.PoolStart); ip == nil {
+		return fmt.Errorf("invalid dhcp.poolStart: %s", c.DHCP.PoolStart)
+	}
+
+	// Validate pool end IP
+	if c.DHCP.PoolEnd == "" {
+		return fmt.Errorf("dhcp.poolEnd is required when DHCP is enabled")
+	}
+	if ip := net.ParseIP(c.DHCP.PoolEnd); ip == nil {
+		return fmt.Errorf("invalid dhcp.poolEnd: %s", c.DHCP.PoolEnd)
+	}
+
+	// Validate lease duration
+	if c.DHCP.LeaseDuration <= 0 {
+		c.DHCP.LeaseDuration = 86400 // Default 24 hours
+	}
+
+	// Validate pool is within network
+	_, network, err := net.ParseCIDR(c.PCAP.Network)
+	if err != nil {
+		return fmt.Errorf("invalid pcap.network: %w", err)
+	}
+
+	poolStart := net.ParseIP(c.DHCP.PoolStart)
+	poolEnd := net.ParseIP(c.DHCP.PoolEnd)
+
+	if !network.Contains(poolStart) {
+		return fmt.Errorf("dhcp.poolStart (%s) is not within pcap.network (%s)", c.DHCP.PoolStart, c.PCAP.Network)
+	}
+	if !network.Contains(poolEnd) {
+		return fmt.Errorf("dhcp.poolEnd (%s) is not within pcap.network (%s)", c.DHCP.PoolEnd, c.PCAP.Network)
+	}
+
+	return nil
 }
 

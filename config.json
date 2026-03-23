@@ -1,9 +1,15 @@
 {
   "pcap": {
-    "interfaceGateway": "192.168.137.1",
+    "interfaceGateway": "172.25.160.1",
     "network": "192.168.137.0/24",
     "localIP": "192.168.137.1",
     "mtu": 1486
+  },
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.137.10",
+    "poolEnd": "192.168.137.250",
+    "leaseDuration": 86400
   },
   "dns": {
     "servers": [
@@ -17,7 +23,7 @@
     ]
   },
   "outbounds": [
-    {"socks": {"address": "127.0.0.1:10808"}},
+    {"tag": "", "direct": {}},
     {"tag": "dns-out", "dns": {}}
   ],
   "telegram": {

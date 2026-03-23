@@ -87,6 +87,14 @@ cd C:\Users\maksi\OneDrive\Documents\GitHub\go-pcap2socks
 - [x] `telegram/bot.go` — защита от бесконечных ошибок (max 5 попыток)
 - [x] `telegram/bot.go` — добавлен `StopPolling()` для graceful restart
 
+### 🌐 DHCP сервер (v3.7.0) — 23.03.2026
+- [x] `dhcp/dhcp.go` — DHCP пакеты и опции
+- [x] `dhcp/server.go` — DHCP сервер (Discover/Offer/Request/Ack)
+- [x] `cfg/config.go` — DHCP конфигурация (pool, lease duration)
+- [x] `core/device/pcap.go` — обработка DHCP пакетов
+- [x] `main.go` — инициализация DHCP сервера
+- [x] `config.json` — DHCP настройки по умолчанию
+
 ---
 
 ## 📊 Аудит кода (v3.2.2)
@@ -160,9 +168,9 @@ cd C:\Users\maksi\OneDrive\Documents\GitHub\go-pcap2socks
 ## 📊 Статистика
 
 ```
-Строк кода: ~12800
-Файлов: 69 (.go)
-Модулей: 25 (папок)
+Строк кода: ~13500
+Файлов: 72 (.go)
+Модулей: 26 (папок)
 Зависимостей: 18 direct, 22 indirect
 Go версия: 1.25.0
 ```
@@ -190,7 +198,14 @@ Go версия: 1.25.0
 
 ## 📅 История версий
 
-### v3.6.0 (23.03.2026) — текущая
+### v3.7.0 (23.03.2026) — текущая (dev)
+- ✅ DHCP сервер: автоматическая раздача IP адресов устройствам
+- ✅ DHCP пул: 192.168.137.10 - 192.168.137.250 (настраивается)
+- ✅ DHCP опции: шлюз, DNS, маска подсети, время аренды
+- ✅ Обработка DHCP Discover/Offer/Request/Ack
+- ✅ Интеграция с pcap на уровне L2
+
+### v3.6.0 (23.03.2026)
 - ✅ UI/UX: современный дизайн с градиентами и анимациями
 - ✅ UI: тёмная тема с переключением
 - ✅ UI: быстрая настройка PS4 с инструкцией

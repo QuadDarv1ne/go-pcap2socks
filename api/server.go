@@ -147,8 +147,14 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get running state from global state if available
+	running := s.enabled
+	if getIsRunningFn != nil {
+		running = getIsRunningFn()
+	}
+
 	status := Status{
-		Running:        s.enabled,
+		Running:        running,
 		ProxyMode:      "socks5",
 		Devices:        s.getDevices(),
 		Traffic:        s.getTraffic(),
@@ -160,17 +166,39 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.sendSuccess(w, status)
 }
 
+// getIsRunningFn returns a function to check if service is running
+// This is set from main package
+var getIsRunningFn func() bool
+
+// SetIsRunningFn sets the function to check if service is running
+func SetIsRunningFn(fn func() bool) {
+	getIsRunningFn = fn
+}
+
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Call start callback if available
+	if startServiceFn != nil {
+		err := startServiceFn()
+		if err != nil {
+			s.sendError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		slog.Info("Service started via API")
+		s.sendSuccess(w, "Service started")
+		return
+	}
+
+	// Fallback: just set flag
 	s.mu.Lock()
 	s.enabled = true
 	s.mu.Unlock()
 
-	slog.Info("Service started via API")
+	slog.Info("Service started via API (flag only)")
 	s.sendSuccess(w, "Service started")
 }
 
@@ -180,12 +208,35 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Call stop callback if available
+	if stopServiceFn != nil {
+		err := stopServiceFn()
+		if err != nil {
+			s.sendError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		slog.Info("Service stopped via API")
+		s.sendSuccess(w, "Service stopped")
+		return
+	}
+
+	// Fallback: just set flag
 	s.mu.Lock()
 	s.enabled = false
 	s.mu.Unlock()
 
-	slog.Info("Service stopped via API")
+	slog.Info("Service stopped via API (flag only)")
 	s.sendSuccess(w, "Service stopped")
+}
+
+// startServiceFn and stopServiceFn are callbacks for real service control
+var startServiceFn func() error
+var stopServiceFn func() error
+
+// SetServiceCallbacks sets the start and stop callbacks
+func SetServiceCallbacks(startFn func() error, stopFn func() error) {
+	startServiceFn = startFn
+	stopServiceFn = stopFn
 }
 
 func (s *Server) handleTraffic(w http.ResponseWriter, r *http.Request) {
@@ -722,12 +773,47 @@ func (s *Server) handleHotkeyToggle(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	// Serve web UI files
 	webPath := path.Join(path.Dir(s.configPath), "web")
-	filePath := path.Join(webPath, r.URL.Path)
 	
+	// Handle root path
 	if r.URL.Path == "/" {
+		filePath := path.Join(webPath, "index.html")
+		http.ServeFile(w, r, filePath)
+		return
+	}
+	
+	// Clean and validate path to prevent directory traversal
+	cleanPath := path.Clean(r.URL.Path)
+	filePath := path.Join(webPath, cleanPath)
+	
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// File not found, serve index.html for SPA routing
 		filePath = path.Join(webPath, "index.html")
 	}
-
+	
+	// Set content type based on file extension
+	ext := path.Ext(filePath)
+	switch ext {
+	case ".html":
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	case ".css":
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	case ".js":
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	case ".json":
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".gif":
+		w.Header().Set("Content-Type", "image/gif")
+	case ".svg":
+		w.Header().Set("Content-Type", "image/svg+xml")
+	case ".ico":
+		w.Header().Set("Content-Type", "image/x-icon")
+	}
+	
 	http.ServeFile(w, r, filePath)
 }
 
@@ -785,6 +871,16 @@ func (s *Server) getTraffic() Traffic {
 }
 
 var startTime = time.Now()
+
+// SetStartTime sets the service start time
+func SetStartTime(t time.Time) {
+	startTime = t
+}
+
+// GetStartTime returns the service start time
+func GetStartTime() time.Time {
+	return startTime
+}
 
 // handleMACFilter returns MAC filter configuration
 func (s *Server) handleMACFilter(w http.ResponseWriter, r *http.Request) {
