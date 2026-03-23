@@ -168,11 +168,11 @@ func (g *ProxyGroup) checkProxyHealth(proxy Proxy) bool {
 func (g *ProxyGroup) updateActiveIndex() {
 	for i := range g.proxies {
 		if g.healthStatus[i].Load() {
-			g.activeIndex = int32(i)
+			atomic.StoreInt32(&g.activeIndex, int32(i))
 			return
 		}
 	}
-	g.activeIndex = 0 // Fallback to first
+	atomic.StoreInt32(&g.activeIndex, 0) // Fallback to first
 }
 
 // selectProxy selects a proxy based on the load balancing policy
