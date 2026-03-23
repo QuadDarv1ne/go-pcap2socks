@@ -21,17 +21,22 @@ type DeviceStats struct {
 	IP        string    `json:"ip"`
 	MAC       string    `json:"mac"`
 	Hostname  string    `json:"hostname"`
+	CustomName string   `json:"custom_name,omitempty"` // User-defined name
 	Connected bool      `json:"connected"`
 	LastSeen  time.Time `json:"last_seen"`
-	
+
 	// Traffic counters
 	TotalBytes   uint64 `json:"total_bytes"`
 	UploadBytes  uint64 `json:"upload_bytes"`
 	DownloadBytes uint64 `json:"download_bytes"`
 	Packets      uint64 `json:"packets"`
-	
+
 	// Session tracking
 	SessionStart time.Time `json:"session_start"`
+
+	// Rate limiting
+	RateLimitUpload   uint64 `json:"rate_limit_upload,omitempty"` // bytes/sec
+	RateLimitDownload uint64 `json:"rate_limit_download,omitempty"` // bytes/sec
 }
 
 // Lock locks the device stats for writing
@@ -273,6 +278,91 @@ func (c *TrafficCounter) AddSent(bytes uint64) {
 func (c *TrafficCounter) AddReceived(bytes uint64) {
 	atomic.AddUint64(&c.BytesReceived, bytes)
 	atomic.AddUint64(&c.PacketsReceived, 1)
+}
+
+// SetCustomName sets a custom name for a device
+func (s *Store) SetCustomName(mac, name string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, device := range s.devices {
+		device.mu.Lock()
+		if device.MAC == mac {
+			device.CustomName = name
+		}
+		device.mu.Unlock()
+	}
+}
+
+// GetCustomName returns the custom name for a MAC address
+func (s *Store) GetCustomName(mac string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, device := range s.devices {
+		device.mu.RLock()
+		if device.MAC == mac {
+			name := device.CustomName
+			device.mu.RUnlock()
+			return name
+		}
+		device.mu.RUnlock()
+	}
+	return ""
+}
+
+// SetRateLimit sets rate limits for a device
+func (s *Store) SetRateLimit(mac string, upload, download uint64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, device := range s.devices {
+		device.mu.Lock()
+		if device.MAC == mac {
+			device.RateLimitUpload = upload
+			device.RateLimitDownload = download
+		}
+		device.mu.Unlock()
+	}
+}
+
+// GetRateLimit returns rate limits for a device
+func (s *Store) GetRateLimit(mac string) (upload, download uint64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, device := range s.devices {
+		device.mu.RLock()
+		if device.MAC == mac {
+			upload = device.RateLimitUpload
+			download = device.RateLimitDownload
+			device.mu.RUnlock()
+			return
+		}
+		device.mu.RUnlock()
+	}
+	return 0, 0
+}
+
+// GetAllDeviceNames returns all device names (custom or hostname)
+func (s *Store) GetAllDeviceNames() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	names := make(map[string]string)
+	for _, device := range s.devices {
+		device.mu.RLock()
+		name := device.CustomName
+		if name == "" {
+			name = device.Hostname
+		}
+		if name == "" {
+			name = device.MAC
+		}
+		names[device.MAC] = name
+		device.mu.RUnlock()
+	}
+	return names
 }
 
 func (c *TrafficCounter) GetTotal() (sent, received uint64) {

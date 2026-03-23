@@ -126,6 +126,11 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/macfilter", s.handleMACFilter)
 	s.mux.HandleFunc("/api/macfilter/update", s.handleMACFilterUpdate)
 
+	// Device management endpoints
+	s.mux.HandleFunc("/api/devices", s.handleDevices)
+	s.mux.HandleFunc("/api/devices/names", s.handleDeviceNames)
+	s.mux.HandleFunc("/api/devices/ratelimit", s.handleDeviceRateLimit)
+
 	// WebSocket endpoint
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
 
@@ -854,6 +859,76 @@ func (s *Server) handleMACFilterUpdate(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("MAC filter updated", "mode", req.Mode, "entries", len(req.List))
 	s.sendSuccess(w, "MAC filter updated")
+}
+
+// handleDeviceNames returns all device names
+func (s *Server) handleDeviceNames(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleDeviceNamesGet(w, r)
+	case http.MethodPost:
+		s.handleDeviceNamesUpdate(w, r)
+	default:
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleDeviceNamesGet returns all device names
+func (s *Server) handleDeviceNamesGet(w http.ResponseWriter, r *http.Request) {
+	names := s.statsStore.GetAllDeviceNames()
+	s.sendSuccess(w, map[string]interface{}{
+		"names": names,
+	})
+}
+
+// handleDeviceNamesUpdate updates a device name
+func (s *Server) handleDeviceNamesUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		MAC  string `json:"mac"`
+		Name string `json:"name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.MAC == "" {
+		s.sendError(w, "MAC address required", http.StatusBadRequest)
+		return
+	}
+
+	s.statsStore.SetCustomName(req.MAC, req.Name)
+	slog.Info("Device name updated", "mac", req.MAC, "name", req.Name)
+	s.sendSuccess(w, "Device name updated")
+}
+
+// handleDeviceRateLimit updates rate limits for a device
+func (s *Server) handleDeviceRateLimit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MAC      string `json:"mac"`
+		Upload   uint64 `json:"upload"`   // bytes/sec
+		Download uint64 `json:"download"` // bytes/sec
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.MAC == "" {
+		s.sendError(w, "MAC address required", http.StatusBadRequest)
+		return
+	}
+
+	s.statsStore.SetRateLimit(req.MAC, req.Upload, req.Download)
+	slog.Info("Rate limit updated", "mac", req.MAC, "upload", req.Upload, "download", req.Download)
+	s.sendSuccess(w, "Rate limit updated")
 }
 
 // readLastLines reads last N lines from a file

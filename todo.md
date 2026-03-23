@@ -83,15 +83,11 @@
 - [x] Health check прокси
 - [x] Балансировка: round-robin, least-load, failover
 
-### 🟡 Приоритет 2 (Контроль трафика) — в работе v3.4.0
+### 🟡 Приоритет 2 (Контроль трафика) — завершено v3.5.0
 - [x] MAC blacklist/whitelist
-- [ ] Лимит скорости на устройство
+- [x] Лимит скорости на устройство (rate limiting)
+- [x] Кастомные имена устройств
 - [ ] Дневные лимиты трафика
-
-### Приоритет 3 (Улучшения)
-- [ ] Кастомные имена устройств
-- [ ] История трафика с графиками
-- [ ] DNS-over-QUIC (DoQ)
 
 ---
 
@@ -163,14 +159,19 @@ Go версия: 1.25.0
 
 ## 📅 История версий
 
-### v3.4.0 (23.03.2026) — текущая
+### v3.5.0 (23.03.2026) — текущая
+- ✅ Кастомные имена устройств (`stats/store.go`)
+- ✅ Rate limiting (`ratelimit/ratelimit.go`, `proxy/stats.go`)
+- ✅ API: `/api/devices/names` — управление именами
+- ✅ API: `/api/devices/ratelimit` — управление лимитами
+- ✅ Token bucket алгоритм для rate limiting
+
+### v3.4.0 (23.03.2026)
 - ✅ `cfg/config.go` — MACFilter структура
 - ✅ `proxy/router.go` — проверка MAC фильтра
 - ✅ `api/server.go` — API /api/macfilter
 - ✅ Режимы: blacklist, whitelist
 - ✅ main.go — инициализация из конфига
-
-### v3.3.0 (23.03.2026)
 - ✅ `proxy/group.go` — группа прокси с health check
 - ✅ `cfg/config.go` — OutboundGroup для групп прокси
 - ✅ `main.go` — создание групп из конфига
