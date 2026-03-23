@@ -12,14 +12,14 @@ import (
 
 // DHCPServer represents a DHCP server using WinDivert
 type DHCPServer struct {
-	mu        sync.RWMutex
-	config    *dhcp.ServerConfig
-	server    *dhcp.Server
-	handle    *Handle
-	stopChan  chan struct{}
-	wg        sync.WaitGroup
-	localMAC  net.HardwareAddr
-	localIP   net.IP
+	mu       sync.RWMutex
+	config   *dhcp.ServerConfig
+	server   *dhcp.Server
+	handle   *Handle
+	stopChan chan struct{}
+	wg       sync.WaitGroup
+	localMAC net.HardwareAddr
+	localIP  net.IP
 }
 
 // NewDHCPServer creates a new DHCP server using WinDivert
@@ -105,7 +105,7 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		return
 	}
 
-	slog.Info("DHCP packet captured via WinDivert",
+	slog.Debug("DHCP packet captured via WinDivert",
 		"src_ip", packet.SrcIP.String(),
 		"dst_ip", packet.DstIP.String(),
 		"src_port", packet.SrcPort,
@@ -120,7 +120,7 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	}
 
 	// Extract DHCP payload (skip IP and UDP headers)
-	ipHeaderLen := int((packet.Raw[0]&0x0F)*4)
+	ipHeaderLen := int((packet.Raw[0] & 0x0F) * 4)
 	udpHeaderLen := 8
 	dhcpStart := ipHeaderLen + udpHeaderLen
 
@@ -146,7 +146,7 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		return
 	}
 
-	slog.Info("DHCP response generated", "response_len", len(responseData))
+	slog.Info("DHCP response generated", "mac", packet.SrcMAC.String(), "response_len", len(responseData))
 
 	// Build and send DHCP response packet
 	err = s.sendDHCPResponse(packet, responseData)
@@ -154,8 +154,8 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		slog.Error("DHCP send response error", "err", err)
 	}
 
-	// Still reinject the original packet
-	s.handle.Send(packet)
+	// Don't reinject the original packet - we've responded to it
+	// This prevents the packet from reaching other DHCP servers
 }
 
 // sendDHCPResponse builds and sends a DHCP response packet
@@ -171,14 +171,12 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 		}
 	}
 
-	// Build DHCP response using helper from dhcp package
-	responsePacket, err := dhcp.BuildDHCPRequestPacket(
-		s.localMAC,           // Source MAC (server)
-		request.SrcMAC,       // Destination MAC (client)
-		s.localIP,            // Source IP (server)
-		dstIP,                // Destination IP (client or broadcast)
-		67,                   // Source port (DHCP server)
-		68,                   // Destination port (DHCP client)
+	// Build IP+UDP+DHCP packet (without Ethernet header for WinDivert network layer)
+	responsePacket, err := buildIPUDPPacket(
+		s.localIP, // Source IP (server)
+		dstIP,     // Destination IP (client or broadcast)
+		67,        // Source port (DHCP server)
+		68,        // Destination port (DHCP client)
 		dhcpData,
 	)
 	if err != nil {
@@ -186,9 +184,14 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 	}
 
 	// Create WinDivert packet for response
+	// Mark as outbound by setting Data=0 (outbound direction)
 	godivertPacket := &godivert.Packet{
-		Raw:       responsePacket,
-		Addr:      &godivert.WinDivertAddress{},
+		Raw: responsePacket,
+		Addr: &godivert.WinDivertAddress{
+			IfIdx:    request.Addr.IfIdx,
+			SubIfIdx: request.Addr.SubIfIdx,
+			Data:     0, // 0 = outbound, 1 = inbound
+		},
 		PacketLen: uint(len(responsePacket)),
 	}
 
@@ -202,8 +205,8 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 	}
 
 	slog.Info("DHCP response sent via WinDivert",
-		"client_mac", request.SrcMAC.String(),
-		"dst_ip", dstIP.String())
+		"dst_ip", dstIP.String(),
+		"packet_len", len(responsePacket))
 
 	return nil
 }
@@ -213,17 +216,72 @@ func (s *DHCPServer) GetLeases() map[string]*dhcp.DHCPLease {
 	return s.server.GetLeases()
 }
 
-// calculateChecksum calculates IP header checksum
-func calculateChecksum(header []byte) (byte, byte) {
+// buildIPUDPPacket builds an IP+UDP packet with payload (no Ethernet header)
+// This is used for WinDivert network layer which expects IP packets without Ethernet framing
+func buildIPUDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) ([]byte, error) {
+	// IP header (20 bytes) + UDP header (8 bytes) + payload
+	ipHeaderLen := 20
+	udpHeaderLen := 8
+	totalLen := ipHeaderLen + udpHeaderLen + len(payload)
+
+	packet := make([]byte, totalLen)
+
+	// Build IP header
+	packet[0] = 0x45                // Version 4, IHL 5 (20 bytes)
+	packet[1] = 0x00                // DSCP, ECN
+	packet[2] = byte(totalLen >> 8) // Total length
+	packet[3] = byte(totalLen)
+	packet[4] = 0x00 // Identification
+	packet[5] = 0x00
+	packet[6] = 0x00 // Flags, Fragment offset
+	packet[7] = 0x00
+	packet[8] = 64 // TTL
+	packet[9] = 17 // Protocol: UDP
+	// Checksum will be calculated later (bytes 10-11)
+	copy(packet[12:16], srcIP.To4())
+	copy(packet[16:20], dstIP.To4())
+
+	// Calculate IP checksum
+	ipChecksum := calculateIPChecksum(packet[0:ipHeaderLen])
+	packet[10] = byte(ipChecksum >> 8)
+	packet[11] = byte(ipChecksum)
+
+	// Build UDP header
+	udpStart := ipHeaderLen
+	packet[udpStart+0] = byte(srcPort >> 8)
+	packet[udpStart+1] = byte(srcPort)
+	packet[udpStart+2] = byte(dstPort >> 8)
+	packet[udpStart+3] = byte(dstPort)
+	udpLen := udpHeaderLen + len(payload)
+	packet[udpStart+4] = byte(udpLen >> 8)
+	packet[udpStart+5] = byte(udpLen)
+	packet[udpStart+6] = 0x00 // Checksum (optional for IPv4)
+	packet[udpStart+7] = 0x00
+
+	// Copy payload
+	copy(packet[ipHeaderLen+udpHeaderLen:], payload)
+
+	return packet, nil
+}
+
+// calculateIPChecksum calculates IP header checksum
+func calculateIPChecksum(header []byte) uint16 {
 	var sum uint32
+
+	// Set checksum field to 0 for calculation
+	header[10] = 0
+	header[11] = 0
+
 	for i := 0; i < len(header); i += 2 {
 		if i+1 < len(header) {
 			sum += uint32(header[i])<<8 | uint32(header[i+1])
 		}
 	}
+
+	// Add carry
 	for (sum >> 16) != 0 {
 		sum = (sum & 0xFFFF) + (sum >> 16)
 	}
-	sum = ^sum
-	return byte(sum >> 8), byte(sum & 0xFF)
+
+	return uint16(^sum)
 }
