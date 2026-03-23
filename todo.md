@@ -67,6 +67,25 @@
 
 ## 🔥 В работе
 
+### HTTP/3 (QUIC) Support - БАЗОВАЯ РЕАЛИЗАЦИЯ ГОТОВА ✅
+- [x] Добавлена зависимость quic-go v0.59.0
+- [x] Создан proxy/http3.go с базовой структурой
+- [x] Добавлен ModeHTTP3 в proxy/mode.go
+- [x] Добавлен OutboundHTTP3 в cfg/config.go
+- [x] Интеграция в main.go для создания HTTP/3 прокси
+- [x] Unit-тесты для HTTP/3 (5 тестов, все проходят)
+- [x] Пример конфигурации config-http3.json
+- [ ] Реализация TCP proxying через HTTP/3 CONNECT
+- [ ] Реализация UDP proxying через QUIC datagrams
+- [ ] Интеграция с ProxyGroup для failover
+- [ ] Документация по использованию HTTP/3
+
+**Статус**: Базовая инфраструктура HTTP/3 готова. HTTP/3 клиент работает для HTTP запросов. TCP/UDP proxying требует дополнительной реализации CONNECT метода и QUIC datagrams.
+
+---
+
+## 📋 Запланировано
+
 ### Критические исправления (HIGH priority)
 - [ ] Исправить race condition в proxy/group.go:157 (запись при RLock)
 - [ ] Добавить аутентификацию API (api/server.go)
