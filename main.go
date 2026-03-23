@@ -33,12 +33,12 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/telegram"
+	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	"github.com/jackpal/gateway"
-	"golang.org/x/sys/windows/svc"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
