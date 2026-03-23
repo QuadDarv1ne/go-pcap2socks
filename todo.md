@@ -25,9 +25,74 @@
 
 ---
 
+## ✅ Завершено (23.03.2026) - Тесты
+
+### Unit-тесты для критических компонентов
+- [x] proxy/router_test.go - 17 тестов для Router
+  - [x] TestNewRouter
+  - [x] TestRouter_DialContext_MACFilter
+  - [x] TestRouter_DialContext_Routing
+  - [x] TestRouter_DialContext_Cache
+  - [x] TestRouter_DialUDP_MACFilter
+  - [x] TestRouter_DialUDP_Routing
+  - [x] TestRouter_Stop
+  - [x] TestRouter_ProxyNotFound
+  - [x] TestMatch (6 sub-tests: DstPort, SrcPort, DstIP, SrcIP)
+  - [x] TestRouteCache_Concurrency
+  - [x] TestRouteCache_TTL
+  - [x] TestRouteCache_MaxSize
+- [x] proxy/group_test.go - 11 тестов для ProxyGroup
+  - [x] TestNewProxyGroup
+  - [x] TestProxyGroup_LeastLoad
+  - [x] TestProxyGroup_DialUDP
+  - [x] TestProxyGroup_EmptyGroup
+  - [x] TestProxyGroup_GetHealthStatus
+  - [x] TestProxyGroup_ConcurrentAccess
+  - [x] TestProxyGroup_Stop
+  - [x] TestProxyGroup_Addr
+  - [x] TestProxyGroup_Mode
+  - [x] TestSelectProxy_Failover
+  - [x] TestSelectProxy_RoundRobin
+  - [ ] TestProxyGroup_Failover (пропущен - timing issues с health check)
+  - [ ] TestProxyGroup_Failover_OnConnectionFailure (пропущен)
+- [x] proxy/proxy.go - добавлен GetDialer() для тестирования
+
+### Примечания по тестам
+- Тесты для tunnel/ и core/ требуют сложной интеграции с gVisor API
+- gVisor имеет нестабильный API между версиями
+- Тесты proxy покрывают критическую логику routing и load balancing
+- Все тесты проходят: `go test ./proxy/... ./stats/... ./cfg/...`
+
+---
+
 ## 🔥 В работе
 
-_Нет активных задач_
+### Критические исправления (HIGH priority)
+- [ ] Исправить race condition в proxy/group.go:157 (запись при RLock)
+- [ ] Добавить аутентификацию API (api/server.go)
+- [ ] Исправить path traversal уязвимость (api/server.go:726)
+- [ ] Добавить очистку неактивных устройств в stats/store.go
+
+### Производительность (MEDIUM priority)
+- [ ] Оптимизировать UPnP discovery (кэшировать устройства на 5 мин)
+- [ ] Интегрировать dns/pool.go для connection pooling
+- [ ] Использовать unsafe конверсию []byte→string в router.go:188
+
+### Безопасность (MEDIUM priority)
+- [ ] Rate limiting на API endpoints
+- [ ] Валидация размера запроса (http.MaxBytesReader)
+- [ ] Опциональная поддержка HTTPS для Web UI
+- [ ] Поддержка переменных окружения для токенов (${TELEGRAM_TOKEN})
+
+### Документация (LOW priority)
+- [ ] Создать docs/ARCHITECTURE.md с диаграммами
+- [ ] Добавить godoc комментарии для ключевых типов
+- [ ] Актуализировать QUICK_START.md для v3.18.0
+
+### Технические долги
+- [ ] Удалить мёртвый код в api/server.go:567-590
+- [ ] Вынести общую DHCP логику из dhcp/ и windivert/
+- [ ] Заменить магические числа на константы (tunnel/tcp.go:14)
 
 ---
 
@@ -55,6 +120,33 @@ _Нет активных задач_
 
 ## 📋 Запланировано
 
+### Критические исправления (HIGH priority)
+- [ ] Исправить race condition в proxy/group.go:157 (запись при RLock)
+- [ ] Добавить аутентификацию API (api/server.go)
+- [ ] Исправить path traversal уязвимость (api/server.go:726)
+- [ ] Добавить очистку неактивных устройств в stats/store.go
+
+### Производительность (MEDIUM priority)
+- [ ] Оптимизировать UPnP discovery (кэшировать устройства на 5 мин)
+- [ ] Интегрировать dns/pool.go для connection pooling
+- [ ] Использовать unsafe конверсию []byte→string в router.go:188
+
+### Безопасность (MEDIUM priority)
+- [ ] Rate limiting на API endpoints
+- [ ] Валидация размера запроса (http.MaxBytesReader)
+- [ ] Опциональная поддержка HTTPS для Web UI
+- [ ] Поддержка переменных окружения для токенов (${TELEGRAM_TOKEN})
+
+### Документация (LOW priority)
+- [ ] Создать docs/ARCHITECTURE.md с диаграммами
+- [ ] Добавить godoc комментарии для ключевых типов
+- [ ] Актуализировать QUICK_START.md для v3.18.0
+
+### Технические долги
+- [ ] Удалить мёртвый код в api/server.go:567-590
+- [ ] Вынести общую DHCP логику из dhcp/ и windivert/
+- [ ] Заменить магические числа на константы (tunnel/tcp.go:14)
+
 ### Долгосрочные
 - [ ] HTTP/3 (QUIC) поддержка
 - [ ] Multi-WAN балансировка
@@ -63,6 +155,15 @@ _Нет активных задач_
 ---
 
 ## 📊 Метрики качества
+
+### Покрытие тестами
+```
+proxy/router.go:      17 тестов ✅ (критический путь - routing, MAC filter, cache)
+proxy/group.go:       11 тестов ✅ (load balancing - RoundRobin, LeastLoad, Failover)
+stats/store.go:       10 тестов ✅ (трафик, устройства, CSV экспорт)
+cfg/config.go:        8 тестов  ✅ (port matcher, config validation)
+cfg/port_range.go:    8 тестов  ✅ (port ranges, matching)
+```
 
 ### Производительность (текущие)
 ```
