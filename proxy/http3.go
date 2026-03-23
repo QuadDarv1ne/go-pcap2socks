@@ -21,9 +21,11 @@ var _ Proxy = (*HTTP3)(nil)
 type HTTP3 struct {
 	*Base
 
-	client    *http.Client
-	transport *http3.Transport
-	addr      string
+	client     *http.Client
+	transport  *http3.Transport
+	addr       string
+	tlsConfig  *tls.Config
+	quicConfig *quic.Config
 }
 
 // NewHTTP3 creates a new HTTP/3 proxy
@@ -53,24 +55,50 @@ func NewHTTP3(addr string, skipVerify bool) (*HTTP3, error) {
 			addr: addr,
 			mode: ModeHTTP3,
 		},
-		client:    client,
-		transport: transport,
-		addr:      addr,
+		client:     client,
+		transport:  transport,
+		addr:       addr,
+		tlsConfig:  tlsConfig,
+		quicConfig: quicConfig,
 	}, nil
 }
 
-// DialContext establishes a connection through HTTP/3 proxy
+// DialContext establishes a connection through HTTP/3 proxy using CONNECT
 func (h *HTTP3) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
-	// HTTP/3 doesn't support traditional TCP proxying like SOCKS5
-	// This is a simplified implementation that uses HTTP CONNECT
-	return nil, fmt.Errorf("HTTP/3 TCP proxying not yet implemented")
+	if metadata == nil {
+		return nil, fmt.Errorf("metadata is nil")
+	}
+
+	targetAddr := metadata.DestinationAddress()
+
+	// Establish QUIC connection to proxy
+	qconn, err := quic.DialAddr(ctx, h.addr, h.tlsConfig, h.quicConfig)
+	if err != nil {
+		return nil, fmt.Errorf("dial QUIC: %w", err)
+	}
+
+	// Open stream and establish CONNECT tunnel
+	conn, err := dialConnectStream(ctx, qconn, targetAddr)
+	if err != nil {
+		qconn.CloseWithError(0, "connect failed")
+		return nil, fmt.Errorf("CONNECT tunnel: %w", err)
+	}
+
+	return conn, nil
 }
 
-// DialUDP creates a UDP connection through HTTP/3
+// DialUDP creates a UDP connection through HTTP/3 using QUIC datagrams
 func (h *HTTP3) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
-	// HTTP/3 is built on QUIC which is UDP-based
-	// This would require implementing QUIC datagram support
-	return nil, fmt.Errorf("HTTP/3 UDP proxying not yet implemented")
+	if metadata == nil {
+		return nil, fmt.Errorf("metadata is nil")
+	}
+
+	// QUIC datagrams support requires:
+	// 1. Negotiating datagram extension during handshake
+	// 2. Implementing PacketConn interface over QUIC datagrams
+	// 3. Proxy server support for UDP forwarding via datagrams
+	// This is a complex feature that requires both client and server implementation
+	return nil, fmt.Errorf("HTTP/3 UDP proxying via QUIC datagrams not yet implemented")
 }
 
 // Close closes the HTTP/3 client
