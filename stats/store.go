@@ -11,9 +11,13 @@ import (
 
 // Store holds traffic statistics
 type Store struct {
-	mu       sync.RWMutex
-	devices  map[string]*DeviceStats
-	started  time.Time
+	mu                sync.RWMutex
+	devices           map[string]*DeviceStats
+	started           time.Time
+	inactivityTimeout time.Duration
+	cleanupInterval   time.Duration
+	stopCleanup       chan struct{}
+	cleanupWg         sync.WaitGroup
 }
 
 // DeviceStats holds statistics for a single device
@@ -130,10 +134,26 @@ type TrafficRecord struct {
 
 // NewStore creates a new statistics store
 func NewStore() *Store {
-	return &Store{
-		devices: make(map[string]*DeviceStats),
-		started: time.Now(),
+	return NewStoreWithCleanup(24*time.Hour, 1*time.Hour)
+}
+
+// NewStoreWithCleanup creates a new statistics store with custom cleanup settings
+func NewStoreWithCleanup(inactivityTimeout, cleanupInterval time.Duration) *Store {
+	s := &Store{
+		devices:           make(map[string]*DeviceStats),
+		started:           time.Now(),
+		inactivityTimeout: inactivityTimeout,
+		cleanupInterval:   cleanupInterval,
+		stopCleanup:       make(chan struct{}),
 	}
+
+	// Start cleanup goroutine if cleanup is enabled
+	if inactivityTimeout > 0 && cleanupInterval > 0 {
+		s.cleanupWg.Add(1)
+		go s.cleanupLoop()
+	}
+
+	return s
 }
 
 // RecordTraffic records traffic for a device

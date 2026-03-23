@@ -91,8 +91,8 @@
 ### Критические исправления (HIGH priority)
 - [x] Исправить race condition в proxy/group.go:157 (запись при RLock) - использован atomic.StoreInt32
 - [x] Исправить path traversal уязвимость (api/server.go:726) - добавлена проверка filepath.Abs
+- [x] Добавить очистку неактивных устройств в stats/store.go - реализован cleanup с настраиваемым таймаутом
 - [ ] Добавить аутентификацию API (api/server.go)
-- [ ] Добавить очистку неактивных устройств в stats/store.go
 
 ### Производительность (MEDIUM priority)
 - [ ] Оптимизировать UPnP discovery (кэшировать устройства на 5 мин)
