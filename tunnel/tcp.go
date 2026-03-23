@@ -34,13 +34,14 @@ func handleTCPConn(originConn adapter.TCPConn) {
 	defer originConn.Close()
 
 	id := originConn.ID()
-	metadata := &M.Metadata{
-		Network: M.TCP,
-		SrcIP:   net.IP(id.RemoteAddress.AsSlice()),
-		SrcPort: id.RemotePort,
-		DstIP:   net.IP(id.LocalAddress.AsSlice()),
-		DstPort: id.LocalPort,
-	}
+	metadata := M.GetMetadata()
+	defer M.PutMetadata(metadata)
+
+	metadata.Network = M.TCP
+	metadata.SrcIP = net.IP(id.RemoteAddress.AsSlice())
+	metadata.SrcPort = id.RemotePort
+	metadata.DstIP = net.IP(id.LocalAddress.AsSlice())
+	metadata.DstPort = id.LocalPort
 
 	remoteConn, err := proxy.Dial(metadata)
 	if err != nil {

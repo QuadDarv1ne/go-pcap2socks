@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.15.0-async-dns)
+## ✅ Завершено (v3.16.0-metadata-pool)
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -14,6 +14,7 @@
 - [x] Connection tracking оптимизация (stats/ - sync.Pool для DeviceStats)
 - [x] Router DialContext оптимизация (byte slice key, 6→3 allocs)
 - [x] Async DNS resolver (context timeout, async exchange)
+- [x] Metadata pool (md/pool.go - 2.8x быстрее создания)
 
 ### Исправления
 - [x] stats/store.go - дублирование кода
@@ -25,18 +26,15 @@
 
 ## 🔥 В работе
 
-### Memory pool для частых аллокаций (средний приоритет)
-- [ ] Анализ частых аллокаций в hot path
-- [ ] Реализация pool для Metadata
-- [ ] Pool для DNS messages
-- [ ] Цель: -15-20% аллокаций
+### gVisor stack tuning (низкий приоритет)
+- [ ] Анализ текущих параметров stack
+- [ ] Настройка через config файл
+- [ ] Тестирование различных конфигураций
+- [ ] Цель: -10% CPU на network stack
 
 ---
 
 ## 📋 Запланировано
-
-### Критичные улучшения
-- [ ] gVisor stack tuning (через config)
 
 ### Долгосрочные
 - [ ] HTTP/3 (QUIC) поддержка
@@ -57,6 +55,7 @@ DNS Cache Get:        98.49 ns/op   0 B/op    0 allocs/op ✅
 Metrics Record:       8.88 ns/op    0 B/op    0 allocs/op ✅
 Stats RecordTraffic:  21.94 ns/op   0 B/op    0 allocs/op ✅
 Async DNS:            5s timeout    non-block ✅
+Metadata Pool:        13.15 ns/op   16 B/op   1 allocs/op ✅ (2.8x faster)
 ```
 
 ### Целевые показатели
@@ -64,7 +63,8 @@ Async DNS:            5s timeout    non-block ✅
 Router DialContext:   <100 ns/op   <100 B/op  <4 allocs/op ✅
 Buffer GetPut:        <50 ns/op    <30 B/op   1 allocs/op ✅
 Async DNS:            non-block    5s timeout ✅
-Memory Pool:          -20% allocs  (в работе)
+Metadata Pool:        <15 ns/op    <20 B/op   1 allocs/op ✅
+gVisor Stack:         -10% CPU     (в работе)
 ```
 
 ---
@@ -87,5 +87,5 @@ Memory Pool:          -20% allocs  (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.15.0-async-dns (dev)
+**Версия**: v3.16.0-metadata-pool (dev)
 **Статус**: 🔄 dev → main (ready for merge)
