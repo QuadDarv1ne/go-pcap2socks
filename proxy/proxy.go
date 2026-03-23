@@ -31,6 +31,11 @@ func SetDialer(d Dialer) {
 	_defaultDialer = d
 }
 
+// GetDialer returns the current default Dialer (for testing).
+func GetDialer() Dialer {
+	return _defaultDialer
+}
+
 // Dial uses default Dialer to dial TCP.
 func Dial(metadata *M.Metadata) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), tcpConnectTimeout)
