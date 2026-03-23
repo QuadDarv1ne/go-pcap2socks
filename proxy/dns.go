@@ -160,6 +160,7 @@ func (d *DNS) DialUDP(m *M.Metadata) (net.PacketConn, error) {
 		interfaceName: d.interfaceName,
 		dohClients:    d.dohClients,
 		dotClients:    d.dotClients,
+		tcpPools:      d.tcpPools,
 		cache:         d.cache,
 	}, nil
 }
@@ -172,6 +173,7 @@ type dnsConn struct {
 	interfaceName string
 	dohClients    map[string]*localdns.DoHClient
 	dotClients    map[string]*localdns.DoTClient
+	tcpPools      map[string]*dnsConnPool
 	cache         *dnsCache
 }
 
@@ -291,6 +293,17 @@ func (d *dnsConn) asyncExchange(ctx context.Context, msg *dns.Msg, responseCh ch
 		}
 
 		// Handle plain DNS (default)
+		// Try TCP pool first if available
+		if pool, ok := d.tcpPools[server.Address]; ok {
+			response, lastErr := pool.Exchange(msg)
+			if lastErr == nil {
+				responseCh <- response
+				return
+			}
+			slog.Debug("TCP pool exchange failed, falling back to UDP", "server", server.Address, "err", lastErr)
+		}
+
+		// Fallback to UDP
 		response, _, lastErr := d.dnsClient.ExchangeContext(ctx, msg, server.Address)
 		if lastErr == nil {
 			responseCh <- response

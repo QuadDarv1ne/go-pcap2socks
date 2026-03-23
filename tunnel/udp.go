@@ -24,6 +24,9 @@ const (
 
 	// udpRelayBufferSize uses adaptive buffer sizing
 	udpRelayBufferSize = buffer.SmallBufferSize // DNS and typical UDP fits in 512 bytes
+
+	// upnpCacheDuration is how long to cache discovered UPnP devices
+	upnpCacheDuration = 5 * time.Minute
 )
 
 // Rate limiters for frequent UDP log messages
@@ -31,6 +34,13 @@ var (
 	udpDialErrorLimiter = ratelimit.NewLimiter(1, 5)   // 1/sec, burst 5
 	udpConnLimiter      = ratelimit.NewLimiter(10, 20) // 10/sec, burst 20
 	udpReadErrorLimiter = ratelimit.NewLimiter(1, 3)   // 1/sec, burst 3
+)
+
+// UPnP device cache to avoid repeated discovery
+var (
+	upnpCacheMu      sync.RWMutex
+	upnpCachedDevices []upnp.Device
+	upnpCacheExpiry   time.Time
 )
 
 type UDPMapping struct {
@@ -122,12 +132,47 @@ func setupUPnP(session *UDPSession, port int) {
 		return
 	}
 
-	devices := upnp.Discover(0, 2*time.Second, alog.NewLogger("upnp"))
+	devices := getUPnPDevices()
 	slog.Info("Discovered UPnP devices", "count", len(devices))
 
 	for _, d := range devices {
 		go addPortMapping(session, d, upnp.UDP, port)
 	}
+}
+
+// getUPnPDevices returns cached UPnP devices or discovers new ones
+func getUPnPDevices() []upnp.Device {
+	now := time.Now()
+
+	// Try to use cached devices first
+	upnpCacheMu.RLock()
+	if now.Before(upnpCacheExpiry) && len(upnpCachedDevices) > 0 {
+		devices := upnpCachedDevices
+		upnpCacheMu.RUnlock()
+		slog.Debug("Using cached UPnP devices", "count", len(devices))
+		return devices
+	}
+	upnpCacheMu.RUnlock()
+
+	// Cache expired or empty, discover new devices
+	upnpCacheMu.Lock()
+	defer upnpCacheMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if now.Before(upnpCacheExpiry) && len(upnpCachedDevices) > 0 {
+		slog.Debug("Using cached UPnP devices (double-check)", "count", len(upnpCachedDevices))
+		return upnpCachedDevices
+	}
+
+	// Perform discovery
+	slog.Debug("Discovering UPnP devices (cache miss or expired)")
+	devices := upnp.Discover(0, 2*time.Second, alog.NewLogger("upnp"))
+
+	// Update cache
+	upnpCachedDevices = devices
+	upnpCacheExpiry = now.Add(upnpCacheDuration)
+
+	return devices
 }
 
 func HandleUDPConn(uc adapter.UDPConn) {
