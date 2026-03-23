@@ -14,7 +14,8 @@
       "Bash(git merge:*)",
       "Bash(grep:*)",
       "Bash(git rm:*)",
-      "Bash(grep -E \"\\\\.\\(go\\)$\")"
+      "Bash(grep -E \"\\\\.\\(go\\)$\")",
+      "Bash(git pull:*)"
     ]
   }
 }

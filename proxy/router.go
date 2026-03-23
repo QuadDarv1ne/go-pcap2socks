@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -37,7 +36,7 @@ type routeCache struct {
 	ttl        time.Duration
 	hits       uint64
 	misses     uint64
-	stringPool sync.Pool // Pool for reducing string allocations
+	keyPool    sync.Pool // Pool for byte slice keys
 }
 
 func newRouteCache(maxSize int, ttl time.Duration) *routeCache {
@@ -45,9 +44,9 @@ func newRouteCache(maxSize int, ttl time.Duration) *routeCache {
 		entries: make(map[string]*routeCacheEntry),
 		maxSize: maxSize,
 		ttl:     ttl,
-		stringPool: sync.Pool{
+		keyPool: sync.Pool{
 			New: func() any {
-				return &strings.Builder{}
+				return make([]byte, 0, 64) // Pre-allocate for typical key size
 			},
 		},
 	}
@@ -113,15 +112,19 @@ func (c *routeCache) stats() (hits, misses uint64) {
 	return c.hits, c.misses
 }
 
-// getBuilder returns a strings.Builder from pool
-func (c *routeCache) getBuilder() *strings.Builder {
-	return c.stringPool.Get().(*strings.Builder)
+// getKeyBuilder returns a byte slice from pool for building cache key
+func (c *routeCache) getKeyBuilder() []byte {
+	return c.keyPool.Get().([]byte)[:0]
 }
 
-// putBuilder returns a strings.Builder to pool
-func (c *routeCache) putBuilder(b *strings.Builder) {
-	b.Reset()
-	c.stringPool.Put(b)
+// putKeyBuilder returns a byte slice to pool
+func (c *routeCache) putKeyBuilder(key []byte) {
+	c.keyPool.Put(key[:0])
+}
+
+// appendPort appends port as string without allocation
+func appendPort(b []byte, port uint16) []byte {
+	return strconv.AppendUint(b, uint64(port), 10)
 }
 
 type Router struct {
@@ -200,19 +203,18 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 		return nil, ErrBlockedByMACFilter
 	}
 
-	// Create cache key using pooled builder
-	sb := d.routeCache.getBuilder()
-	sb.Grow(64) // Pre-allocate for typical key size
-	sb.WriteString("tcp:")
-	sb.WriteString(metadata.SrcIP.String())
-	sb.WriteByte(':')
-	sb.WriteString(portToString(metadata.SrcPort))
-	sb.WriteByte(':')
-	sb.WriteString(metadata.DstIP.String())
-	sb.WriteByte(':')
-	sb.WriteString(portToString(metadata.DstPort))
-	cacheKey := sb.String()
-	d.routeCache.putBuilder(sb)
+	// Create cache key using byte slice for zero-copy
+	key := d.routeCache.getKeyBuilder()
+	key = append(key, "tcp:"...)
+	key = append(key, metadata.SrcIP...)
+	key = append(key, ':')
+	key = appendPort(key, metadata.SrcPort)
+	key = append(key, ':')
+	key = append(key, metadata.DstIP...)
+	key = append(key, ':')
+	key = appendPort(key, metadata.DstPort)
+	cacheKey := string(key)
+	d.routeCache.putKeyBuilder(key)
 
 	// Check cache first
 	if outboundTag, found := d.routeCache.get(cacheKey); found {
@@ -253,19 +255,18 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, ErrBlockedByMACFilter
 	}
 
-	// Create cache key using pooled builder
-	sb := d.routeCache.getBuilder()
-	sb.Grow(64) // Pre-allocate for typical key size
-	sb.WriteString("udp:")
-	sb.WriteString(metadata.SrcIP.String())
-	sb.WriteByte(':')
-	sb.WriteString(portToString(metadata.SrcPort))
-	sb.WriteByte(':')
-	sb.WriteString(metadata.DstIP.String())
-	sb.WriteByte(':')
-	sb.WriteString(portToString(metadata.DstPort))
-	cacheKey := sb.String()
-	d.routeCache.putBuilder(sb)
+	// Create cache key using byte slice for zero-copy
+	key := d.routeCache.getKeyBuilder()
+	key = append(key, "udp:"...)
+	key = append(key, metadata.SrcIP...)
+	key = append(key, ':')
+	key = appendPort(key, metadata.SrcPort)
+	key = append(key, ':')
+	key = append(key, metadata.DstIP...)
+	key = append(key, ':')
+	key = appendPort(key, metadata.DstPort)
+	cacheKey := string(key)
+	d.routeCache.putKeyBuilder(key)
 
 	// Check cache first
 	if outboundTag, found := d.routeCache.get(cacheKey); found {
@@ -297,24 +298,6 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	}
 
 	return nil, ErrProxyNotFound
-}
-
-// portToString converts port to string without allocations using a buffer pool
-var portBufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 0, 5) // Max port is 65535 (5 digits)
-		return &b
-	},
-}
-
-func portToString(port uint16) string {
-	bufPtr := portBufPool.Get().(*[]byte)
-	buf := (*bufPtr)[:0]
-	buf = strconv.AppendUint(buf, uint64(port), 10)
-	s := string(buf)
-	*bufPtr = buf
-	portBufPool.Put(bufPtr)
-	return s
 }
 
 func match(metadata *M.Metadata, rule cfg.Rule) bool {
