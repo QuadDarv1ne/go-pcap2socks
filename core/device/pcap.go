@@ -35,9 +35,7 @@ type PCAP struct {
 	mtu        uint32 // Configured MTU (may differ from Interface.MTU)
 	rMux       sync.Mutex
 	stacker    func() Stacker
-	dhcpServer interface { // DHCP server interface
-		HandleRequest(data []byte) ([]byte, error)
-	}
+	dhcpServer DHCPServer // DHCP server interface
 }
 
 const offset = 0
@@ -47,9 +45,7 @@ func Open(captureCfg cfg.Capture, ifce net.Interface, netConfig *NetworkConfig, 
 }
 
 // OpenWithDHCP opens a PCAP device with optional DHCP server support
-func OpenWithDHCP(captureCfg cfg.Capture, ifce net.Interface, netConfig *NetworkConfig, stacker func() Stacker, dhcpServer interface {
-	HandleRequest(data []byte) ([]byte, error)
-}) (_ Device, err error) {
+func OpenWithDHCP(captureCfg cfg.Capture, ifce net.Interface, netConfig *NetworkConfig, stacker func() Stacker, dhcpServer DHCPServer) (_ Device, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("open tun: %v", r)
@@ -72,31 +68,15 @@ func OpenWithDHCP(captureCfg cfg.Capture, ifce net.Interface, netConfig *Network
 		return nil, fmt.Errorf("open live error: %w", err)
 	}
 
-	// BPF filter breakdown:
-	// 1. ARP packets: (arp dst host <localIP> and arp src net <network> and not arp src host <localIP>)
-	//    - Only ARP requests TO us (arp dst host)
-	//    - From devices in our network (arp src net)
-	//    - Not from ourselves (not arp src host) - loop prevention
-	// 2. IPv4 packets: (src net <network> and not dst net <network> and not (icmp and src host <localIP>))
-	//    - All IPv4 packets from the configured network
-	//    - Not destined to the local network (only capture internet-bound traffic)
-	//    - Exclude ICMP from ourselves (loop prevention in promiscuous mode)
-	// 3. DHCP packets: (udp and (src port 68 or dst port 67))
-	//    - DHCP Discover/Request from clients (port 68)
-	//    - DHCP Offer/Ack to clients (port 67)
-	bpfFilter := fmt.Sprintf(
-		"(arp dst host %s and arp src net %s and not arp src host %s) or (src net %s and not dst net %s and not (icmp and src host %s)) or (udp and (src port 68 or dst port 67))",
-		netConfig.LocalIP.String(),
-		netConfig.Network.String(),
-		netConfig.LocalIP.String(),
-		netConfig.Network.String(),
-		netConfig.Network.String(),
-		netConfig.LocalIP.String(),
-	)
-	err = pcaph.SetBPFFilter(bpfFilter)
-	if err != nil {
-		return nil, fmt.Errorf("set bpf filter error: %w", err)
-	}
+	// NOTE: BPF filter disabled for DHCP support
+	// DHCP broadcast packets from devices without IP are not captured by Npcap with BPF filters
+	// We filter packets in Read() instead
+	// 
+	// Original filter (for reference):
+	// "(arp dst host %s and arp src net %s and not arp src host %s) or (src net %s and not dst net %s and not (icmp and src host %s)) or (udp port 67 or udp port 68)"
+	
+	// No BPF filter - capture all packets and filter in Read()
+	// This allows DHCP broadcast packets to be captured
 
 	t := &PCAP{
 		name:       "dspcap",
@@ -202,20 +182,32 @@ func (t *PCAP) Read() []byte {
 			udpHeader := header.UDP(data[14+int(ipProtocol.HeaderLength()):])
 			srcPort := udpHeader.SourcePort()
 			dstPort := udpHeader.DestinationPort()
+
+			// Log all UDP packets for debugging
+			slog.Info("UDP packet captured", "src_port", srcPort, "dst_port", dstPort, "src_mac", net.HardwareAddr(ethProtocol.SourceAddress()).String())
 			
 			// DHCP uses ports 67 (server) and 68 (client)
 			if (srcPort == 68 || dstPort == 67) && t.dhcpServer != nil {
 				// This is a DHCP request from a client
-				slog.Debug("DHCP packet received", "src_port", srcPort, "dst_port", dstPort)
+				srcMAC := net.HardwareAddr(ethProtocol.SourceAddress())
+				dstMAC := net.HardwareAddr(ethProtocol.DestinationAddress())
+				slog.Info("DHCP packet captured", 
+					"src_port", srcPort, 
+					"dst_port", dstPort,
+					"src_mac", srcMAC.String(),
+					"dst_mac", dstMAC.String())
 				
 				// Parse the packet and handle DHCP request
 				response, err := t.handleDHCP(data)
 				if err != nil {
 					slog.Error("DHCP handle error", "err", err)
 				} else if response != nil {
+					slog.Info("DHCP response generated", "response_len", len(response))
 					// Send DHCP response
 					if err := t.handle.WritePacketData(response); err != nil {
 						slog.Error("DHCP write error", "err", err)
+					} else {
+						slog.Info("DHCP response sent successfully")
 					}
 				}
 				return nil // Don't pass DHCP packets to the stack

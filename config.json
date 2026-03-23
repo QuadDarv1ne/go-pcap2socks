@@ -1,6 +1,6 @@
 {
   "pcap": {
-    "interfaceGateway": "172.25.160.1",
+    "interfaceGateway": "192.168.137.1",
     "network": "192.168.137.0/24",
     "localIP": "192.168.137.1",
     "mtu": 1486
@@ -37,9 +37,13 @@
     "enabled": true,
     "toggle": "Ctrl+Alt+P"
   },
-  "upnp": {
+  "windivert": {
     "enabled": false,
-    "autoForward": false,
+    "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
+  },
+  "upnp": {
+    "enabled": true,
+    "autoForward": true,
     "leaseDuration": 3600,
     "gamePresets": {
       "ps4": [3478, 3479, 3480],

@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"net"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 )
 
 // DHCP message types
@@ -78,7 +80,16 @@ func NewDHCPMessage() *DHCPMessage {
 
 // Marshal serializes the DHCP message to bytes
 func (m *DHCPMessage) Marshal() []byte {
-	packet := make([]byte, 240) // Minimum DHCP packet size
+	// Estimate total size: 240 (header) + options
+	estimatedSize := 240
+	for _, value := range m.Options {
+		estimatedSize += 2 + len(value) // code + length + value
+	}
+	estimatedSize += 1 // End option
+
+	// Get buffer from pool
+	buf := pool.Get(estimatedSize)
+	packet := buf[:estimatedSize]
 
 	// Fixed header
 	packet[0] = m.OpCode
@@ -125,7 +136,12 @@ func (m *DHCPMessage) Marshal() []byte {
 	// End option
 	packet[optionPos] = OptionEnd
 
-	return packet
+	// Return actual size slice
+	result := make([]byte, optionPos+1)
+	copy(result, packet[:optionPos+1])
+	pool.Put(buf)
+
+	return result
 }
 
 // ParseDHCPMessage parses a DHCP message from bytes

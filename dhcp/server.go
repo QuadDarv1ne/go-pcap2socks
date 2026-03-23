@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 )
@@ -170,18 +171,23 @@ func (s *Server) buildResponse(request *DHCPMessage, messageType uint8, ip net.I
 
 		// DNS servers
 		if len(s.config.DNSServers) > 0 {
-			dnsBytes := make([]byte, 0, len(s.config.DNSServers)*4)
+			dnsSize := len(s.config.DNSServers) * 4
+			dnsBuf := pool.Get(dnsSize)
+			dnsBytes := dnsBuf[:0]
 			for _, dns := range s.config.DNSServers {
 				dnsBytes = append(dnsBytes, dns.To4()...)
 			}
-			response.Options[OptionDNSServer] = dnsBytes
+			// Copy to response and return buffer to pool
+			response.Options[OptionDNSServer] = append([]byte(nil), dnsBytes...)
+			pool.Put(dnsBuf)
 		}
 
 		// Lease time
 		leaseTime := uint32(s.config.LeaseDuration.Seconds())
-		leaseTimeBytes := make([]byte, 4)
-		binary.BigEndian.PutUint32(leaseTimeBytes, leaseTime)
-		response.Options[OptionLeaseTime] = leaseTimeBytes
+		leaseTimeBuf := pool.Get(4)
+		binary.BigEndian.PutUint32(leaseTimeBuf[:4], leaseTime)
+		response.Options[OptionLeaseTime] = append([]byte(nil), leaseTimeBuf[:4]...)
+		pool.Put(leaseTimeBuf)
 	}
 
 	return response.Marshal()
@@ -285,6 +291,12 @@ func (s *Server) cleanupLeases() {
 // Stop stops the DHCP server
 func (s *Server) Stop() {
 	close(s.stopChan)
+}
+
+// Start starts the DHCP server (cleanup loop already started in NewServer)
+func (s *Server) Start() error {
+	// Cleanup loop is already running from NewServer
+	return nil
 }
 
 // GetLeases returns current leases

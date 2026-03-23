@@ -15,12 +15,32 @@ import (
 
 var _ Proxy = (*DNS)(nil)
 
+// dnsConnPool wraps connection pool for DNS
+type dnsConnPool struct {
+	pool *localdns.ConnPool
+}
+
+func newDNSConnPool(addr string) *dnsConnPool {
+	pool := localdns.NewConnPool(addr, "tcp", 4, 30*time.Second, 5*time.Second)
+	return &dnsConnPool{pool: pool}
+}
+
+func (p *dnsConnPool) Exchange(msg *dns.Msg) (*dns.Msg, error) {
+	return p.pool.Exchange(msg)
+}
+
+func (p *dnsConnPool) Close() error {
+	return p.pool.Close()
+}
+
 type DNS struct {
 	cfg           cfg.DNS
 	dnsClient     *dns.Client
 	interfaceName string
 	dohClients    map[string]*localdns.DoHClient
 	dotClients    map[string]*localdns.DoTClient
+	cache         *dnsCache
+	stopCleanup   chan struct{}
 }
 
 func (d *DNS) Addr() string {
@@ -29,6 +49,36 @@ func (d *DNS) Addr() string {
 
 func (d *DNS) Mode() Mode {
 	return ModeDNS
+}
+
+// cleanupLoop periodically removes expired cache entries
+func (d *DNS) cleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			d.cache.cleanup()
+
+			// Log cache stats
+			hits, misses := d.cache.stats()
+			if hits+misses > 0 {
+				hitRate := float64(hits) / float64(hits+misses) * 100
+				slog.Debug("DNS cache stats",
+					"hits", hits,
+					"misses", misses,
+					"hit_rate", hitRate)
+			}
+		case <-d.stopCleanup:
+			return
+		}
+	}
+}
+
+// Close stops the DNS proxy and cleanup goroutine
+func (d *DNS) Close() {
+	close(d.stopCleanup)
 }
 
 func NewDNS(cfg cfg.DNS, interfaceName string) *DNS {
@@ -63,13 +113,20 @@ func NewDNS(cfg cfg.DNS, interfaceName string) *DNS {
 		}
 	}
 
-	return &DNS{
+	d := &DNS{
 		dnsClient:     dnsClient,
 		cfg:           cfg,
 		interfaceName: interfaceName,
 		dohClients:    dohClients,
 		dotClients:    dotClients,
+		cache:         newDNSCache(10000), // Cache up to 10k DNS entries
+		stopCleanup:   make(chan struct{}),
 	}
+
+	// Start cache cleanup goroutine
+	go d.cleanupLoop()
+
+	return d
 }
 
 func (d *DNS) DialContext(_ context.Context, _ *M.Metadata) (net.Conn, error) {
@@ -85,6 +142,7 @@ func (d *DNS) DialUDP(m *M.Metadata) (net.PacketConn, error) {
 		interfaceName: d.interfaceName,
 		dohClients:    d.dohClients,
 		dotClients:    d.dotClients,
+		cache:         d.cache,
 	}, nil
 }
 
@@ -96,6 +154,7 @@ type dnsConn struct {
 	interfaceName string
 	dohClients    map[string]*localdns.DoHClient
 	dotClients    map[string]*localdns.DoTClient
+	cache         *dnsCache
 }
 
 func (d *dnsConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
@@ -116,6 +175,17 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 	}
 
 	go func() {
+		// Check cache first
+		cacheKey := getCacheKey(msg)
+		if cacheKey != "" {
+			if cached, found := d.cache.get(cacheKey); found {
+				// Update message ID to match request
+				cached.Id = msg.Id
+				d.answerCh <- cached
+				return
+			}
+		}
+
 		var response *dns.Msg
 		var lastErr error
 
@@ -125,6 +195,11 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 				localClient := localdns.NewLocalClient(d.interfaceName)
 				response, lastErr = localClient.Exchange(msg)
 				if lastErr == nil {
+					// Cache successful response
+					if cacheKey != "" {
+						ttl := getTTL(response)
+						d.cache.set(cacheKey, response, ttl)
+					}
 					d.answerCh <- response
 					return
 				}
@@ -137,6 +212,11 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 				if client, ok := d.dohClients[server.Address]; ok {
 					response, lastErr = client.Exchange(msg)
 					if lastErr == nil {
+						// Cache successful response
+						if cacheKey != "" {
+							ttl := getTTL(response)
+							d.cache.set(cacheKey, response, ttl)
+						}
 						d.answerCh <- response
 						return
 					}
@@ -150,6 +230,11 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 				if client, ok := d.dotClients[server.Address]; ok {
 					response, lastErr = client.Exchange(msg)
 					if lastErr == nil {
+						// Cache successful response
+						if cacheKey != "" {
+							ttl := getTTL(response)
+							d.cache.set(cacheKey, response, ttl)
+						}
 						d.answerCh <- response
 						return
 					}
@@ -161,6 +246,11 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 			// Handle plain DNS (default)
 			response, _, lastErr = d.dnsClient.Exchange(msg, server.Address)
 			if lastErr == nil {
+				// Cache successful response
+				if cacheKey != "" {
+					ttl := getTTL(response)
+					d.cache.set(cacheKey, response, ttl)
+				}
 				d.answerCh <- response
 				return
 			}

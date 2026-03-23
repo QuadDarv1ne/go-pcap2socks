@@ -12,11 +12,27 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
+	"github.com/QuadDarv1ne/go-pcap2socks/ratelimit"
 	alog "github.com/anacrolix/log"
 	"github.com/anacrolix/upnp"
 )
 
-var UdpSessionTimeout = 5 * time.Minute
+const (
+	// UdpSessionTimeout is the timeout for UDP sessions
+	// Reduced from 5 minutes to 3 minutes for faster resource cleanup
+	UdpSessionTimeout = 3 * time.Minute
+
+	// udpRelayBufferSize is optimized buffer size for UDP relay
+	// Matches max UDP datagram size for efficiency
+	udpRelayBufferSize = 1500 // Standard Ethernet MTU
+)
+
+// Rate limiters for frequent UDP log messages
+var (
+	udpDialErrorLimiter = ratelimit.NewLimiter(1, 5)   // 1/sec, burst 5
+	udpConnLimiter      = ratelimit.NewLimiter(10, 20) // 10/sec, burst 20
+	udpReadErrorLimiter = ratelimit.NewLimiter(1, 3)   // 1/sec, burst 3
+)
 
 type UDPMapping struct {
 	device       upnp.Device
@@ -126,7 +142,9 @@ func HandleUDPConn(uc adapter.UDPConn) {
 
 	pc, err := proxy.DialUDP(metadata)
 	if err != nil {
-		slog.Warn("[UDP] dial error: ", "error", err)
+		if udpDialErrorLimiter.Allow() {
+			slog.Debug("[UDP] dial error", "error", err)
+		}
 		session.cleanup()
 		return
 	}
@@ -135,7 +153,9 @@ func HandleUDPConn(uc adapter.UDPConn) {
 		session.cleanup()
 	}()
 
-	slog.Info("[UDP] Connection", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
+	if udpConnLimiter.Allow() {
+		slog.Debug("[UDP] Connection", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
+	}
 
 	wg := sync.WaitGroup{}
 	wg.Add(2)
@@ -145,13 +165,15 @@ func HandleUDPConn(uc adapter.UDPConn) {
 	wg.Wait()
 
 	uc.Close()
-	slog.Info("[UDP] Connection closed", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
+	if udpConnLimiter.Allow() {
+		slog.Debug("[UDP] Connection closed", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
+	}
 }
 
 func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	buf := pool.Get(pool.MaxSegmentSize)
+	buf := pool.Get(udpRelayBufferSize)
 	defer pool.Put(buf)
 
 	for {
@@ -159,11 +181,13 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 		n, dest, err := from.ReadFrom(buf)
 		if err != nil {
 			if errors.Is(err, io.ErrClosedPipe) {
-				slog.Warn("[UDP] pipe closed", "source", from.LocalAddr(), "dest", to.LocalAddr(), "error", err)
+				slog.Debug("[UDP] pipe closed", "source", from.LocalAddr(), "dest", to.LocalAddr(), "error", err)
 				return
 			}
 			if !errors.Is(err, os.ErrDeadlineExceeded) {
-				slog.Warn("[UDP] read error", "source", from.LocalAddr(), "dest", to.LocalAddr(), "error", err)
+				if udpReadErrorLimiter.Allow() {
+					slog.Debug("[UDP] read error", "source", from.LocalAddr(), "dest", to.LocalAddr(), "error", err)
+				}
 			}
 
 			return
@@ -171,7 +195,9 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 
 		to.SetWriteDeadline(time.Now().Add(UdpSessionTimeout))
 		if _, err := to.WriteTo(buf[:n], dest); err != nil {
-			slog.Warn("[UDP] write error", "source", from.LocalAddr(), "dest", dest, "error", err)
+			if udpReadErrorLimiter.Allow() {
+				slog.Debug("[UDP] write error", "source", from.LocalAddr(), "dest", dest, "error", err)
+			}
 			return
 		}
 	}

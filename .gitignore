@@ -39,3 +39,12 @@ $null
 
 # AI/editor files
 CLAUDE.md
+.qwen/
+
+# WinDivert files (kept in windivert/ folder)
+/windivert/*.dll
+/windivert/*.sys
+/windivert/*.zip
+
+# But keep Go source files in windivert/
+!/windivert/*.go

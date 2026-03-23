@@ -27,16 +27,16 @@ func TestRecordTraffic(t *testing.T) {
 		t.Fatal("Expected device to be created")
 	}
 
-	if device.UploadBytes != bytes {
-		t.Errorf("Expected UploadBytes %d, got %d", bytes, device.UploadBytes)
+	if device.GetUploadBytes() != bytes {
+		t.Errorf("Expected UploadBytes %d, got %d", bytes, device.GetUploadBytes())
 	}
 
-	if device.TotalBytes != bytes {
-		t.Errorf("Expected TotalBytes %d, got %d", bytes, device.TotalBytes)
+	if device.GetTotalBytes() != bytes {
+		t.Errorf("Expected TotalBytes %d, got %d", bytes, device.GetTotalBytes())
 	}
 
-	if device.Packets != 1 {
-		t.Errorf("Expected Packets 1, got %d", device.Packets)
+	if device.GetPackets() != 1 {
+		t.Errorf("Expected Packets 1, got %d", device.GetPackets())
 	}
 }
 
@@ -49,8 +49,8 @@ func TestRecordTraffic_Download(t *testing.T) {
 	store.RecordTraffic(ip, mac, bytes, false) // download
 
 	device := store.GetDeviceStats(ip)
-	if device.DownloadBytes != bytes {
-		t.Errorf("Expected DownloadBytes %d, got %d", bytes, device.DownloadBytes)
+	if device.GetDownloadBytes() != bytes {
+		t.Errorf("Expected DownloadBytes %d, got %d", bytes, device.GetDownloadBytes())
 	}
 }
 

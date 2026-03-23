@@ -3,6 +3,7 @@ package tunnel
 import (
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/ratelimit"
 	"gvisor.dev/gvisor/pkg/log"
 	"io"
 	"log/slog"
@@ -17,6 +18,16 @@ import (
 const (
 	// tcpWaitTimeout implements a TCP half-close timeout.
 	tcpWaitTimeout = 60 * time.Second
+
+	// tcpRelayBufferSize is optimized buffer size for TCP relay
+	// Reduced from 20 KiB to 8 KiB for better cache locality
+	tcpRelayBufferSize = 8 << 10
+)
+
+// Rate limiters for frequent log messages
+var (
+	tcpDialErrorLimiter   = ratelimit.NewLimiter(1, 5)   // 1/sec, burst 5
+	tcpConnLimiter        = ratelimit.NewLimiter(10, 20) // 10/sec, burst 20
 )
 
 func handleTCPConn(originConn adapter.TCPConn) {
@@ -33,14 +44,18 @@ func handleTCPConn(originConn adapter.TCPConn) {
 
 	remoteConn, err := proxy.Dial(metadata)
 	if err != nil {
-		slog.Warn("[TCP] Dial error", "dest", metadata.DestinationAddress(), "error", err)
+		if tcpDialErrorLimiter.Allow() {
+			slog.Debug("[TCP] Dial error", "dest", metadata.DestinationAddress(), "error", err)
+		}
 		return
 	}
 	metadata.MidIP, metadata.MidPort = parseAddr(remoteConn.LocalAddr())
 
 	defer remoteConn.Close()
 
-	slog.Info("[TCP] Connection", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
+	if tcpConnLimiter.Allow() {
+		slog.Debug("[TCP] Connection", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
+	}
 	pipe(originConn, remoteConn)
 }
 
@@ -57,7 +72,7 @@ func pipe(origin, remote net.Conn) {
 
 func unidirectionalStream(dst, src net.Conn, dir string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	buf := pool.Get(pool.RelayBufferSize)
+	buf := pool.Get(tcpRelayBufferSize)
 	if _, err := io.CopyBuffer(dst, src, buf); err != nil {
 		log.Debugf("[TCP] copy data for %s: %v", dir, err)
 	}

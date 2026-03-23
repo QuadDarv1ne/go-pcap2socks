@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
@@ -39,6 +40,7 @@ import (
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
+	"github.com/QuadDarv1ne/go-pcap2socks/windivert"
 	"github.com/jackpal/gateway"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
@@ -46,9 +48,12 @@ import (
 //go:embed config.json
 var configData string
 
+// asyncHandler holds the async logger for graceful shutdown
+var asyncHandler *asynclogger.AsyncHandler
+
 func main() {
 	// Setup logging - check SLOG_LEVEL env var
-	logLevel := slog.LevelInfo // Default to debug
+	logLevel := slog.LevelInfo // Default to info
 	if lvl := os.Getenv("SLOG_LEVEL"); lvl != "" {
 		switch lvl {
 		case "debug", "DEBUG":
@@ -65,8 +70,11 @@ func main() {
 	opts := &slog.HandlerOptions{
 		Level: logLevel,
 	}
-	handler := slog.NewTextHandler(os.Stdout, opts)
-	slog.SetDefault(slog.New(handler))
+	
+	// Use async handler for better performance
+	syncHandler := slog.NewTextHandler(os.Stdout, opts)
+	asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
+	slog.SetDefault(slog.New(asyncHandler))
 
 	// Check for commands
 	if len(os.Args) > 1 {
@@ -549,6 +557,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	proxy.SetDialer(_defaultProxy)
 
 	// Initialize DHCP server if enabled
+	var dhcpServer device.DHCPServer
 	if cfg.DHCP != nil && cfg.DHCP.Enabled {
 		poolStart := net.ParseIP(cfg.DHCP.PoolStart)
 		poolEnd := net.ParseIP(cfg.DHCP.PoolEnd)
@@ -574,15 +583,42 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			DNSServers:    dnsServers,
 		}
 
-		_dhcpServer = dhcp.NewServer(dhcpConfig)
-		slog.Info("DHCP server initialized", 
-			"pool", fmt.Sprintf("%s-%s", poolStart, poolEnd),
-			"lease", fmt.Sprintf("%ds", cfg.DHCP.LeaseDuration))
+		// Use WinDivert DHCP server if enabled in config
+		useWinDivert := cfg.WinDivert != nil && cfg.WinDivert.Enabled
+		if useWinDivert {
+			// Create WinDivert DHCP server
+			windivertDHCP, err := windivert.NewDHCPServer(dhcpConfig, netConfig.LocalMAC)
+			if err != nil {
+				slog.Error("WinDivert DHCP server creation failed", "err", err)
+				return err
+			}
+			_dhcpServer = windivertDHCP
+			slog.Info("WinDivert DHCP server initialized",
+				"pool", fmt.Sprintf("%s-%s", poolStart, poolEnd),
+				"lease", fmt.Sprintf("%ds", cfg.DHCP.LeaseDuration))
+		} else {
+			// Use standard DHCP server integrated with device
+			_dhcpServer = dhcp.NewServer(dhcpConfig)
+			slog.Info("DHCP server initialized",
+				"pool", fmt.Sprintf("%s-%s", poolStart, poolEnd),
+				"lease", fmt.Sprintf("%ds", cfg.DHCP.LeaseDuration))
+		}
+
+		// Set dhcpServer for device if it implements the interface
+		if ds, ok := _dhcpServer.(device.DHCPServer); ok {
+			dhcpServer = ds
+		}
+
+		// Start DHCP server
+		if err := _dhcpServer.Start(); err != nil {
+			slog.Error("DHCP server start failed", "err", err)
+			return err
+		}
 	}
 
 	_defaultDevice, err = device.OpenWithDHCP(cfg.Capture, ifce, netConfig, func() device.Stacker {
 		return _defaultStack
-	}, _dhcpServer)
+	}, dhcpServer)
 	if err != nil {
 		return err
 	}
@@ -639,8 +675,8 @@ var (
 	// _upnpManager holds the UPnP manager
 	_upnpManager *upnpmanager.Manager
 
-	// _dhcpServer holds the DHCP server
-	_dhcpServer *dhcp.Server
+	// _dhcpServer holds the DHCP server (can be *dhcp.Server or *windivert.DHCPServer)
+	_dhcpServer interface{ Start() error; Stop() }
 )
 
 // GetStatsStore returns the global statistics store
@@ -724,6 +760,18 @@ func Stop() {
 	if _dhcpServer != nil {
 		_dhcpServer.Stop()
 		slog.Info("DHCP server stopped")
+	}
+
+	// Stop async logger
+	if asyncHandler != nil {
+		asyncHandler.Flush()
+		if err := asyncHandler.Stop(); err != nil {
+			// Logger stop error - ignore in shutdown
+		}
+		if dropped := asyncHandler.GetDroppedCount(); dropped > 0 {
+			// Log final stats before exit
+			fmt.Fprintf(os.Stderr, "Async logger stopped, dropped: %d records\n", dropped)
+		}
 	}
 
 	// Signal shutdown complete
@@ -966,6 +1014,12 @@ func autoConfigure() {
     "localIP": "192.168.137.1",
     "mtu": %d
   },
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.137.10",
+    "poolEnd": "192.168.137.250",
+    "leaseDuration": 86400
+  },
   "dns": {
     "servers": [
       {"address": "8.8.8.8:53"},
@@ -992,9 +1046,13 @@ func autoConfigure() {
     "enabled": true,
     "toggle": "Ctrl+Alt+P"
   },
-  "upnp": {
+  "windivert": {
     "enabled": false,
-    "autoForward": false,
+    "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
+  },
+  "upnp": {
+    "enabled": true,
+    "autoForward": true,
     "leaseDuration": 3600,
     "gamePresets": {
       "ps4": [3478, 3479, 3480],
