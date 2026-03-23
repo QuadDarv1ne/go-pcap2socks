@@ -84,5 +84,5 @@ gVisor Stack:       -15% CPU (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.11.0-metrics (dev)
-**Статус**: 🔄 dev → main (ready for merge)
+**Версия**: v3.11.0-metrics (в main)
+**Статус**: ✅ main и dev синхронизированы с origin
