@@ -53,6 +53,7 @@ type Config struct {
 	Outbounds []Outbound `json:"outbounds"`
 	Capture   Capture    `json:"capture,omitempty"`
 	Language  string     `json:"language,omitempty"`
+	API       *API       `json:"api,omitempty"`
 	Telegram  *Telegram  `json:"telegram,omitempty"`
 	Discord   *Discord   `json:"discord,omitempty"`
 	Hotkey    *Hotkey    `json:"hotkey,omitempty"`

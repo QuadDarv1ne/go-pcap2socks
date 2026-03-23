@@ -27,6 +27,7 @@ type Server struct {
 	upnpMgr    *upnpmanager.Manager
 	metrics    *metrics.Collector
 	configPath string
+	authToken  string // Optional authentication token
 	mu         sync.RWMutex
 	enabled    bool
 }
@@ -95,63 +96,39 @@ func getGlobalStatsStore() *stats.Store {
 }
 
 func (s *Server) setupRoutes() {
-	// Status endpoints
+	// Public endpoints (no auth required)
 	s.mux.HandleFunc("/api/status", s.handleStatus)
-	s.mux.HandleFunc("/api/start", s.handleStart)
-	s.mux.HandleFunc("/api/stop", s.handleStop)
-
-	// Traffic endpoints
-	s.mux.HandleFunc("/api/traffic", s.handleTraffic)
-	s.mux.HandleFunc("/api/traffic/export", s.handleTrafficExport)
-
-	// Logs endpoints
-	s.mux.HandleFunc("/api/logs", s.handleLogs)
-	s.mux.HandleFunc("/api/logs/export", s.handleLogsExport)
-
-	// Device endpoints
-	s.mux.HandleFunc("/api/devices", s.handleDevices)
-
-	// Config endpoints
-	s.mux.HandleFunc("/api/config", s.handleConfig)
-	s.mux.HandleFunc("/api/config/update", s.handleConfigUpdate)
-	s.mux.HandleFunc("/api/config/reload", s.handleConfigReload)
-	s.mux.HandleFunc("/api/config/auto", s.handleAutoConfig)
-
-	// DHCP endpoints
-	s.mux.HandleFunc("/api/dhcp", s.handleDHCP)
-	s.mux.HandleFunc("/api/dhcp/leases", s.handleDHCPLeases)
-
-	// Profile endpoints
-	s.mux.HandleFunc("/api/profiles", s.handleProfiles)
-	s.mux.HandleFunc("/api/profiles/switch", s.handleProfileSwitch)
-
-	// UPnP endpoints
-	s.mux.HandleFunc("/api/upnp", s.handleUPnP)
-	s.mux.HandleFunc("/api/upnp/discover", s.handleUPnPDiscover)
-	s.mux.HandleFunc("/api/upnp/add", s.handleUPnPAddPort)
-	s.mux.HandleFunc("/api/upnp/remove", s.handleUPnPRemovePort)
-	s.mux.HandleFunc("/api/upnp/apply", s.handleUPnPApplyMappings)
-
-	// Hotkey endpoints
-	s.mux.HandleFunc("/api/hotkey", s.handleHotkey)
-	s.mux.HandleFunc("/api/hotkey/toggle", s.handleHotkeyToggle)
-
-	// MAC Filter endpoints
-	s.mux.HandleFunc("/api/macfilter", s.handleMACFilter)
-	s.mux.HandleFunc("/api/macfilter/update", s.handleMACFilterUpdate)
-
-	// Device management endpoints
-	s.mux.HandleFunc("/api/devices/names", s.handleDeviceNames)
-	s.mux.HandleFunc("/api/devices/ratelimit", s.handleDeviceRateLimit)
-
-	// WebSocket endpoint
-	s.mux.HandleFunc("/ws", s.handleWebSocket)
-
-	// Prometheus metrics endpoint
 	s.mux.HandleFunc("/metrics", s.handleMetrics)
-
-	// Static files (web UI)
 	s.mux.HandleFunc("/", s.handleStatic)
+
+	// Protected endpoints (require auth if token is set)
+	s.mux.HandleFunc("/api/start", s.authMiddleware(s.handleStart))
+	s.mux.HandleFunc("/api/stop", s.authMiddleware(s.handleStop))
+	s.mux.HandleFunc("/api/traffic", s.authMiddleware(s.handleTraffic))
+	s.mux.HandleFunc("/api/traffic/export", s.authMiddleware(s.handleTrafficExport))
+	s.mux.HandleFunc("/api/logs", s.authMiddleware(s.handleLogs))
+	s.mux.HandleFunc("/api/logs/export", s.authMiddleware(s.handleLogsExport))
+	s.mux.HandleFunc("/api/devices", s.authMiddleware(s.handleDevices))
+	s.mux.HandleFunc("/api/config", s.authMiddleware(s.handleConfig))
+	s.mux.HandleFunc("/api/config/update", s.authMiddleware(s.handleConfigUpdate))
+	s.mux.HandleFunc("/api/config/reload", s.authMiddleware(s.handleConfigReload))
+	s.mux.HandleFunc("/api/config/auto", s.authMiddleware(s.handleAutoConfig))
+	s.mux.HandleFunc("/api/dhcp", s.authMiddleware(s.handleDHCP))
+	s.mux.HandleFunc("/api/dhcp/leases", s.authMiddleware(s.handleDHCPLeases))
+	s.mux.HandleFunc("/api/profiles", s.authMiddleware(s.handleProfiles))
+	s.mux.HandleFunc("/api/profiles/switch", s.authMiddleware(s.handleProfileSwitch))
+	s.mux.HandleFunc("/api/upnp", s.authMiddleware(s.handleUPnP))
+	s.mux.HandleFunc("/api/upnp/discover", s.authMiddleware(s.handleUPnPDiscover))
+	s.mux.HandleFunc("/api/upnp/add", s.authMiddleware(s.handleUPnPAddPort))
+	s.mux.HandleFunc("/api/upnp/remove", s.authMiddleware(s.handleUPnPRemovePort))
+	s.mux.HandleFunc("/api/upnp/apply", s.authMiddleware(s.handleUPnPApplyMappings))
+	s.mux.HandleFunc("/api/hotkey", s.authMiddleware(s.handleHotkey))
+	s.mux.HandleFunc("/api/hotkey/toggle", s.authMiddleware(s.handleHotkeyToggle))
+	s.mux.HandleFunc("/api/macfilter", s.authMiddleware(s.handleMACFilter))
+	s.mux.HandleFunc("/api/macfilter/update", s.authMiddleware(s.handleMACFilterUpdate))
+	s.mux.HandleFunc("/api/devices/names", s.authMiddleware(s.handleDeviceNames))
+	s.mux.HandleFunc("/api/devices/ratelimit", s.authMiddleware(s.handleDeviceRateLimit))
+	s.mux.HandleFunc("/ws", s.authMiddleware(s.handleWebSocket))
 }
 
 // handleMetrics exports Prometheus format metrics
