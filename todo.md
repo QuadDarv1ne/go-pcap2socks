@@ -82,5 +82,5 @@ Metrics:            full observability (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.10.0-http2-pool (dev)
-**Статус**: 🔄 dev → main (ready for merge)
+**Версия**: v3.10.0-http2-pool (в main)
+**Статус**: ✅ main и dev синхронизированы с origin
