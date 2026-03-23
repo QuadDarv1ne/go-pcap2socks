@@ -148,6 +148,7 @@ type Outbound struct {
 	Socks  *OutboundSocks  `json:"socks,omitempty"`
 	Reject *OutboundReject `json:"reject,omitempty"`
 	DNS    *OutboundDNS    `json:"dns,omitempty"`
+	Group  *OutboundGroup  `json:"group,omitempty"`
 	Tag    string          `json:"tag,omitempty"`
 }
 
@@ -161,6 +162,14 @@ type OutboundSocks struct {
 }
 
 type OutboundDNS struct{}
+
+// OutboundGroup represents a group of proxies with load balancing
+type OutboundGroup struct {
+	Proxies     []string `json:"proxies"`              // List of outbound tags
+	Policy      string   `json:"policy,omitempty"`      // "failover", "round-robin", "least-load"
+	CheckURL    string   `json:"check_url,omitempty"`   // URL for health check
+	CheckInterval int    `json:"check_interval,omitempty"` // Health check interval in seconds
+}
 
 // DNSServerType defines the type of DNS server
 type DNSServerType string

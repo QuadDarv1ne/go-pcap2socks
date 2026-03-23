@@ -413,7 +413,14 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	displayNetworkConfig(netConfig, localizer)
 
 	proxies := make(map[string]proxy.Proxy)
+	
+	// First pass: create individual proxies
 	for _, outbound := range cfg.Outbounds {
+		// Skip groups in first pass
+		if outbound.Group != nil {
+			continue
+		}
+		
 		var p proxy.Proxy
 		switch {
 		case outbound.Direct != nil:
@@ -435,6 +442,52 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		// Wrap with stats tracking
 		p = proxy.NewStatsProxy(p, _statsStore)
 		proxies[outbound.Tag] = p
+	}
+	
+	// Second pass: create proxy groups
+	for _, outbound := range cfg.Outbounds {
+		if outbound.Group == nil {
+			continue
+		}
+		
+		// Resolve proxy references
+		groupProxies := make([]proxy.Proxy, 0, len(outbound.Group.Proxies))
+		for _, proxyTag := range outbound.Group.Proxies {
+			if p, ok := proxies[proxyTag]; ok {
+				groupProxies = append(groupProxies, p)
+			} else {
+				slog.Warn("Proxy group references unknown proxy", "group", outbound.Tag, "proxy", proxyTag)
+			}
+		}
+		
+		if len(groupProxies) == 0 {
+			slog.Warn("Proxy group has no valid proxies", "group", outbound.Tag)
+			continue
+		}
+		
+		// Determine policy
+		policy := proxy.Failover
+		switch outbound.Group.Policy {
+		case "round-robin":
+			policy = proxy.RoundRobin
+		case "least-load":
+			policy = proxy.LeastLoad
+		}
+		
+		// Create proxy group
+		groupCfg := &proxy.ProxyGroupConfig{
+			Name:     outbound.Tag,
+			Proxies:  groupProxies,
+			Policy:   policy,
+			CheckURL: outbound.Group.CheckURL,
+		}
+		if outbound.Group.CheckInterval > 0 {
+			groupCfg.CheckInterval = time.Duration(outbound.Group.CheckInterval) * time.Second
+		}
+		
+		group := proxy.NewProxyGroup(groupCfg)
+		proxies[outbound.Tag] = group
+		slog.Info("Created proxy group", "name", outbound.Tag, "policy", policy.String(), "proxies", len(groupProxies))
 	}
 
 	_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
@@ -529,6 +582,14 @@ func IsRunning() bool {
 func Stop() {
 	slog.Info("Stopping service...")
 	_running = false
+
+	// Stop proxy groups
+	for _, p := range _defaultProxy.(*proxy.Router).Proxies {
+		if group, ok := p.(*proxy.ProxyGroup); ok {
+			group.Stop()
+			slog.Info("Proxy group stopped", "name", group.Addr())
+		}
+	}
 
 	// Close HTTP server
 	if _httpServer != nil {

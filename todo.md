@@ -78,10 +78,10 @@
 
 ## 📋 План v3.2
 
-### Приоритет 1 (Multi-WAN) — в работе
-- [ ] Структура outbounds с группами прокси
-- [ ] Health check прокси
-- [ ] Балансировка: round-robin, least-load, failover
+### ✅ Приоритет 1 (Multi-WAN) — завершено v3.3.0
+- [x] Структура outbounds с группами прокси
+- [x] Health check прокси
+- [x] Балансировка: round-robin, least-load, failover
 
 ### Приоритет 2 (Контроль трафика)
 - [ ] Лимит скорости на устройство
@@ -163,7 +163,15 @@ Go версия: 1.25.0
 
 ## 📅 История версий
 
-### v3.2.4 (23.03.2026) — текущая
+### v3.3.0 (23.03.2026) — текущая
+- ✅ `proxy/group.go` — группа прокси с health check
+- ✅ `cfg/config.go` — OutboundGroup для групп прокси
+- ✅ `main.go` — создание групп из конфига
+- ✅ Политики: failover, round-robin, least-load
+- ✅ Автоматический health check (30с интервал)
+- ✅ Graceful остановка групп
+
+### v3.2.4 (23.03.2026)
 - ✅ Добавлен контекст в `dialer.ListenPacket()` для отмены операций
 - ✅ Telegram bot: контекст для остановки polling
 - ✅ Telegram bot: экспоненциальный backoff при ошибках
