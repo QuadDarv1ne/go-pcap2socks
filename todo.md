@@ -100,7 +100,7 @@
 - [ ] Использовать unsafe конверсию []byte→string в router.go:188
 
 ### Безопасность (MEDIUM priority)
-- [ ] Rate limiting на API endpoints
+- [x] Rate limiting на API endpoints - реализован token bucket per IP (100 req/min)
 - [ ] Валидация размера запроса (http.MaxBytesReader)
 - [ ] Опциональная поддержка HTTPS для Web UI
 - [ ] Поддержка переменных окружения для токенов (${TELEGRAM_TOKEN})
