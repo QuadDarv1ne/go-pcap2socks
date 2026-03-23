@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (v3.11.0-metrics)
+## ✅ Завершено (v3.12.0-stable)
 
 ### Производительность
 - [x] Асинхронное логирование (asynclogger/async_handler.go)
@@ -22,11 +22,11 @@
 
 ## 🔥 В работе
 
-### gVisor stack оптимизация (средний приоритет)
-- [ ] Изучить текущие параметры stack
-- [ ] Оптимизировать MTU/MSS настройки
-- [ ] Batch обработка пакетов
-- [ ] Цель: -10-15% CPU на network stack
+### Connection tracking оптимизация (средний приоритет)
+- [ ] Анализ текущей реализации connection tracking
+- [ ] Оптимизация хранения состояния соединений
+- [ ] Снижение аллокаций при создании соединений
+- [ ] Цель: -10% CPU на connection handling
 
 ---
 
@@ -34,8 +34,8 @@
 
 ### Критичные улучшения
 - [ ] Async DNS resolver
-- [ ] Connection tracking оптимизация
 - [ ] Memory pool для частых аллокаций
+- [ ] gVisor stack tuning (через config)
 
 ### Долгосрочные
 - [ ] HTTP/3 (QUIC) поддержка
@@ -61,7 +61,7 @@ Metrics Export:     5356 ns/op    1152 B/op 73 allocs/op
 Router DialContext: <100 ns/op   <100 B/op  <4 allocs/op
 Buffer GetPut:      <50 ns/op    <30 B/op   1 allocs/op ✅
 Metrics Record:     <10 ns/op    0 B/op     0 allocs/op ✅
-gVisor Stack:       -15% CPU (в работе)
+Conn Tracking:      -10% CPU (в работе)
 ```
 
 ---
@@ -84,5 +84,5 @@ gVisor Stack:       -15% CPU (в работе)
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.11.0-metrics (в main)
-**Статус**: ✅ main и dev синхронизированы с origin
+**Версия**: v3.12.0-stable (dev)
+**Статус**: 🔄 dev → main (ready for merge)
