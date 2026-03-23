@@ -147,6 +147,14 @@ type socksPacketConn struct {
 
 	rAddr   net.Addr
 	tcpConn net.Conn
+	// buf holds the current packet being read for zero-copy operation
+	buf []byte
+	// payloadStart indicates where payload begins in buf
+	payloadStart int
+	// payloadLen is the length of the payload
+	payloadLen int
+	// currentAddr is the parsed address for the current packet
+	currentAddr net.Addr
 }
 
 func (pc *socksPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
@@ -164,12 +172,14 @@ func (pc *socksPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 }
 
 func (pc *socksPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	// Use provided buffer directly for zero-copy read
 	n, _, err := pc.PacketConn.ReadFrom(b)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	addr, payload, err := socks5.DecodeUDPPacket(b)
+	// Parse SOCKS5 UDP header in-place
+	addr, payloadLen, err := socks5.DecodeUDPPacketInPlace(b)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -179,9 +189,12 @@ func (pc *socksPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 		return 0, nil, fmt.Errorf("convert %s to UDPAddr is nil", addr)
 	}
 
-	// due to DecodeUDPPacket is mutable, record addr length
-	copy(b, payload)
-	return n - len(addr) - 3, udpAddr, nil
+	// Shift payload to beginning of buffer (minimal copy within same buffer)
+	if payloadLen > 0 && payloadLen < n {
+		copy(b[:payloadLen], b[n-payloadLen:n])
+	}
+
+	return payloadLen, udpAddr, nil
 }
 
 func (pc *socksPacketConn) Close() error {
