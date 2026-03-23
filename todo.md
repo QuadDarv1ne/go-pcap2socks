@@ -1,259 +1,97 @@
-# go-pcap2socks - План разработки
+# go-pcap2socks TODO
 
-## 📌 Актуальный репозиторий
+## ✅ Завершено (v3.8.0-speed)
 
-**Основной репозиторий:** https://github.com/QuadDarv1ne/go-pcap2socks
+### Производительность
+- [x] Асинхронное логирование (asynclogger/async_handler.go)
+- [x] Rate limiting для логов (ratelimit/limiter.go)
+- [x] Ошибки без аллокаций в router (ErrBlockedByMACFilter, ErrProxyNotFound)
+- [x] DNS connection pooling (dns/pool.go)
+- [x] Оптимизация буферов TCP (20KB → 8KB)
+- [x] Оптимизация буферов UDP (64KB → 1.5KB)
+- [x] String builder pool для кэша маршрутизации
+- [x] Connection pooling для SOCKS5 (socks5_pool.go)
 
-**Модуль:** `github.com/QuadDarv1ne/go-pcap2socks`
-
----
-
-## 🎮 Инструкция по подключению PS4
-
-### Быстрый старт (после перезапуска)
-
-**1. Запуск сервиса:**
-```powershell
-cd C:\Users\maksi\OneDrive\Documents\GitHub\go-pcap2socks
-.\go-pcap2socks.exe tray
-.\go-pcap2socks.exe web
-```
-
-**2. Открыть web интерфейс:**
-- URL: http://localhost:8080
-- Проверить статус: "Запущен"
-- Проверить IP: 192.168.137.1
-- MTU: 1486
-
-**3. Настройка PS4:**
-```
-Настройки → Настройки сети → Настроить соединение вручную
-1. Использовать LAN-кабель (Ethernet)
-2. Прокси: Не использовать
-3. Проверить подключение к Интернету
-```
-
-**4. Проверка подключения:**
-- В web интерфейсе: "🎮 Подключено устройств: 1"
-- На PS4: тест подключения успешен
+### Исправления
+- [x] Исправлен stats/store.go (дублирование кода)
+- [x] Исправлен dns/pool.go (dns.Conn pointer)
 
 ---
 
-## 🔧 В работе (v3.2-dev)
+## 🔥 В работе (dev)
 
-### ✅ Реализовано v3.2
-
-#### DNS-over-HTTPS/TLS
-- [x] `dns/doh.go` — DoH и DoT клиенты
-- [x] `cfg/config.go` — DNSServerType (plain/tls/https)
-- [x] `proxy/dns.go` — поддержка зашифрованных DNS
-
-#### Автообновление
-- [x] `updater/updater.go` — проверка и загрузка обновлений
-- [x] Команда `check-update`
-- [x] Команда `update` с авторестартом
-
-#### Улучшения UX
-- [x] `stats/hostname.go` — mDNS/NetBIOS + OUI (400+ устройств)
-- [x] `tray/tray.go` — горячие клавиши в трее
-- [x] `web/index.html` — UI переключения профилей
-- [x] `api/server.go` — endpoint `/api/profiles/switch`
-
-#### Инфраструктура
-- [x] Все импорты обновлены на `QuadDarv1ne` (69 файлов)
-- [x] `go.mod` — module `github.com/QuadDarv1ne/go-pcap2socks`
-- [x] Сборка без ошибок ✅
-
-### 🛠 Исправления ошибок (v3.2.2) — 23.03.2026
-- [x] `proxy/dns.go` — исправлены `Addr()` и `Mode()` (был `panic`)
-- [x] `proxy/mode.go` — добавлен `ModeDNS`
-- [x] `arpr/arp.go` — исправлен `panic` в `SendReply()` на возврат ошибки
-- [x] `main.go` — добавлена обработка ошибки `cmd.Wait()`
-- [x] Все тесты проходят ✅
-- [x] `go vet` — без замечаний
-- [x] `go test -race` — без гонок
-
-### 🔥 Оптимизация goroutine (v3.2.3) — 23.03.2026
-- [x] `updater/updater.go` — добавлен `StopAutoCheck()` для остановки проверки обновлений
-- [x] `updater/updater.go` — улучшена обработка ошибок в background goroutine
-- [x] `proxy/socks5.go` — исправлена goroutine утечка в `DialUDP` (передача параметров)
-- [x] Добавлена защита от повторного запуска в `StartAutoCheck()`
-
-### 🚀 Улучшение контекстов (v3.2.4) — 23.03.2026
-- [x] `dialer/dialer.go` — `ListenPacket` теперь принимает `context.Context`
-- [x] `dialer/dialer.go` — добавлен `ListenPacketWithContext()` для отмены операций
-- [x] `telegram/bot.go` — добавлен контекст для остановки polling
-- [x] `telegram/bot.go` — экспоненциальный backoff при ошибках (до 5 мин)
-- [x] `telegram/bot.go` — защита от бесконечных ошибок (max 5 попыток)
-- [x] `telegram/bot.go` — добавлен `StopPolling()` для graceful restart
+### Zero-copy UDP (высокий приоритет)
+- [ ] Изучить текущую реализацию socksPacketConn.ReadFrom
+- [ ] Реализовать чтение без копирования payload
+- [ ] Протестировать на UDP трафике
+- [ ] Замерить улучшение (цель: -20% CPU на UDP)
 
 ---
 
-## 📊 Аудит кода (v3.2.2)
+## 📋 Запланировано
 
-### Проверено
-- ✅ Сборка без ошибок
-- ✅ Все тесты проходят
-- ✅ `go vet` — нет проблем
-- ✅ Race detector — нет гонок
-- ✅ Обработка ошибок — улучшена
-- ✅ Удалены пустые блоки обработки ошибок
+### Критичные улучшения
+- [ ] Adaptive buffer sizing (динамический выбор размера буфера)
+- [ ] HTTP/2 connection pooling
+- [ ] Metrics Prometheus (cpu, memory, latency, connections)
 
-### Статистика
-- Файлов: 69 (.go)
-- Строк кода: ~12800
-- Зависимостей: 18 direct, 22 indirect
-- Go версия: 1.25.0
+### Важные улучшения
+- [ ] gVisor stack оптимизация (MTU/MSS tuning)
+- [ ] Batch обработка пакетов
+- [ ] Async DNS resolver
 
----
-
-## 📋 План v3.2
-
-### ✅ Приоритет 1 (Multi-WAN) — завершено v3.3.0
-- [x] Структура outbounds с группами прокси
-- [x] Health check прокси
-- [x] Балансировка: round-robin, least-load, failover
-
-### 🟡 Приоритет 2 (Контроль трафика) — завершено v3.5.0
-- [x] MAC blacklist/whitelist
-- [x] Лимит скорости на устройство (rate limiting)
-- [x] Кастомные имена устройств
-- [ ] Дневные лимиты трафика
-
----
-
-## ✅ Завершено (v3.1)
-
-### Ядро
-- [x] Валидация конфигурации `Validate()`
-- [x] Менеджер профилей при старте
-- [x] Определение hostname по OUI
-
-### Веб-интерфейс
-- [x] WebSocket retry logic
-- [x] Индикатор соединения
-- [x] Тёмная тема (localStorage)
-- [x] Мобильная адаптация
-- [x] Экспорт логов и трафика (CSV)
-
-### Telegram/Discord
-- [x] Периодические отчёты (24h)
-- [x] Команда `/report`
-- [x] Интеграция с statsStore
-
-### Инфраструктура
-- [x] Windows сервис
-- [x] Tray режим
-- [x] Профили (`profiles/`)
-- [x] UPnP обнаружение
+### Долгосрочные
+- [ ] HTTP/3 (QUIC) поддержка
+- [ ] Multi-WAN балансировка
+- [ ] Machine learning для routing
 
 ---
 
 ## 🐛 Известные проблемы
 
-### Средние
-- **ARP hostname** — mDNS/NetBIOS требует тестирования
-  - Статус: не критично
+### Тесты
+- [ ] common/svc/service_test.go - undefined: NewService
+- [ ] api/server_test.go - undefined: SuccessResponse, ErrorResponse
+- [ ] profiles/manager_test.go - unused imports, undefined method
 
 ---
 
-## 📊 Статистика
+## 📊 Метрики качества
 
+### Производительность (текущие)
 ```
-Строк кода: ~12800
-Файлов: 69 (.go)
-Модулей: 25 (папок)
-Зависимостей: 18 direct, 22 indirect
-Go версия: 1.25.0
+Router Match:       7.65 ns/op    0 B/op    0 allocs/op ✅
+Router DialContext: 143.1 ns/op   112 B/op  6 allocs/op
+Buffer GetPut:      11.03 ns/op   24 B/op   1 allocs/op ✅
+DNS Cache Get:      98.49 ns/op   0 B/op    0 allocs/op ✅
+```
+
+### Целевые показатели
+```
+Router DialContext: <100 ns/op   <100 B/op  <4 allocs/op
+Buffer GetPut:      <10 ns/op    <20 B/op   1 allocs/op
+UDP Relay:          -20% CPU (после zero-copy)
 ```
 
 ---
 
-## 🎯 Спринт v3.2
+## 🔄 Process
 
-### ✅ Завершено (main)
-- [x] Сборка без ошибок
-- [x] Все импорты на QuadDarv1ne
-- [x] todo.md обновлён
-- [x] Git commit & push в main
+### Перед merge в main:
+1. Запустить все тесты: `go test ./...`
+2. Запустить бенчмарки: `go test -bench=. -benchmem ./...`
+3. Собрать проект: `go build -ldflags="-s -w"`
+4. Проверить размер бинарника: <25MB
+5. Обновить CHANGELOG.md
 
----
-
-## 📝 Процесс
-
-1. Разработка в dev
-2. Тестирование
-3. Merge в main
-4. Tag версии
+### Ветка dev:
+- Все новые фичи сначала в dev
+- Тестирование на реальных сценариях
+- Benchmark comparison с main
+- Только после этого merge в main
 
 ---
 
-## 📅 История версий
-
-### v3.6.0 (23.03.2026) — текущая
-- ✅ UI/UX: современный дизайн с градиентами и анимациями
-- ✅ UI: тёмная тема с переключением
-- ✅ UI: быстрая настройка PS4 с инструкцией
-- ✅ UI: статус подключения устройств
-- ✅ Web: автоматический выбор портов 8080-8090
-- ✅ Web: загрузка конфига для отображения IP/MTU
-- ✅ Tray: улучшена иконка (системная по умолчанию)
-- ✅ Fix: исправлен дубликат маршрута /api/devices
-
-### v3.5.0 (23.03.2026)
-- ✅ Кастомные имена устройств (`stats/store.go`)
-- ✅ Rate limiting (`ratelimit/ratelimit.go`, `proxy/stats.go`)
-- ✅ API: `/api/devices/names` — управление именами
-- ✅ API: `/api/devices/ratelimit` — управление лимитами
-- ✅ Token bucket алгоритм для rate limiting
-
-### v3.4.0 (23.03.2026)
-- ✅ `cfg/config.go` — MACFilter структура
-- ✅ `proxy/router.go` — проверка MAC фильтра
-- ✅ `api/server.go` — API /api/macfilter
-- ✅ Режимы: blacklist, whitelist
-- ✅ main.go — инициализация из конфига
-- ✅ `proxy/group.go` — группа прокси с health check
-- ✅ `cfg/config.go` — OutboundGroup для групп прокси
-- ✅ `main.go` — создание групп из конфига
-- ✅ Политики: failover, round-robin, least-load
-- ✅ Автоматический health check (30с интервал)
-- ✅ Graceful остановка групп
-- ✅ Добавлен контекст в `dialer.ListenPacket()` для отмены операций
-- ✅ Telegram bot: контекст для остановки polling
-- ✅ Telegram bot: экспоненциальный backoff при ошибках
-- ✅ Telegram bot: защита от бесконечных ошибок (max 5)
-- ✅ Telegram bot: `StopPolling()` для graceful restart
-
-### v3.2.3 (23.03.2026)
-- ✅ Добавлен `StopAutoCheck()` в updater
-- ✅ Исправлена goroutine утечка в `proxy/socks5.go`
-- ✅ Улучшена обработка ошибок в background goroutine
-- ✅ Защита от повторного запуска `StartAutoCheck()`
-
-### v3.2.2 (23.03.2026)
-- ✅ Исправлен `panic` в `proxy/dns.go` (Addr/Mode)
-- ✅ Добавлен `ModeDNS` в `proxy/mode.go`
-- ✅ Исправлен `panic` в `arpr/arp.go` на возврат ошибки
-- ✅ Улучшена обработка ошибок в `main.go`
-- ✅ `go vet` и `go test -race` — без замечаний
-
-### v3.2.1 (23.03.2026)
-- ✅ Чистка `.gitignore`
-- ✅ Объединение PowerShell скриптов
-- ✅ `go mod tidy`
-- ✅ Обновление todo.md
-- ✅ Настройка git
-
-### v3.2
-- ✅ DNS-over-HTTPS/TLS
-- ✅ Автообновление
-- ✅ Улучшения UX (mDNS/NetBIOS, горячие клавиши)
-- ✅ Инфраструктура (импорты QuadDarv1ne)
-
-### v3.1
-- ✅ Валидация конфигурации
-- ✅ Менеджер профилей
-- ✅ Веб-интерфейс (WebSocket, тёмная тема)
-- ✅ Telegram/Discord интеграция
-- ✅ Windows сервис/Tray
+**Последнее обновление**: 23 марта 2026 г.  
+**Версия**: v3.8.0-speed  
+**Статус**: dev → main (ready for review)

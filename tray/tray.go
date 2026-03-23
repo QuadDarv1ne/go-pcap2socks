@@ -10,16 +10,39 @@ import (
 	"os/signal"
 	"path"
 	"syscall"
+	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
+	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
+	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/getlantern/systray"
+)
+
+// Global state
+var (
+	trayRunning      bool
+	trayStartTime    time.Time
+	trayStatsStore   *stats.Store
+	trayProfileMgr   *profiles.Manager
 )
 
 // Run starts the system tray application
 func Run() {
 	slog.Info("Starting system tray...")
+
+	// Initialize stats store
+	trayStatsStore = stats.NewStore()
+
+	// Initialize profile manager
+	var err error
+	trayProfileMgr, err = profiles.NewManager()
+	if err != nil {
+		slog.Warn("Profile manager init error", "err", err)
+	} else {
+		trayProfileMgr.CreateDefaultProfiles()
+	}
 
 	// Initialize hotkey manager
 	hotkeyMgr := hotkey.NewManager()
@@ -42,7 +65,10 @@ func Run() {
 }
 
 func onReady(hotkeyMgr *hotkey.Manager) {
-	systray.SetIcon(getIcon())
+	icon := getIcon()
+	if icon != nil {
+		systray.SetIcon(icon)
+	}
 	systray.SetTitle("go-pcap2socks")
 	systray.SetTooltip("go-pcap2socks - SOCKS5 прокси для устройств")
 

@@ -2,6 +2,7 @@ package stats
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -25,11 +26,11 @@ type DeviceStats struct {
 	Connected bool      `json:"connected"`
 	LastSeen  time.Time `json:"last_seen"`
 
-	// Traffic counters
-	TotalBytes   uint64 `json:"total_bytes"`
-	UploadBytes  uint64 `json:"upload_bytes"`
-	DownloadBytes uint64 `json:"download_bytes"`
-	Packets      uint64 `json:"packets"`
+	// Traffic counters - using atomic for lock-free updates
+	totalBytes    uint64 // accessed via atomic operations
+	uploadBytes   uint64 // accessed via atomic operations
+	downloadBytes uint64 // accessed via atomic operations
+	packets       uint64 // accessed via atomic operations
 
 	// Session tracking
 	SessionStart time.Time `json:"session_start"`
@@ -59,6 +60,65 @@ func (ds *DeviceStats) RUnlock() {
 	ds.mu.RUnlock()
 }
 
+// GetTotalBytes returns total bytes atomically
+func (ds *DeviceStats) GetTotalBytes() uint64 {
+	return atomic.LoadUint64(&ds.totalBytes)
+}
+
+// GetUploadBytes returns upload bytes atomically
+func (ds *DeviceStats) GetUploadBytes() uint64 {
+	return atomic.LoadUint64(&ds.uploadBytes)
+}
+
+// GetDownloadBytes returns download bytes atomically
+func (ds *DeviceStats) GetDownloadBytes() uint64 {
+	return atomic.LoadUint64(&ds.downloadBytes)
+}
+
+// GetPackets returns packet count atomically
+func (ds *DeviceStats) GetPackets() uint64 {
+	return atomic.LoadUint64(&ds.packets)
+}
+
+// MarshalJSON implements json.Marshaler for DeviceStats
+func (ds *DeviceStats) MarshalJSON() ([]byte, error) {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+
+	// Create a temporary struct with exported fields
+	type Alias struct {
+		IP                string    `json:"ip"`
+		MAC               string    `json:"mac"`
+		Hostname          string    `json:"hostname"`
+		CustomName        string    `json:"custom_name,omitempty"`
+		Connected         bool      `json:"connected"`
+		LastSeen          time.Time `json:"last_seen"`
+		TotalBytes        uint64    `json:"total_bytes"`
+		UploadBytes       uint64    `json:"upload_bytes"`
+		DownloadBytes     uint64    `json:"download_bytes"`
+		Packets           uint64    `json:"packets"`
+		SessionStart      time.Time `json:"session_start"`
+		RateLimitUpload   uint64    `json:"rate_limit_upload,omitempty"`
+		RateLimitDownload uint64    `json:"rate_limit_download,omitempty"`
+	}
+
+	return json.Marshal(&Alias{
+		IP:                ds.IP,
+		MAC:               ds.MAC,
+		Hostname:          ds.Hostname,
+		CustomName:        ds.CustomName,
+		Connected:         ds.Connected,
+		LastSeen:          ds.LastSeen,
+		TotalBytes:        atomic.LoadUint64(&ds.totalBytes),
+		UploadBytes:       atomic.LoadUint64(&ds.uploadBytes),
+		DownloadBytes:     atomic.LoadUint64(&ds.downloadBytes),
+		Packets:           atomic.LoadUint64(&ds.packets),
+		SessionStart:      ds.SessionStart,
+		RateLimitUpload:   ds.RateLimitUpload,
+		RateLimitDownload: ds.RateLimitDownload,
+	})
+}
+
 // TrafficRecord represents a single traffic record for export
 type TrafficRecord struct {
 	Timestamp time.Time `json:"timestamp"`
@@ -77,34 +137,47 @@ func NewStore() *Store {
 }
 
 // RecordTraffic records traffic for a device
+// Optimized for high-frequency calls with atomic operations
 func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
-	s.mu.Lock()
+	now := time.Now() // Call once and reuse
+
+	s.mu.RLock()
 	device, exists := s.devices[ip]
+	s.mu.RUnlock()
+
 	if !exists {
-		device = &DeviceStats{
-			IP:           ip,
-			MAC:          mac,
-			Connected:    true,
-			LastSeen:     time.Now(),
-			SessionStart: time.Now(),
+		// Device doesn't exist, need to create it
+		s.mu.Lock()
+		// Double-check after acquiring write lock
+		device, exists = s.devices[ip]
+		if !exists {
+			device = &DeviceStats{
+				IP:           ip,
+				MAC:          mac,
+				Connected:    true,
+				LastSeen:     now,
+				SessionStart: now,
+			}
+			s.devices[ip] = device
 		}
-		s.devices[ip] = device
+		s.mu.Unlock()
 	}
-	s.mu.Unlock()
 
-	device.mu.Lock()
-	defer device.mu.Unlock()
-
-	device.LastSeen = time.Now()
-	device.Connected = true
-	device.Packets++
-	device.TotalBytes += bytes
+	// Update counters atomically (lock-free)
+	atomic.AddUint64(&device.totalBytes, bytes)
+	atomic.AddUint64(&device.packets, 1)
 
 	if isUpload {
-		device.UploadBytes += bytes
+		atomic.AddUint64(&device.uploadBytes, bytes)
 	} else {
-		device.DownloadBytes += bytes
+		atomic.AddUint64(&device.downloadBytes, bytes)
 	}
+
+	// Update metadata with lock (less frequent, acceptable)
+	device.mu.Lock()
+	device.LastSeen = now
+	device.Connected = true
+	device.mu.Unlock()
 }
 
 // UpdateHeartbeat updates the last seen time for a device
@@ -164,17 +237,17 @@ func (s *Store) GetAllDevices() []*DeviceStats {
 }
 
 // GetTotalTraffic returns total traffic across all devices
+// Optimized with atomic loads for lock-free reads
 func (s *Store) GetTotalTraffic() (total, upload, download, packets uint64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	for _, device := range s.devices {
-		device.mu.RLock()
-		total += device.TotalBytes
-		upload += device.UploadBytes
-		download += device.DownloadBytes
-		packets += device.Packets
-		device.mu.RUnlock()
+		// Use atomic loads - no device lock needed
+		total += atomic.LoadUint64(&device.totalBytes)
+		upload += atomic.LoadUint64(&device.uploadBytes)
+		download += atomic.LoadUint64(&device.downloadBytes)
+		packets += atomic.LoadUint64(&device.packets)
 	}
 	return
 }
@@ -202,10 +275,10 @@ func (s *Store) ExportCSV() (string, error) {
 			device.IP,
 			device.MAC,
 			device.Hostname,
-			device.TotalBytes,
-			device.UploadBytes,
-			device.DownloadBytes,
-			device.Packets,
+			atomic.LoadUint64(&device.totalBytes),
+			atomic.LoadUint64(&device.uploadBytes),
+			atomic.LoadUint64(&device.downloadBytes),
+			atomic.LoadUint64(&device.packets),
 			device.Connected,
 		)
 		buf.WriteString(line)

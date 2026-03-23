@@ -31,7 +31,9 @@ func Load(filePath string) (*Config, error) {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
 
-	config.Normalize()
+	if err := config.Normalize(); err != nil {
+		return nil, fmt.Errorf("normalize config: %w", err)
+	}
 
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
@@ -43,6 +45,7 @@ func Load(filePath string) (*Config, error) {
 type Config struct {
 	ExecuteOnStart []string  `json:"executeOnStart,omitempty"`
 	PCAP           PCAP      `json:"pcap"`
+	DHCP           *DHCP     `json:"dhcp,omitempty"`
 	DNS            DNS       `json:"dns"`
 	Routing        struct {
 		Rules []Rule `json:"rules"`
@@ -55,6 +58,7 @@ type Config struct {
 	Hotkey    *Hotkey    `json:"hotkey,omitempty"`
 	UPnP      *UPnP      `json:"upnp,omitempty"`
 	MACFilter *MACFilter `json:"macFilter,omitempty"`
+	WinDivert *WinDivert `json:"windivert,omitempty"`
 }
 
 type PCAP struct {
@@ -65,18 +69,33 @@ type PCAP struct {
 	LocalMAC         string `json:"localMAC"`
 }
 
-func (c *Config) Normalize() {
+func (c *Config) Normalize() error {
 	for i := range c.Routing.Rules {
-		c.Routing.Rules[i].Normalize()
+		if err := c.Routing.Rules[i].Normalize(); err != nil {
+			return fmt.Errorf("normalize rule %d: %w", i, err)
+		}
 	}
+	return nil
 }
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
 	// Validate PCAP config
 	if c.PCAP.Network != "" {
-		if _, _, err := net.ParseCIDR(c.PCAP.Network); err != nil {
+		_, network, err := net.ParseCIDR(c.PCAP.Network)
+		if err != nil {
 			return fmt.Errorf("invalid pcap.network: %w", err)
+		}
+
+		// Validate LocalIP is within network
+		if c.PCAP.LocalIP != "" {
+			localIP := net.ParseIP(c.PCAP.LocalIP)
+			if localIP == nil {
+				return fmt.Errorf("invalid pcap.localIP: %s", c.PCAP.LocalIP)
+			}
+			if !network.Contains(localIP) {
+				return fmt.Errorf("pcap.localIP %s is not within pcap.network %s", c.PCAP.LocalIP, c.PCAP.Network)
+			}
 		}
 	}
 
@@ -86,8 +105,18 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Validate InterfaceGateway is present when Network is configured
+	if c.PCAP.Network != "" && c.PCAP.InterfaceGateway == "" {
+		return fmt.Errorf("pcap.interfaceGateway is required when pcap.network is configured")
+	}
+
 	if c.PCAP.MTU == 0 {
 		c.PCAP.MTU = 1500 // Default MTU
+	}
+
+	// Validate DHCP config
+	if err := c.validateDHCP(); err != nil {
+		return err
 	}
 
 	// Validate DNS config
@@ -130,18 +159,36 @@ type Rule struct {
 	DstIP       []string `json:"dstIP,omitempty"`
 	OutboundTag string   `json:"outboundTag"`
 
-	SrcPorts map[uint16]struct{}
-	DstPorts map[uint16]struct{}
-	SrcIPs   []net.IPNet
-	DstIPs   []net.IPNet
+	SrcPortMatcher *PortMatcher
+	DstPortMatcher *PortMatcher
+	SrcIPs         []net.IPNet
+	DstIPs         []net.IPNet
 }
 
-func (r *Rule) Normalize() {
-	r.SrcPorts = mustPorts(r.SrcPort)
-	r.DstPorts = mustPorts(r.DstPort)
+func (r *Rule) Normalize() error {
+	var err error
 
-	r.SrcIPs = mustToNetIP(r.SrcIP)
-	r.DstIPs = mustToNetIP(r.DstIP)
+	r.SrcPortMatcher, err = NewPortMatcher(r.SrcPort)
+	if err != nil {
+		return fmt.Errorf("parse source ports: %w", err)
+	}
+
+	r.DstPortMatcher, err = NewPortMatcher(r.DstPort)
+	if err != nil {
+		return fmt.Errorf("parse destination ports: %w", err)
+	}
+
+	r.SrcIPs, err = parseNetIPs(r.SrcIP)
+	if err != nil {
+		return fmt.Errorf("parse source IPs: %w", err)
+	}
+
+	r.DstIPs, err = parseNetIPs(r.DstIP)
+	if err != nil {
+		return fmt.Errorf("parse destination IPs: %w", err)
+	}
+
+	return nil
 }
 
 type Outbound struct {
@@ -233,11 +280,11 @@ type PortMapping struct {
 	Description  string `json:"description,omitempty"`
 }
 
-func mustToNetIP(addrs []string) []net.IPNet {
+func parseNetIPs(addrs []string) ([]net.IPNet, error) {
 	ips := make([]net.IPNet, 0, len(addrs))
 
 	if len(addrs) == 0 {
-		return ips
+		return ips, nil
 	}
 
 	for _, addr := range addrs {
@@ -247,41 +294,41 @@ func mustToNetIP(addrs []string) []net.IPNet {
 
 		_, ipNet, err := net.ParseCIDR(addr)
 		if err != nil {
-			panic(fmt.Sprintf("invalid ip: %s", addr))
+			return nil, fmt.Errorf("invalid ip %s: %w", addr, err)
 		}
 
 		ips = append(ips, *ipNet)
 	}
 
-	return ips
+	return ips, nil
 }
 
-func mustPorts(ports string) map[uint16]struct{} {
+func parsePorts(ports string) (map[uint16]struct{}, error) {
 	m := make(map[uint16]struct{})
 
 	if ports == "" {
-		return m
+		return m, nil
 	}
 
 	for _, port := range strings.Split(ports, ",") {
 		if strings.Contains(port, "-") {
 			p := strings.Split(strings.TrimSpace(port), "-")
 			if len(p) != 2 {
-				panic(fmt.Sprintf("invalid port: %s", port))
+				return nil, fmt.Errorf("invalid port range format: %s", port)
 			}
 
 			mmin, err := strconv.ParseUint(strings.TrimSpace(p[0]), 10, 16)
 			if err != nil {
-				panic(fmt.Sprintf("invalid port: %s", p[0]))
+				return nil, fmt.Errorf("invalid port range start %s: %w", p[0], err)
 			}
 
 			mmax, err := strconv.ParseUint(strings.TrimSpace(p[1]), 10, 16)
 			if err != nil {
-				panic(fmt.Sprintf("invalid port: %s", p[1]))
+				return nil, fmt.Errorf("invalid port range end %s: %w", p[1], err)
 			}
 
 			if mmin > mmax {
-				panic(fmt.Sprintf("invalid port: %s", port))
+				return nil, fmt.Errorf("invalid port range %s: start > end", port)
 			}
 
 			for i := mmin; i <= mmax; i++ {
@@ -291,15 +338,15 @@ func mustPorts(ports string) map[uint16]struct{} {
 			continue
 		}
 
-		mustPort, err := strconv.ParseUint(strings.TrimSpace(port), 10, 16)
+		portNum, err := strconv.ParseUint(strings.TrimSpace(port), 10, 16)
 		if err != nil {
-			panic(fmt.Sprintf("invalid port: %s", port))
+			return nil, fmt.Errorf("invalid port %s: %w", port, err)
 		}
 
-		m[uint16(mustPort)] = struct{}{}
+		m[uint16(portNum)] = struct{}{}
 	}
 
-	return m
+	return m, nil
 }
 
 // MACFilterMode defines the MAC filtering mode
@@ -347,5 +394,64 @@ func (f *MACFilter) IsAllowed(mac string) bool {
 	default:
 		return true
 	}
+}
+
+// DHCP holds DHCP server configuration
+type DHCP struct {
+	Enabled       bool   `json:"enabled"`
+	PoolStart     string `json:"poolStart"`
+	PoolEnd       string `json:"poolEnd"`
+	LeaseDuration int    `json:"leaseDuration"` // seconds
+}
+
+// Validate validates the DHCP configuration
+func (c *Config) validateDHCP() error {
+	if c.DHCP == nil || !c.DHCP.Enabled {
+		return nil
+	}
+
+	// Validate pool start IP
+	if c.DHCP.PoolStart == "" {
+		return fmt.Errorf("dhcp.poolStart is required when DHCP is enabled")
+	}
+	if ip := net.ParseIP(c.DHCP.PoolStart); ip == nil {
+		return fmt.Errorf("invalid dhcp.poolStart: %s", c.DHCP.PoolStart)
+	}
+
+	// Validate pool end IP
+	if c.DHCP.PoolEnd == "" {
+		return fmt.Errorf("dhcp.poolEnd is required when DHCP is enabled")
+	}
+	if ip := net.ParseIP(c.DHCP.PoolEnd); ip == nil {
+		return fmt.Errorf("invalid dhcp.poolEnd: %s", c.DHCP.PoolEnd)
+	}
+
+	// Validate lease duration
+	if c.DHCP.LeaseDuration <= 0 {
+		c.DHCP.LeaseDuration = 86400 // Default 24 hours
+	}
+
+	// Validate pool is within network
+	_, network, err := net.ParseCIDR(c.PCAP.Network)
+	if err != nil {
+		return fmt.Errorf("invalid pcap.network: %w", err)
+	}
+
+	poolStart := net.ParseIP(c.DHCP.PoolStart)
+	poolEnd := net.ParseIP(c.DHCP.PoolEnd)
+
+	if !network.Contains(poolStart) {
+		return fmt.Errorf("dhcp.poolStart (%s) is not within pcap.network (%s)", c.DHCP.PoolStart, c.PCAP.Network)
+	}
+	if !network.Contains(poolEnd) {
+		return fmt.Errorf("dhcp.poolEnd (%s) is not within pcap.network (%s)", c.DHCP.PoolEnd, c.PCAP.Network)
+	}
+
+	return nil
+}
+
+// WinDivert holds WinDivert driver configuration
+type WinDivert struct {
+	Enabled bool `json:"enabled"`
 }
 

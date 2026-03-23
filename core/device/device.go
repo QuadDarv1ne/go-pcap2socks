@@ -25,3 +25,8 @@ type NetworkConfig struct {
 	LocalMAC net.HardwareAddr
 	MTU      uint32
 }
+
+// DHCPServer defines the interface for DHCP server implementations
+type DHCPServer interface {
+	HandleRequest(data []byte) ([]byte, error)
+}

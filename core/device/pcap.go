@@ -11,6 +11,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device/iobased"
+	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/gopacket/gopacket/pcap"
@@ -34,11 +35,17 @@ type PCAP struct {
 	mtu        uint32 // Configured MTU (may differ from Interface.MTU)
 	rMux       sync.Mutex
 	stacker    func() Stacker
+	dhcpServer DHCPServer // DHCP server interface
 }
 
 const offset = 0
 
 func Open(captureCfg cfg.Capture, ifce net.Interface, netConfig *NetworkConfig, stacker func() Stacker) (_ Device, err error) {
+	return OpenWithDHCP(captureCfg, ifce, netConfig, stacker, nil)
+}
+
+// OpenWithDHCP opens a PCAP device with optional DHCP server support
+func OpenWithDHCP(captureCfg cfg.Capture, ifce net.Interface, netConfig *NetworkConfig, stacker func() Stacker, dhcpServer DHCPServer) (_ Device, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("open tun: %v", r)
@@ -61,32 +68,15 @@ func Open(captureCfg cfg.Capture, ifce net.Interface, netConfig *NetworkConfig, 
 		return nil, fmt.Errorf("open live error: %w", err)
 	}
 
-	// BPF filter breakdown:
-	// 1. ARP packets: (arp dst host <localIP> and arp src net <network> and not arp src host <localIP>)
-	//    - Only ARP requests TO us (arp dst host)
-	//    - From devices in our network (arp src net)
-	//    - Not from ourselves (not arp src host) - loop prevention
-	// 2. IPv4 packets: (src net <network> and not dst net <network> and not (icmp and src host <localIP>))
-	//    - All IPv4 packets from the configured network
-	//    - Not destined to the local network (only capture internet-bound traffic)
-	//    - Exclude ICMP from ourselves (loop prevention in promiscuous mode)
-	//
-	// ARP field access in BPF:
-	// - "arp src host X" / "arp src net X" - checks Source Protocol Address (SPA) field
-	// - "arp dst host X" / "arp dst net X" - checks Target Protocol Address (TPA) field
-	bpfFilter := fmt.Sprintf(
-		"(arp dst host %s and arp src net %s and not arp src host %s) or (src net %s and not dst net %s and not (icmp and src host %s))",
-		netConfig.LocalIP.String(),
-		netConfig.Network.String(),
-		netConfig.LocalIP.String(),
-		netConfig.Network.String(),
-		netConfig.Network.String(),
-		netConfig.LocalIP.String(),
-	)
-	err = pcaph.SetBPFFilter(bpfFilter)
-	if err != nil {
-		return nil, fmt.Errorf("set bpf filter error: %w", err)
-	}
+	// NOTE: BPF filter disabled for DHCP support
+	// DHCP broadcast packets from devices without IP are not captured by Npcap with BPF filters
+	// We filter packets in Read() instead
+	// 
+	// Original filter (for reference):
+	// "(arp dst host %s and arp src net %s and not arp src host %s) or (src net %s and not dst net %s and not (icmp and src host %s)) or (udp port 67 or udp port 68)"
+	
+	// No BPF filter - capture all packets and filter in Read()
+	// This allows DHCP broadcast packets to be captured
 
 	t := &PCAP{
 		name:       "dspcap",
@@ -98,6 +88,7 @@ func Open(captureCfg cfg.Capture, ifce net.Interface, netConfig *NetworkConfig, 
 		mtu:        netConfig.MTU,
 		handle:     pcaph,
 		ipMacTable: make(map[string]net.HardwareAddr),
+		dhcpServer: dhcpServer,
 	}
 
 	ep, err := iobased.New(t, netConfig.MTU, offset, t.localMAC)
@@ -186,6 +177,43 @@ func (t *PCAP) Read() []byte {
 			return nil
 		}
 
+		// Check if this is a DHCP packet (UDP port 67 or 68)
+		if ipProtocol.Protocol() == 17 { // UDP protocol number
+			udpHeader := header.UDP(data[14+int(ipProtocol.HeaderLength()):])
+			srcPort := udpHeader.SourcePort()
+			dstPort := udpHeader.DestinationPort()
+
+			// Log all UDP packets for debugging
+			slog.Info("UDP packet captured", "src_port", srcPort, "dst_port", dstPort, "src_mac", net.HardwareAddr(ethProtocol.SourceAddress()).String())
+			
+			// DHCP uses ports 67 (server) and 68 (client)
+			if (srcPort == 68 || dstPort == 67) && t.dhcpServer != nil {
+				// This is a DHCP request from a client
+				srcMAC := net.HardwareAddr(ethProtocol.SourceAddress())
+				dstMAC := net.HardwareAddr(ethProtocol.DestinationAddress())
+				slog.Info("DHCP packet captured", 
+					"src_port", srcPort, 
+					"dst_port", dstPort,
+					"src_mac", srcMAC.String(),
+					"dst_mac", dstMAC.String())
+				
+				// Parse the packet and handle DHCP request
+				response, err := t.handleDHCP(data)
+				if err != nil {
+					slog.Error("DHCP handle error", "err", err)
+				} else if response != nil {
+					slog.Info("DHCP response generated", "response_len", len(response))
+					// Send DHCP response
+					if err := t.handle.WritePacketData(response); err != nil {
+						slog.Error("DHCP write error", "err", err)
+					} else {
+						slog.Info("DHCP response sent successfully")
+					}
+				}
+				return nil // Don't pass DHCP packets to the stack
+			}
+		}
+
 		if bytes.Compare(srcAddress.AsSlice(), t.localIP) != 0 {
 			t.SetHardwareAddr(srcAddress.AsSlice(), []byte(ethProtocol.SourceAddress()))
 		}
@@ -213,6 +241,97 @@ func (t *PCAP) Read() []byte {
 	}
 
 	return data
+}
+
+// handleDHCP processes DHCP packets and returns response
+func (t *PCAP) handleDHCP(data []byte) ([]byte, error) {
+	if t.dhcpServer == nil {
+		return nil, nil
+	}
+
+	// Parse Ethernet header to get MAC addresses
+	eth := header.Ethernet(data)
+	srcMAC := net.HardwareAddr(eth.SourceAddress())
+	dstMAC := net.HardwareAddr(eth.DestinationAddress())
+
+	// Skip Ethernet header (14 bytes)
+	ipStart := 14
+	if len(data) <= ipStart {
+		return nil, fmt.Errorf("packet too short")
+	}
+
+	// Parse IP header
+	ip := header.IPv4(data[ipStart:])
+	if len(data) <= ipStart+int(ip.HeaderLength()) {
+		return nil, fmt.Errorf("packet too short for IP header")
+	}
+
+	// Skip IP header
+	udpStart := ipStart + int(ip.HeaderLength())
+	if len(data) <= udpStart+8 {
+		return nil, fmt.Errorf("packet too short for UDP header")
+	}
+
+	// Parse UDP header
+	udp := header.UDP(data[udpStart:])
+	srcPort := udp.SourcePort()
+	dstPort := udp.DestinationPort()
+
+	srcAddr := ip.SourceAddress()
+	dstAddr := ip.DestinationAddress()
+	
+	slog.Debug("DHCP packet details", 
+		"src_mac", srcMAC.String(),
+		"dst_mac", dstMAC.String(),
+		"src_ip", net.IP(srcAddr.AsSlice()).String(),
+		"dst_ip", net.IP(dstAddr.AsSlice()).String(),
+		"src_port", srcPort,
+		"dst_port", dstPort)
+
+	// DHCP payload starts after UDP header (8 bytes)
+	dhcpStart := udpStart + 8
+	if len(data) <= dhcpStart {
+		return nil, fmt.Errorf("packet too short for DHCP")
+	}
+
+	dhcpData := data[dhcpStart:]
+
+	// Handle DHCP request
+	responseData, err := t.dhcpServer.HandleRequest(dhcpData)
+	if err != nil || responseData == nil {
+		return nil, err
+	}
+
+	// Build response packet
+	srcIP := t.localIP
+	dstIP := net.IPv4(255, 255, 255, 255) // Broadcast for DHCPOFFER/DHCPACK
+	
+	// If client requested a specific IP or already has one, use unicast
+	if len(dhcpData) > 16 {
+		clientIP := net.IP(dhcpData[12:16]).To4()
+		if !clientIP.Equal(net.IPv4zero) {
+			dstIP = clientIP
+		}
+	}
+
+	responsePacket, err := dhcp.BuildDHCPRequestPacket(
+		t.localMAC,           // Source MAC (server)
+		dstMAC,               // Destination MAC (client)
+		srcIP,                // Source IP (server)
+		dstIP,                // Destination IP (client or broadcast)
+		67,                   // Source port (DHCP server)
+		68,                   // Destination port (DHCP client)
+		responseData,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build DHCP response: %w", err)
+	}
+
+	slog.Info("DHCP response sent", 
+		"client_mac", dstMAC.String(),
+		"dst_ip", dstIP.String())
+
+	return responsePacket, nil
 }
 
 func (t *PCAP) Write(p []byte) (n int, err error) {

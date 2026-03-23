@@ -5,6 +5,12 @@
     "localIP": "192.168.137.1",
     "mtu": 1486
   },
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.137.10",
+    "poolEnd": "192.168.137.250",
+    "leaseDuration": 86400
+  },
   "dns": {
     "servers": [
       {"address": "8.8.8.8:53"},
@@ -17,7 +23,7 @@
     ]
   },
   "outbounds": [
-    {"socks": {"address": "127.0.0.1:10808"}},
+    {"tag": "", "direct": {}},
     {"tag": "dns-out", "dns": {}}
   ],
   "telegram": {
@@ -31,9 +37,13 @@
     "enabled": true,
     "toggle": "Ctrl+Alt+P"
   },
-  "upnp": {
+  "windivert": {
     "enabled": false,
-    "autoForward": false,
+    "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
+  },
+  "upnp": {
+    "enabled": true,
+    "autoForward": true,
     "leaseDuration": 3600,
     "gamePresets": {
       "ps4": [3478, 3479, 3480],
