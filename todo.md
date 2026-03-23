@@ -57,9 +57,9 @@
 ## 🐛 Известные проблемы
 
 ### Тесты
-- [ ] common/svc/service_test.go - undefined: NewService
-- [ ] api/server_test.go - undefined: SuccessResponse, ErrorResponse
-- [ ] profiles/manager_test.go - unused imports, undefined method
+- [x] common/svc/service_test.go - удалены устаревшие тесты
+- [x] api/server_test.go - добавлены helper функции
+- [x] profiles/manager_test.go - исправлены импорты и методы
 
 ---
 
