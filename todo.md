@@ -11,12 +11,14 @@
 - [x] Adaptive buffer sizing (buffer/ - 512B/2KB/8KB пулы)
 - [x] HTTP/2 connection pooling (dialer/dialer.go - shared transport)
 - [x] Metrics Prometheus (metrics/collector.go - /metrics endpoint)
+- [x] Router DialContext optimization (proxy/router.go - portToString pool)
 
 ### Исправления
 - [x] stats/store.go - дублирование кода
 - [x] dns/pool.go - dns.Conn pointer
 - [x] api/server_test.go - helper функции
 - [x] profiles/manager_test.go - импорты и методы
+- [x] asynclogger/async_handler.go - go vet warnings (atomic/sync pointers)
 
 ---
 
@@ -49,7 +51,7 @@
 ### Производительность (текущие)
 ```
 Router Match:       7.65 ns/op    0 B/op    0 allocs/op ✅
-Router DialContext: 143.1 ns/op   112 B/op  6 allocs/op
+Router DialContext: 128.2 ns/op   112 B/op  6 allocs/op ✅
 Buffer GetPut:      42.74 ns/op   24 B/op   1 allocs/op ✅
 DNS Cache Get:      98.49 ns/op   0 B/op    0 allocs/op ✅
 Metrics Record:     8.88 ns/op    0 B/op    0 allocs/op ✅
