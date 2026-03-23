@@ -149,11 +149,11 @@ func (g *ProxyGroup) checkProxyHealth(proxy Proxy) bool {
 
 	// Try to establish a connection to check health
 	// For SOCKS5, we can try to connect to a well-known endpoint
-	testMetadata := &M.Metadata{
-		Network: M.TCP,
-		DstIP:   net.ParseIP("8.8.8.8"),
-		DstPort: 53,
-	}
+	testMetadata := M.GetMetadata()
+	defer M.PutMetadata(testMetadata)
+	testMetadata.Network = M.TCP
+	testMetadata.DstIP = net.ParseIP("8.8.8.8")
+	testMetadata.DstPort = 53
 
 	conn, err := proxy.DialContext(ctx, testMetadata)
 	if err != nil {

@@ -17,7 +17,8 @@
       "Bash(grep -E \"\\\\.\\(go\\)$\")",
       "Bash(git pull:*)",
       "Bash(dir go-pcap2socks.exe)",
-      "Bash(findstr /C:\"go-pcap2socks.exe\")"
+      "Bash(findstr /C:\"go-pcap2socks.exe\")",
+      "Bash(findstr \"Benchmark\")"
     ]
   }
 }

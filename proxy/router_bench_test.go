@@ -39,13 +39,12 @@ func BenchmarkRouterDialContext(b *testing.B) {
 	router := NewRouter(rules, proxies)
 	defer router.Stop()
 
-	metadata := &M.Metadata{
-		Network: M.TCP,
-		SrcIP:   net.ParseIP("192.168.1.100"),
-		SrcPort: 12345,
-		DstIP:   net.ParseIP("8.8.8.8"),
-		DstPort: 443,
-	}
+	metadata := M.GetMetadata()
+	metadata.Network = M.TCP
+	metadata.SrcIP = net.ParseIP("192.168.1.100")
+	metadata.SrcPort = 12345
+	metadata.DstIP = net.ParseIP("8.8.8.8")
+	metadata.DstPort = 443
 
 	ctx := context.Background()
 
@@ -55,6 +54,8 @@ func BenchmarkRouterDialContext(b *testing.B) {
 			_, _ = router.DialContext(ctx, metadata)
 		}
 	})
+
+	M.PutMetadata(metadata)
 }
 
 // BenchmarkRouterDialContextCacheHit benchmarks cache hit performance
@@ -80,13 +81,12 @@ func BenchmarkRouterDialContextCacheHit(b *testing.B) {
 	router := NewRouter(rules, proxies)
 	defer router.Stop()
 
-	metadata := &M.Metadata{
-		Network: M.TCP,
-		SrcIP:   net.ParseIP("192.168.1.100"),
-		SrcPort: 12345,
-		DstIP:   net.ParseIP("8.8.8.8"),
-		DstPort: 443,
-	}
+	metadata := M.GetMetadata()
+	metadata.Network = M.TCP
+	metadata.SrcIP = net.ParseIP("192.168.1.100")
+	metadata.SrcPort = 12345
+	metadata.DstIP = net.ParseIP("8.8.8.8")
+	metadata.DstPort = 443
 
 	ctx := context.Background()
 
@@ -97,6 +97,8 @@ func BenchmarkRouterDialContextCacheHit(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = router.DialContext(ctx, metadata)
 	}
+
+	M.PutMetadata(metadata)
 }
 
 // BenchmarkRouterMatch benchmarks the rule matching logic
@@ -110,13 +112,12 @@ func BenchmarkRouterMatch(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	metadata := &M.Metadata{
-		Network: M.TCP,
-		SrcIP:   net.ParseIP("192.168.1.100"),
-		SrcPort: 12345,
-		DstIP:   net.ParseIP("8.8.8.8"),
-		DstPort: 443,
-	}
+	metadata := M.GetMetadata()
+	metadata.Network = M.TCP
+	metadata.SrcIP = net.ParseIP("192.168.1.100")
+	metadata.SrcPort = 12345
+	metadata.DstIP = net.ParseIP("8.8.8.8")
+	metadata.DstPort = 443
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -69,3 +69,31 @@ func BenchmarkMetadataNew(b *testing.B) {
 		_ = m
 	}
 }
+
+// BenchmarkMetadataPool_GetPut measures pure pool overhead without allocations
+func BenchmarkMetadataPool_GetPut(b *testing.B) {
+	ip := net.ParseIP("192.168.1.1")
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			m := GetMetadata()
+			m.SrcIP = ip
+			m.DstPort = 443
+			PutMetadata(m)
+		}
+	})
+}
+
+// BenchmarkMetadataNew_Alloc measures pure allocation without pool
+func BenchmarkMetadataNew_Alloc(b *testing.B) {
+	ip := net.ParseIP("192.168.1.1")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m := &Metadata{
+			Network: TCP,
+			SrcIP:   ip,
+			DstPort: 443,
+		}
+		_ = m
+	}
+}

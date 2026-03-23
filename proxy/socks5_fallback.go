@@ -149,10 +149,10 @@ func (sf *Socks5WithFallback) checkHealth() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	metadata := &M.Metadata{
-		DstIP:   net.ParseIP("8.8.8.8"),
-		DstPort: 53,
-	}
+	metadata := M.GetMetadata()
+	defer M.PutMetadata(metadata)
+	metadata.DstIP = net.ParseIP("8.8.8.8")
+	metadata.DstPort = 53
 
 	conn, err := sf.Socks5.DialContext(ctx, metadata)
 	if err == nil {
