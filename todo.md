@@ -10,33 +10,32 @@
 - [x] Zero-copy UDP (transport/socks5.go - DecodeUDPPacketInPlace)
 - [x] Adaptive buffer sizing (buffer/ - 512B/2KB/8KB пулы)
 - [x] HTTP/2 connection pooling (dialer/dialer.go - shared transport)
-
-### Observability
-- [x] Prometheus metrics (metrics/collector.go)
-- [x] Эндпоинт /metrics для scraping
-- [x] Метрики: connections, traffic, cache, devices
+- [x] Metrics Prometheus (metrics/collector.go - /metrics endpoint)
 
 ### Исправления
 - [x] stats/store.go - дублирование кода
 - [x] dns/pool.go - dns.Conn pointer
 - [x] api/server_test.go - helper функции
 - [x] profiles/manager_test.go - импорты и методы
-- [x] asynclogger/async_handler.go - go vet warnings (atomic/sync pointers)
 
 ---
 
 ## 🔥 В работе
 
-_Нет активных задач_
+### gVisor stack оптимизация (средний приоритет)
+- [ ] Изучить текущие параметры stack
+- [ ] Оптимизировать MTU/MSS настройки
+- [ ] Batch обработка пакетов
+- [ ] Цель: -10-15% CPU на network stack
 
 ---
 
 ## 📋 Запланировано
 
 ### Критичные улучшения
-- [ ] gVisor stack оптимизация (MTU/MSS tuning)
-- [ ] Batch обработка пакетов
 - [ ] Async DNS resolver
+- [ ] Connection tracking оптимизация
+- [ ] Memory pool для частых аллокаций
 
 ### Долгосрочные
 - [ ] HTTP/3 (QUIC) поддержка
@@ -53,15 +52,16 @@ Router Match:       7.65 ns/op    0 B/op    0 allocs/op ✅
 Router DialContext: 143.1 ns/op   112 B/op  6 allocs/op
 Buffer GetPut:      42.74 ns/op   24 B/op   1 allocs/op ✅
 DNS Cache Get:      98.49 ns/op   0 B/op    0 allocs/op ✅
-HTTP2 Pool:         реализован    -30% lat  (ожидаемо)
+Metrics Record:     8.88 ns/op    0 B/op    0 allocs/op ✅
+Metrics Export:     5356 ns/op    1152 B/op 73 allocs/op
 ```
 
 ### Целевые показатели
 ```
 Router DialContext: <100 ns/op   <100 B/op  <4 allocs/op
 Buffer GetPut:      <50 ns/op    <30 B/op   1 allocs/op ✅
-HTTP/2 Pool:        -30% latency ✅
-Metrics:            full observability ✅
+Metrics Record:     <10 ns/op    0 B/op     0 allocs/op ✅
+gVisor Stack:       -15% CPU (в работе)
 ```
 
 ---
@@ -84,5 +84,5 @@ Metrics:            full observability ✅
 ---
 
 **Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.11.0-metrics (в main и dev)
-**Статус**: ✅ Все изменения синхронизированы с origin
+**Версия**: v3.11.0-metrics (dev)
+**Статус**: 🔄 dev → main (ready for merge)
