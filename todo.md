@@ -83,10 +83,10 @@
 - [x] Health check прокси
 - [x] Балансировка: round-robin, least-load, failover
 
-### Приоритет 2 (Контроль трафика)
+### 🟡 Приоритет 2 (Контроль трафика) — в работе v3.4.0
+- [x] MAC blacklist/whitelist
 - [ ] Лимит скорости на устройство
 - [ ] Дневные лимиты трафика
-- [ ] Блокировка устройств (MAC blacklist/whitelist)
 
 ### Приоритет 3 (Улучшения)
 - [ ] Кастомные имена устройств
@@ -163,15 +163,20 @@ Go версия: 1.25.0
 
 ## 📅 История версий
 
-### v3.3.0 (23.03.2026) — текущая
+### v3.4.0 (23.03.2026) — текущая
+- ✅ `cfg/config.go` — MACFilter структура
+- ✅ `proxy/router.go` — проверка MAC фильтра
+- ✅ `api/server.go` — API /api/macfilter
+- ✅ Режимы: blacklist, whitelist
+- ✅ main.go — инициализация из конфига
+
+### v3.3.0 (23.03.2026)
 - ✅ `proxy/group.go` — группа прокси с health check
 - ✅ `cfg/config.go` — OutboundGroup для групп прокси
 - ✅ `main.go` — создание групп из конфига
 - ✅ Политики: failover, round-robin, least-load
 - ✅ Автоматический health check (30с интервал)
 - ✅ Graceful остановка групп
-
-### v3.2.4 (23.03.2026)
 - ✅ Добавлен контекст в `dialer.ListenPacket()` для отмены операций
 - ✅ Telegram bot: контекст для остановки polling
 - ✅ Telegram bot: экспоненциальный backoff при ошибках

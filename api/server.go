@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
@@ -120,6 +121,10 @@ func (s *Server) setupRoutes() {
 	// Hotkey endpoints
 	s.mux.HandleFunc("/api/hotkey", s.handleHotkey)
 	s.mux.HandleFunc("/api/hotkey/toggle", s.handleHotkeyToggle)
+
+	// MAC Filter endpoints
+	s.mux.HandleFunc("/api/macfilter", s.handleMACFilter)
+	s.mux.HandleFunc("/api/macfilter/update", s.handleMACFilterUpdate)
 
 	// WebSocket endpoint
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
@@ -776,6 +781,80 @@ func (s *Server) getTraffic() Traffic {
 }
 
 var startTime = time.Now()
+
+// handleMACFilter returns MAC filter configuration
+func (s *Server) handleMACFilter(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get config to access MAC filter
+	config, err := cfg.Load(s.configPath)
+	if err != nil {
+		s.sendError(w, "Failed to load config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	filter := config.MACFilter
+	if filter == nil {
+		filter = &cfg.MACFilter{
+			Mode: cfg.MACFilterDisabled,
+			List: []string{},
+		}
+	}
+
+	s.sendSuccess(w, map[string]interface{}{
+		"mode": filter.Mode,
+		"list": filter.List,
+	})
+}
+
+// handleMACFilterUpdate updates MAC filter configuration
+func (s *Server) handleMACFilterUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Mode string   `json:"mode"`
+		List []string `json:"list"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Load current config
+	config, err := cfg.Load(s.configPath)
+	if err != nil {
+		s.sendError(w, "Failed to load config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Update MAC filter
+	config.MACFilter = &cfg.MACFilter{
+		Mode: cfg.MACFilterMode(req.Mode),
+		List: req.List,
+	}
+
+	// Save config
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		s.sendError(w, "Failed to marshal config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+		s.sendError(w, "Failed to save config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("MAC filter updated", "mode", req.Mode, "entries", len(req.List))
+	s.sendSuccess(w, "MAC filter updated")
+}
 
 // readLastLines reads last N lines from a file
 func readLastLines(filePath string, n int) ([]string, error) {

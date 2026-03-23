@@ -491,6 +491,15 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	}
 
 	_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
+	
+	// Set MAC filter if configured
+	if cfg.MACFilter != nil {
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			router.SetMACFilter(cfg.MACFilter)
+			slog.Info("MAC filter configured", "mode", cfg.MACFilter.Mode, "entries", len(cfg.MACFilter.List))
+		}
+	}
+	
 	proxy.SetDialer(_defaultProxy)
 
 	_defaultDevice, err = device.Open(cfg.Capture, ifce, netConfig, func() device.Stacker {

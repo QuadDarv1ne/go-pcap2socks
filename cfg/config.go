@@ -54,6 +54,7 @@ type Config struct {
 	Discord   *Discord   `json:"discord,omitempty"`
 	Hotkey    *Hotkey    `json:"hotkey,omitempty"`
 	UPnP      *UPnP      `json:"upnp,omitempty"`
+	MACFilter *MACFilter `json:"macFilter,omitempty"`
 }
 
 type PCAP struct {
@@ -300,3 +301,51 @@ func mustPorts(ports string) map[uint16]struct{} {
 
 	return m
 }
+
+// MACFilterMode defines the MAC filtering mode
+type MACFilterMode string
+
+const (
+	// MACFilterDisabled - no filtering
+	MACFilterDisabled MACFilterMode = ""
+	// MACFilterBlacklist - block listed MACs, allow others
+	MACFilterBlacklist MACFilterMode = "blacklist"
+	// MACFilterWhitelist - allow listed MACs, block others
+	MACFilterWhitelist MACFilterMode = "whitelist"
+)
+
+// MACFilter holds MAC filtering configuration
+type MACFilter struct {
+	Mode MACFilterMode `json:"mode,omitempty"` // "blacklist" or "whitelist"
+	List []string      `json:"list,omitempty"`  // List of MAC addresses
+}
+
+// IsAllowed checks if a MAC address is allowed based on the filter mode
+func (f *MACFilter) IsAllowed(mac string) bool {
+	if f == nil || f.Mode == MACFilterDisabled {
+		return true
+	}
+
+	// Normalize MAC address
+	mac = strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(mac, ":", ""), "-", ""))
+
+	// Check if MAC is in the list
+	inList := false
+	for _, listedMAC := range f.List {
+		normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(listedMAC, ":", ""), "-", ""))
+		if normalized == mac {
+			inList = true
+			break
+		}
+	}
+
+	switch f.Mode {
+	case MACFilterBlacklist:
+		return !inList // Block if in list
+	case MACFilterWhitelist:
+		return inList // Allow only if in list
+	default:
+		return true
+	}
+}
+
