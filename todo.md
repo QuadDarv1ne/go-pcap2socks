@@ -11,6 +11,11 @@
 - [x] Adaptive buffer sizing (buffer/ - 512B/2KB/8KB пулы)
 - [x] HTTP/2 connection pooling (dialer/dialer.go - shared transport)
 
+### Observability
+- [x] Prometheus metrics (metrics/collector.go)
+- [x] Эндпоинт /metrics для scraping
+- [x] Метрики: connections, traffic, cache, devices
+
 ### Исправления
 - [x] stats/store.go - дублирование кода
 - [x] dns/pool.go - dns.Conn pointer
@@ -22,11 +27,7 @@
 
 ## 🔥 В работе
 
-### Metrics Prometheus (средний приоритет)
-- [ ] Добавить метрики: cpu, memory, latency, connections
-- [ ] Экспорт в Prometheus формате
-- [ ] Эндпоинт /metrics для scraping
-- [ ] Цель: full observability
+_Нет активных задач_
 
 ---
 

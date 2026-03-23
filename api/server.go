@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
@@ -21,6 +22,7 @@ type Server struct {
 	statsStore   *stats.Store
 	profileMgr   *profiles.Manager
 	upnpMgr      *upnpmanager.Manager
+	metrics      *metrics.Collector
 	configPath   string
 	mu           sync.RWMutex
 	enabled      bool
@@ -66,11 +68,15 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 		statsStore = getGlobalStatsStore()
 	}
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector(statsStore)
+
 	s := &Server{
 		mux:          http.NewServeMux(),
 		statsStore:   statsStore,
 		profileMgr:   profileMgr,
 		upnpMgr:      upnpMgr,
+		metrics:      metricsCollector,
 		configPath:   cfgFile,
 		enabled:      true,
 	}
@@ -133,8 +139,22 @@ func (s *Server) setupRoutes() {
 	// WebSocket endpoint
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
 
+	// Prometheus metrics endpoint
+	s.mux.HandleFunc("/metrics", s.handleMetrics)
+
 	// Static files (web UI)
 	s.mux.HandleFunc("/", s.handleStatic)
+}
+
+// handleMetrics exports Prometheus format metrics
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.metrics == nil {
+		http.Error(w, "Metrics not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	s.metrics.WriteMetrics(w)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
