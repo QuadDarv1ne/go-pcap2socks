@@ -342,7 +342,7 @@ func main() {
 
 			err = cmd.Wait()
 			if err != nil {
-
+				slog.Debug("Command finished with error", slog.Any("err", err))
 			}
 		}()
 	}
