@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/ratelimit"
 	"gvisor.dev/gvisor/pkg/log"
@@ -20,8 +20,8 @@ const (
 	tcpWaitTimeout = 60 * time.Second
 
 	// tcpRelayBufferSize is optimized buffer size for TCP relay
-	// Reduced from 20 KiB to 8 KiB for better cache locality
-	tcpRelayBufferSize = 8 << 10
+	// Using adaptive buffer sizing for better memory efficiency
+	tcpRelayBufferSize = buffer.MediumBufferSize
 )
 
 // Rate limiters for frequent log messages
@@ -72,11 +72,11 @@ func pipe(origin, remote net.Conn) {
 
 func unidirectionalStream(dst, src net.Conn, dir string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	buf := pool.Get(tcpRelayBufferSize)
+	buf := buffer.Get(tcpRelayBufferSize)
+	defer buffer.Put(buf)
 	if _, err := io.CopyBuffer(dst, src, buf); err != nil {
 		log.Debugf("[TCP] copy data for %s: %v", dir, err)
 	}
-	pool.Put(buf)
 	// Do the upload/download side TCP half-close.
 	if cr, ok := src.(interface{ CloseRead() error }); ok {
 		cr.CloseRead()
