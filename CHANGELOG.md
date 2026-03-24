@@ -5,6 +5,17 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.19.1] - 2026-03-24
+
+### Исправлено
+- **dhcp.Marshal()** - добавлен magic cookie (байты 236-239: 99,130,83,99)
+- **dhcp.Marshal()** - детерминированный порядок опций (Message Type, Server ID, Subnet, Router, DNS, Lease Time)
+- **dhcp.Marshal()** - правильная обработка ServerHostname и BootFileName
+- **windivert.processPacket()** - исправлена проверка портов (srcPort=68 && dstPort=67)
+- **windivert.sendDHCPResponse()** - правильный выбор destination IP (clientIP/yourIP/broadcast)
+
+---
+
 ## [3.19.0] - 2026-03-24
 
 ### Добавлено

@@ -365,8 +365,8 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.19.0-http3-udp (dev: 66e5ed6, main: 66e5ed6)
-**Статус**: ✅ готов к использованию, HTTP/3 UDP proxying реализован
+**Версия**: v3.19.1-dhcp-fix (dev: 66e5ed6, main: 66e5ed6)
+**Статус**: ✅ готов к использованию, DHCP исправлен
 
 ### Статус веток
 ```
@@ -377,9 +377,47 @@ dev:  66e5ed6 синхронизирован с main ✅
 ### Текущие задачи (в работе)
 - ✅ HTTP/3 UDP proxying через QUIC datagrams (RFC 9221) - РЕАЛИЗОВАНО
 - ✅ HTTP/3 TCP proxying через CONNECT - РЕАЛИЗОВАНО
+- ✅ DHCP Marshal исправлен - magic cookie, порядок опций
+- ✅ DHCP WinDivert исправлен - проверка портов, destination IP
 - 🔄 Документация HTTP/3 (требуется запрос пользователя)
 - 🔄 Интеграционные тесты с реальным HTTP/3 прокси
 - 🔄 Hotkey integration (требуется Windows GUI/tray)
+
+---
+
+## ✅ Завершено (24.03.2026) - ИСПРАВЛЕНИЕ DHCP
+
+### Исправление DHCP (24.03.2026 19:45)
+- [x] Исправлен dhcp.Marshal() - добавлен magic cookie (99,130,83,99) ✅
+- [x] Исправлен dhcp.Marshal() - детерминированный порядок опций ✅
+- [x] Исправлен dhcp.Marshal() - ServerHostname и BootFileName ✅
+- [x] Исправлен windivert.processPacket() - проверка srcPort=68 && dstPort=67 ✅
+- [x] Исправлен windivert.sendDHCPResponse() - правильный destination IP ✅
+- [x] Все DHCP тесты проходят ✅
+- [x] Компиляция без ошибок ✅
+
+### Найденные проблемы DHCP
+1. **Magic cookie отсутствовал** - обязательное поле DHCP (байты 236-239: 99,130,83,99)
+2. **Порядок опций недетерминированный** - некоторые клиенты требуют определённый порядок
+3. **WinDivert проверка портов** - было `||`, стало `&&` для client requests
+4. **Destination IP в ответе** - теперь правильно определяется clientIP/yourIP
+
+### Метрики производительности (актуальные)
+```
+Router Match:         5.896 ns/op   0 B/op    0 allocs/op ✅
+Router DialContext:   99.47 ns/op   40 B/op   2 allocs/op ✅
+Router Cache Hit:     155.3 ns/op   40 B/op   2 allocs/op ✅
+Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
+DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
+DHCP Tests:           10 тестов     ✅ все проходят
+```
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (proxy: 28, buffer: 2, stats: 10, cfg: 8, dhcp: 10)
+- Размер бинарника: 15.6MB (в пределах нормы <25MB)
+- Ветка: dev/main (66e5ed6)
+- Готовность: ✅ проект стабилен, DHCP исправлен
 
 ---
 

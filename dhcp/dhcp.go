@@ -82,64 +82,160 @@ func NewDHCPMessage() *DHCPMessage {
 func (m *DHCPMessage) Marshal() []byte {
 	// Estimate total size: 240 (header) + options
 	estimatedSize := 240
-	for _, value := range m.Options {
+	for code, value := range m.Options {
+		if code == OptionEnd {
+			continue
+		}
 		estimatedSize += 2 + len(value) // code + length + value
 	}
 	estimatedSize += 1 // End option
 
 	// Get buffer from pool
 	buf := pool.Get(estimatedSize)
-	packet := buf[:estimatedSize]
+	defer pool.Put(buf)
+
+	// Zero out the buffer
+	for i := range buf[:estimatedSize] {
+		buf[i] = 0
+	}
 
 	// Fixed header
-	packet[0] = m.OpCode
-	packet[1] = m.HardwareType
-	packet[2] = m.HardwareLength
-	packet[3] = m.Hops
-	binary.BigEndian.PutUint32(packet[4:8], m.TransactionID)
-	binary.BigEndian.PutUint16(packet[8:10], m.Seconds)
-	binary.BigEndian.PutUint16(packet[10:12], m.Flags)
+	buf[0] = m.OpCode
+	buf[1] = m.HardwareType
+	buf[2] = m.HardwareLength
+	buf[3] = m.Hops
+	binary.BigEndian.PutUint32(buf[4:8], m.TransactionID)
+	binary.BigEndian.PutUint16(buf[8:10], m.Seconds)
+	binary.BigEndian.PutUint16(buf[10:12], m.Flags)
 
 	// IP addresses
-	copy(packet[12:16], m.ClientIP.To4())
-	copy(packet[16:20], m.YourIP.To4())
-	copy(packet[20:24], m.ServerIP.To4())
-	copy(packet[24:28], m.GatewayIP.To4())
+	copy(buf[12:16], m.ClientIP.To4())
+	copy(buf[16:20], m.YourIP.To4())
+	copy(buf[20:24], m.ServerIP.To4())
+	copy(buf[24:28], m.GatewayIP.To4())
 
-	// Client hardware address
-	copy(packet[28:34], m.ClientHardware)
+	// Client hardware address (first 6 bytes)
+	copy(buf[28:34], m.ClientHardware)
 
-	// Options
+	// Server hostname (64 bytes starting at 44)
+	if m.ServerHostname != "" {
+		copy(buf[44:], []byte(m.ServerHostname))
+	}
+
+	// Boot file name (128 bytes starting at 108)
+	if m.BootFileName != "" {
+		copy(buf[108:], []byte(m.BootFileName))
+	}
+
+	// Magic cookie (mandatory for DHCP)
+	buf[236] = 99
+	buf[237] = 130
+	buf[238] = 83
+	buf[239] = 99
+
+	// Options starting at 240
 	optionPos := 240
-	packet[optionPos] = OptionDHCPMessageType
-	optionPos++
-	packet[optionPos] = 1
-	optionPos++
-	packet[optionPos] = m.Options[OptionDHCPMessageType][0]
-	optionPos++
+
+	// Add options in deterministic order for reliability
+	// First: DHCP Message Type (mandatory)
+	if msgType, ok := m.Options[OptionDHCPMessageType]; ok {
+		buf[optionPos] = OptionDHCPMessageType
+		optionPos++
+		buf[optionPos] = byte(len(msgType))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(msgType)], msgType)
+		optionPos += len(msgType)
+	}
+
+	// Then: Server Identifier (important for DHCP)
+	if serverID, ok := m.Options[OptionServerIdentifier]; ok {
+		buf[optionPos] = OptionServerIdentifier
+		optionPos++
+		buf[optionPos] = byte(len(serverID))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(serverID)], serverID)
+		optionPos += len(serverID)
+	}
+
+	// Then: Subnet Mask
+	if subnetMask, ok := m.Options[OptionSubnetMask]; ok {
+		buf[optionPos] = OptionSubnetMask
+		optionPos++
+		buf[optionPos] = byte(len(subnetMask))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(subnetMask)], subnetMask)
+		optionPos += len(subnetMask)
+	}
+
+	// Then: Router/Gateway
+	if router, ok := m.Options[OptionRouter]; ok {
+		buf[optionPos] = OptionRouter
+		optionPos++
+		buf[optionPos] = byte(len(router))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(router)], router)
+		optionPos += len(router)
+	}
+
+	// Then: DNS Servers
+	if dnsServers, ok := m.Options[OptionDNSServer]; ok {
+		buf[optionPos] = OptionDNSServer
+		optionPos++
+		buf[optionPos] = byte(len(dnsServers))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(dnsServers)], dnsServers)
+		optionPos += len(dnsServers)
+	}
+
+	// Then: Lease Time
+	if leaseTime, ok := m.Options[OptionLeaseTime]; ok {
+		buf[optionPos] = OptionLeaseTime
+		optionPos++
+		buf[optionPos] = byte(len(leaseTime))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(leaseTime)], leaseTime)
+		optionPos += len(leaseTime)
+	}
+
+	// Then: Requested IP
+	if requestedIP, ok := m.Options[OptionRequestedIP]; ok {
+		buf[optionPos] = OptionRequestedIP
+		optionPos++
+		buf[optionPos] = byte(len(requestedIP))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(requestedIP)], requestedIP)
+		optionPos += len(requestedIP)
+	}
+
+	// Add any remaining options not handled above
+	handledOptions := map[uint8]bool{
+		OptionDHCPMessageType:  true,
+		OptionServerIdentifier: true,
+		OptionSubnetMask:       true,
+		OptionRouter:           true,
+		OptionDNSServer:        true,
+		OptionLeaseTime:        true,
+		OptionRequestedIP:      true,
+	}
 
 	for code, value := range m.Options {
-		if code == OptionDHCPMessageType {
-			continue // Already added
+		if handledOptions[code] || code == OptionEnd {
+			continue
 		}
-		if code == OptionEnd {
-			continue // Add at the end
-		}
-		packet[optionPos] = code
+		buf[optionPos] = code
 		optionPos++
-		packet[optionPos] = byte(len(value))
+		buf[optionPos] = byte(len(value))
 		optionPos++
-		copy(packet[optionPos:optionPos+len(value)], value)
+		copy(buf[optionPos:optionPos+len(value)], value)
 		optionPos += len(value)
 	}
 
 	// End option
-	packet[optionPos] = OptionEnd
+	buf[optionPos] = OptionEnd
 
 	// Return actual size slice
 	result := make([]byte, optionPos+1)
-	copy(result, packet[:optionPos+1])
-	pool.Put(buf)
+	copy(result, buf[:optionPos+1])
 
 	return result
 }

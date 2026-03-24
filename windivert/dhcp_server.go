@@ -98,9 +98,11 @@ func (s *DHCPServer) packetLoop() {
 
 // processPacket processes a single DHCP packet
 func (s *DHCPServer) processPacket(packet *Packet) {
-	// Check if this is a DHCP packet (UDP port 67 or 68)
-	if packet.SrcPort != 68 && packet.DstPort != 67 {
-		// Not a DHCP packet, reinject it
+	// Check if this is a DHCP request from client (srcPort=68, dstPort=67)
+	// Only process DHCP DISCOVER/REQUEST from clients
+	if packet.SrcPort != 68 || packet.DstPort != 67 {
+		// Not a client request (could be server response or other traffic)
+		// Reinject it back to the network
 		s.handle.Send(packet)
 		return
 	}
@@ -110,22 +112,17 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		"dst_ip", packet.DstIP.String(),
 		"src_port", packet.SrcPort,
 		"dst_port", packet.DstPort,
-		"inbound", packet.IsInbound)
-
-	// Only process DHCP requests from clients (port 68 -> 67)
-	if packet.DstPort != 67 {
-		// Not a client request, reinject
-		s.handle.Send(packet)
-		return
-	}
+		"inbound", packet.IsInbound,
+		"src_mac", packet.SrcMAC.String())
 
 	// Extract DHCP payload (skip IP and UDP headers)
+	// IP header length is in first byte (lower 4 bits)
 	ipHeaderLen := int((packet.Raw[0] & 0x0F) * 4)
 	udpHeaderLen := 8
 	dhcpStart := ipHeaderLen + udpHeaderLen
 
 	if len(packet.Raw) <= dhcpStart {
-		slog.Warn("DHCP packet too short")
+		slog.Warn("DHCP packet too short", "len", len(packet.Raw), "dhcpStart", dhcpStart)
 		s.handle.Send(packet)
 		return
 	}
@@ -161,17 +158,29 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 // sendDHCPResponse builds and sends a DHCP response packet
 func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 	// Determine destination IP
+	// For DHCP OFFER/ACK, use broadcast (255.255.255.255) if client doesn't have IP yet
+	// or use the client's assigned IP if it's a renewal
 	dstIP := net.IPv4(255, 255, 255, 255) // Default broadcast
 
-	// Check if client has a requested IP or already has one
-	if len(dhcpData) > 16 {
+	// Check DHCP message type and client IP
+	// DHCP message starts at dhcpData[0]
+	// YourIP (yiaddr) is at offset 16-19 in DHCP message
+	// ClientIP (ciaddr) is at offset 12-15 in DHCP message
+	if len(dhcpData) >= 20 {
 		clientIP := net.IP(dhcpData[12:16]).To4()
+		yourIP := net.IP(dhcpData[16:20]).To4()
+		
+		// If client already has an IP (ciaddr != 0), use that
 		if !clientIP.Equal(net.IPv4zero) {
 			dstIP = clientIP
+		} else if !yourIP.Equal(net.IPv4zero) {
+			// For OFFER/ACK, use the assigned IP for unicast if possible
+			// But broadcast is safer for compatibility
+			dstIP = net.IPv4(255, 255, 255, 255)
 		}
 	}
 
-	// Build IP+UDP+DHCP packet (without Ethernet header for WinDivert network layer)
+	// Build IP+UDP+DHCP packet (WinDivert network layer - no Ethernet header)
 	responsePacket, err := buildIPUDPPacket(
 		s.localIP, // Source IP (server)
 		dstIP,     // Destination IP (client or broadcast)
@@ -184,13 +193,13 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 	}
 
 	// Create WinDivert packet for response
-	// Mark as outbound by setting Data=0 (outbound direction)
+	// Use inbound direction to send back to the local network
 	godivertPacket := &godivert.Packet{
 		Raw: responsePacket,
 		Addr: &godivert.WinDivertAddress{
 			IfIdx:    request.Addr.IfIdx,
 			SubIfIdx: request.Addr.SubIfIdx,
-			Data:     0, // 0 = outbound, 1 = inbound
+			Data:     1, // 1 = inbound (send to local network)
 		},
 		PacketLen: uint(len(responsePacket)),
 	}
@@ -206,7 +215,8 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 
 	slog.Info("DHCP response sent via WinDivert",
 		"dst_ip", dstIP.String(),
-		"packet_len", len(responsePacket))
+		"packet_len", len(responsePacket),
+		"ifidx", request.Addr.IfIdx)
 
 	return nil
 }
