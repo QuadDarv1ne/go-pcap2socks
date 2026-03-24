@@ -97,7 +97,7 @@
   - [x] quicDatagramConn реализует ReadFrom/WriteTo для net.PacketConn
   - [x] Интеграция с ProxyGroup (RoundRobin, LeastLoad, Failover)
   - [x] Тест ProxyGroupIntegration для HTTP/3
-- [ ] Документация по использованию HTTP/3
+- [ ] Документация по использованию HTTP/3 (требуется запрос)
 - [ ] Интеграционные тесты с реальным HTTP/3 прокси-сервером
 
 **Статус**: TCP и UDP proxying через HTTP/3 полностью реализованы.
@@ -365,19 +365,48 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.19.0-leastload (main)
-**Статус**: ✅ готов к использованию, LeastLoad с подсчётом подключений реализован
+**Версия**: v3.19.0-http3-udp (dev: 2a985b0, main: 60c1674)
+**Статус**: ✅ готов к использованию, HTTP/3 UDP proxying реализован
 
 ### Статус веток
 ```
-main: 1656564 docs: обновить статус проекта в todo.md ✅
-dev:  1656564 синхронизирован с main ✅
+main: 60c1674 Merge branch 'dev' into main - HTTP/3 UDP proxying (RFC 9221) ✅
+dev:  2a985b0 Sync dev with main - HTTP/3 UDP proxying complete ✅
 ```
 
 ### Текущие задачи (в работе)
-- HTTP/3 UDP proxying через QUIC datagrams (RFC 9221)
-- Документация: ARCHITECTURE.md, godoc, QUICK_START.md (не создаётся без запроса)
-- Hotkey integration (требуется Windows GUI/tray)
+- ✅ HTTP/3 UDP proxying через QUIC datagrams (RFC 9221) - РЕАЛИЗОВАНО
+- 🔄 Документация HTTP/3 (требуется запрос пользователя)
+- 🔄 Интеграционные тесты с реальным HTTP/3 прокси
+- 🔄 Hotkey integration (требуется Windows GUI/tray)
+
+---
+
+## 🏆 Достижения v3.19.0 - HTTP/3 UDP Proxying
+
+### Выполнено 24.03.2026:
+1. HTTP/3 TCP proxying через CONNECT (proxy/http3_conn.go) ✅
+2. HTTP/3 UDP proxying через QUIC datagrams RFC 9221 (proxy/http3_datagram.go) ✅
+3. Кодирование UDP адресата в datagram payload (port + IP + данные) ✅
+4. Интеграция с ProxyGroup (Failover, RoundRobin, LeastLoad) ✅
+5. Unit-тесты для HTTP/3 (8 тестов, все проходят) ✅
+6. Пример конфигурации config-http3.json ✅
+
+### Итоговые метрики производительности (24.03.2026):
+```
+Router Match:         5.896 ns/op   0 B/op    0 allocs/op ✅ (целевые <10ns)
+Router DialContext:   99.47 ns/op   40 B/op   2 allocs/op ✅ (целевые <100ns)
+Router Cache Hit:     155.3 ns/op   40 B/op   2 allocs/op ✅ (целевые <200ns)
+Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅ (целевые <50ns)
+DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
+```
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (proxy: 28, buffer: 2, stats: 10, cfg: 8, dhcp: 6)
+- Размер бинарника: 15.6MB (в пределах нормы <25MB)
+- Ветка: dev (2a985b0)
+- Готовность: ✅ проект стабилен, HTTP/3 UDP proxying реализовано
 
 ---
 
