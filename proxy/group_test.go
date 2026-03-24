@@ -33,13 +33,7 @@ func (m *mockProxyWithHealth) IsHealthCheckOK() bool {
 func (m *mockProxyWithHealth) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
 	m.mu.Lock()
 	m.dialTCPCount++
-	count := m.dialTCPCount  // Capture count at time of call
 	m.mu.Unlock()
-	
-	// Debug log
-	if m.addr == "backup://" {
-		println("mockProxyWithHealth.DialContext called on backup, count=", count)
-	}
 
 	if m.failDial {
 		return nil, context.DeadlineExceeded

@@ -67,6 +67,7 @@
 - Добавлен интерфейс `healthCheckOverride` для тестирования health check без реальных подключений
 - Исправлен `DialContext` для Failover политики - теперь пытается подключиться к следующему прокси при ошибке
 - TestProxyGroup_Failover и TestProxyGroup_Failover_OnConnectionFailure теперь проходят
+- Удалён отладочный `println` из mockProxyWithHealth.DialContext
 
 ---
 
@@ -395,3 +396,4 @@ dev:  [local changes] исправлены тесты Failover и dialContext
 21. Исправлен DialContext для Failover политики - повторные попытки к здоровым прокси
 22. Добавлен интерфейс healthCheckOverride для тестирования
 23. TestProxyGroup_Failover и TestProxyGroup_Failover_OnConnectionFailure - проходят ✅
+24. Удалён отладочный `println` из тестового кода ✅
