@@ -69,6 +69,10 @@
 - TestProxyGroup_Failover и TestProxyGroup_Failover_OnConnectionFailure теперь проходят
 - Удалён отладочный `println` из mockProxyWithHealth.DialContext
 
+### Исправления кода (24.03.2026)
+- Удалён мёртвый код в dns/pool.go: неиспользуемые `tlsConfig` и `dialer` в NewDoHClientWithPool
+- Удалён неиспользуемый импорт `crypto/tls` из dns/pool.go
+
 ---
 
 ## 🔥 В работе
@@ -397,3 +401,7 @@ dev:  [local changes] исправлены тесты Failover и dialContext
 22. Добавлен интерфейс healthCheckOverride для тестирования
 23. TestProxyGroup_Failover и TestProxyGroup_Failover_OnConnectionFailure - проходят ✅
 24. Удалён отладочный `println` из тестового кода ✅
+
+### Выполнено исправлений кода (24.03.2026):
+25. Удалён мёртвый код в dns/pool.go (tlsConfig, dialer) ✅
+26. Удалён неиспользуемый импорт crypto/tls ✅

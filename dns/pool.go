@@ -3,7 +3,6 @@ package dns
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
@@ -193,16 +192,7 @@ type DoHClientWithPool struct {
 
 // NewDoHClientWithPool creates a new DoH client with connection pooling
 func NewDoHClientWithPool(addr string) (*DoHClientWithPool, error) {
-	// For DoH, we use TCP with TLS
-	tlsConfig := &tls.Config{
-		ServerName: addr,
-	}
-
-	dialer := &net.Dialer{
-		Timeout: DefaultConnectTimeout,
-	}
-
-	// Create pooled TLS connections
+	// Create pooled TCP connections
 	pool := &ConnPool{
 		addr:        addr,
 		network:     "tcp",
@@ -210,9 +200,6 @@ func NewDoHClientWithPool(addr string) (*DoHClientWithPool, error) {
 		idleTimeout: DefaultIdleTimeout,
 		dialTimeout: DefaultConnectTimeout,
 	}
-
-	_ = tlsConfig // Use tlsConfig for TLS connections
-	_ = dialer
 
 	return &DoHClientWithPool{
 		pool: pool,
