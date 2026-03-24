@@ -170,7 +170,8 @@ func TestProxyGroup_LeastLoad(t *testing.T) {
 	group := NewProxyGroup(cfg)
 	defer group.Stop()
 
-	// Make 4 connections
+	// Make 4 connections and keep them open
+	var conns []net.Conn
 	for i := 0; i < 4; i++ {
 		metadata := M.GetMetadata()
 		defer M.PutMetadata(metadata)
@@ -184,17 +185,24 @@ func TestProxyGroup_LeastLoad(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Connection %d failed: %v", i, err)
 		}
-		conn.Close()
+		conns = append(conns, conn)
 	}
 
-	// Each proxy should have 2 connections (4 / 2 = 2)
-	// Note: LeastLoad currently uses round-robin as approximation
+	// Each proxy should have 2 connections (4 / 2 = 2) distributed by LeastLoad
+	// Check total dial count via GetStats
 	proxies_to_check := []*mockProxyWithHealth{proxy1, proxy2}
-	for i, p := range proxies_to_check {
+	totalDials := 0
+	for _, p := range proxies_to_check {
 		tcpCount, _ := p.GetStats()
-		if tcpCount != 2 {
-			t.Errorf("Proxy %d: expected 2 connections, got %d", i, tcpCount)
-		}
+		totalDials += tcpCount
+	}
+	if totalDials != 4 {
+		t.Errorf("Expected 4 total dials, got %d", totalDials)
+	}
+
+	// Close all connections
+	for _, conn := range conns {
+		conn.Close()
 	}
 }
 

@@ -55,6 +55,9 @@ type ProxyGroup struct {
 	// Health status
 	healthStatus []atomic.Bool
 	activeIndex  int32 // atomic index of current active proxy
+
+	// Active connection counters for LeastLoad policy
+	activeConns []atomic.Int32
 }
 
 // ProxyGroupConfig holds configuration for a proxy group
@@ -85,6 +88,7 @@ func NewProxyGroup(cfg *ProxyGroupConfig) *ProxyGroup {
 		checkTimeout:  cfg.CheckTimeout,
 		checkURL:      cfg.CheckURL,
 		healthStatus:  make([]atomic.Bool, len(cfg.Proxies)),
+		activeConns:   make([]atomic.Int32, len(cfg.Proxies)),
 	}
 
 	// Initialize all as unhealthy, let health check determine status
@@ -216,14 +220,35 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 		return g.proxies[idx%len(g.proxies)], idx % len(g.proxies), nil
 
 	case LeastLoad:
-		// For now, use round-robin as approximation
-		// TODO: Track active connections per proxy
-		idx := int(atomic.AddInt32(&g.current, 1) - 1)
-		return g.proxies[idx%len(g.proxies)], idx % len(g.proxies), nil
+		// Find proxy with least active connections
+		minConns := int32(-1)
+		selectedIdx := 0
+		for i := range g.proxies {
+			if !g.healthStatus[i].Load() {
+				continue // Skip unhealthy proxies
+			}
+			conns := g.activeConns[i].Load()
+			if minConns < 0 || conns < minConns {
+				minConns = conns
+				selectedIdx = i
+			}
+		}
+		return g.proxies[selectedIdx], selectedIdx, nil
 
 	default:
 		return g.proxies[0], 0, nil
 	}
+}
+
+// trackedConn wraps a net.Conn and decrements the active connection counter on Close
+type trackedConn struct {
+	net.Conn
+	counter *atomic.Int32
+}
+
+func (c *trackedConn) Close() error {
+	c.counter.Add(-1)
+	return c.Conn.Close()
 }
 
 // DialContext dials a TCP connection through the proxy group
@@ -263,15 +288,32 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 		return nil, err
 	}
 
+	// Increment active connection counter
+	g.activeConns[idx].Add(1)
+
 	conn, err := proxy.DialContext(ctx, metadata)
 	if err != nil {
+		// Decrement on failure
+		g.activeConns[idx].Add(-1)
 		// Mark as unhealthy
 		g.healthStatus[idx].Store(false)
 		slog.Debug("Proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
 		return nil, err
 	}
 
-	return conn, nil
+	// Wrap connection to track active connections
+	return &trackedConn{Conn: conn, counter: &g.activeConns[idx]}, nil
+}
+
+// trackedPacketConn wraps a net.PacketConn and decrements the active connection counter on Close
+type trackedPacketConn struct {
+	net.PacketConn
+	counter *atomic.Int32
+}
+
+func (c *trackedPacketConn) Close() error {
+	c.counter.Add(-1)
+	return c.PacketConn.Close()
 }
 
 // DialUDP dials a UDP connection through the proxy group
@@ -281,8 +323,13 @@ func (g *ProxyGroup) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, err
 	}
 
+	// Increment active connection counter
+	g.activeConns[idx].Add(1)
+
 	pc, err := proxy.DialUDP(metadata)
 	if err != nil {
+		// Decrement on failure
+		g.activeConns[idx].Add(-1)
 		// Mark as unhealthy
 		g.healthStatus[idx].Store(false)
 		slog.Debug("Proxy UDP failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
@@ -293,7 +340,8 @@ func (g *ProxyGroup) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, err
 	}
 
-	return pc, nil
+	// Wrap connection to track active connections
+	return &trackedPacketConn{PacketConn: pc, counter: &g.activeConns[idx]}, nil
 }
 
 // Addr returns the group address (name)
