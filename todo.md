@@ -53,8 +53,8 @@
   - [x] TestProxyGroup_Mode
   - [x] TestSelectProxy_Failover
   - [x] TestSelectProxy_RoundRobin
-  - [ ] TestProxyGroup_Failover (пропущен - timing issues с health check)
-  - [ ] TestProxyGroup_Failover_OnConnectionFailure (пропущен)
+  - [x] TestProxyGroup_Failover (исправлен - timing issues решены через healthCheckOverride)
+  - [x] TestProxyGroup_Failover_OnConnectionFailure (исправлен - тест failover при ошибке dial)
 - [x] proxy/proxy.go - добавлен GetDialer() для тестирования
 
 ### Примечания по тестам
@@ -62,6 +62,11 @@
 - gVisor имеет нестабильный API между версиями
 - Тесты proxy покрывают критическую логику routing и load balancing
 - Все тесты проходят: `go test ./proxy/... ./stats/... ./cfg/...`
+
+### Исправления тестов (24.03.2026)
+- Добавлен интерфейс `healthCheckOverride` для тестирования health check без реальных подключений
+- Исправлен `DialContext` для Failover политики - теперь пытается подключиться к следующему прокси при ошибке
+- TestProxyGroup_Failover и TestProxyGroup_Failover_OnConnectionFailure теперь проходят
 
 ---
 
@@ -336,19 +341,18 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.18.0-perf (main)
-**Статус**: ✅ готов к использованию, все критические проблемы безопасности и производительности исправлены
+**Версия**: v3.18.1-tests (dev)
+**Статус**: ✅ готов к использованию, все тесты проходят, failover исправлен
 
 ### Статус веток
 ```
 main: a58685b refactor: export TCPWaitTimeout constant ✅
-dev:  a58685b синхронизирован с main ✅
+dev:  [local changes] исправлены тесты Failover и dialContext
 ```
 
 ### Текущие задачи (в работе)
 - HTTP/3 UDP proxying через QUIC datagrams (RFC 9221)
-- Пропущенные тесты: TestProxyGroup_Failover (timing issues)
-- Документация: ARCHITECTURE.md, godoc, QUICK_START.md
+- Документация: ARCHITECTURE.md, godoc, QUICK_START.md (не создаётся без запроса)
 
 ---
 
@@ -386,3 +390,8 @@ dev:  a58685b синхронизирован с main ✅
 - Router Cache Hit: 369.4 → 160.3 ns/op (**-57%**)
 - Аллокации: 6 → 3 allocs/op (**-50%**)
 - Metadata: 37.45 → 13.15 ns/op (**-65%**, 2.8x быстрее)
+
+### Выполнено исправлений тестов и Failover (24.03.2026):
+21. Исправлен DialContext для Failover политики - повторные попытки к здоровым прокси
+22. Добавлен интерфейс healthCheckOverride для тестирования
+23. TestProxyGroup_Failover и TestProxyGroup_Failover_OnConnectionFailure - проходят ✅

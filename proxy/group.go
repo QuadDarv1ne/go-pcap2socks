@@ -142,8 +142,18 @@ func (g *ProxyGroup) checkAllProxies() {
 	}
 }
 
+// healthCheckOverride is an optional interface for proxies to override health check
+type healthCheckOverride interface {
+	IsHealthCheckOK() bool
+}
+
 // checkProxyHealth checks if a single proxy is healthy
 func (g *ProxyGroup) checkProxyHealth(proxy Proxy) bool {
+	// Check if proxy has a custom health check override (for testing)
+	if hco, ok := proxy.(healthCheckOverride); ok {
+		return hco.IsHealthCheckOK()
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), g.checkTimeout)
 	defer cancel()
 
@@ -218,6 +228,36 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 
 // DialContext dials a TCP connection through the proxy group
 func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
+	if g.policy == Failover {
+		// For failover policy, try each proxy until one succeeds
+		startIdx := int(atomic.LoadInt32(&g.activeIndex))
+		for i := 0; i < len(g.proxies); i++ {
+			idx := (startIdx + i) % len(g.proxies)
+
+			if !g.healthStatus[idx].Load() {
+				continue // Skip unhealthy proxies
+			}
+
+			g.mu.RLock()
+			proxy := g.proxies[idx]
+			g.mu.RUnlock()
+
+			conn, err := proxy.DialContext(ctx, metadata)
+			if err == nil {
+				return conn, nil
+			}
+
+			// Mark as unhealthy and try next
+			g.healthStatus[idx].Store(false)
+			slog.Debug("Proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
+		}
+
+		// All proxies failed
+		g.updateActiveIndex()
+		return nil, fmt.Errorf("all proxies in failover group are unavailable")
+	}
+
+	// Non-failover policies (RoundRobin, LeastLoad)
 	proxy, idx, err := g.selectProxy()
 	if err != nil {
 		return nil, err
@@ -225,13 +265,9 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 
 	conn, err := proxy.DialContext(ctx, metadata)
 	if err != nil {
-		// Mark as unhealthy and try next
+		// Mark as unhealthy
 		g.healthStatus[idx].Store(false)
 		slog.Debug("Proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
-
-		if g.policy == Failover {
-			g.updateActiveIndex()
-		}
 		return nil, err
 	}
 

@@ -13,13 +13,21 @@ import (
 
 // mockProxyWithHealth allows controlling health check result
 type mockProxyWithHealth struct {
-	mu           sync.Mutex
-	dialTCPCount int
-	dialUDPCount int
-	failDial     bool
-	failUDP      bool
-	addr         string
-	healthCheck  func() bool
+	mu            sync.Mutex
+	dialTCPCount  int
+	dialUDPCount  int
+	failDial      bool
+	failUDP       bool
+	healthCheckOK *bool // If non-nil, use this value for health check (avoids DialContext call)
+	addr          string
+}
+
+// IsHealthCheckOK implements healthCheckOverride interface for testing
+func (m *mockProxyWithHealth) IsHealthCheckOK() bool {
+	if m.healthCheckOK == nil {
+		return true // Default to healthy if not specified
+	}
+	return *m.healthCheckOK
 }
 
 func (m *mockProxyWithHealth) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
@@ -104,12 +112,8 @@ func TestNewProxyGroup(t *testing.T) {
 	}
 }
 
-// TestProxyGroup_Failover is skipped due to complex health check interactions
-// The test demonstrates correct failover behavior but has timing issues
-func TestProxyGroup_Failover_Skipped(t *testing.T) {
-	t.Skip("Skipped due to health check timing issues - manual verification recommended")
-	
-	// Test implementation remains for reference
+// TestProxyGroup_Failover tests failover behavior with health checks disabled
+func TestProxyGroup_Failover(t *testing.T) {
 	proxy1 := &mockProxyWithHealth{addr: "proxy1://"}
 	proxy2 := &mockProxyWithHealth{addr: "proxy2://"}
 	proxy3 := &mockProxyWithHealth{addr: "proxy3://"}
@@ -120,11 +124,11 @@ func TestProxyGroup_Failover_Skipped(t *testing.T) {
 		Name:          "roundrobin-group",
 		Proxies:       proxies,
 		Policy:        RoundRobin,
-		CheckInterval: 1 * time.Hour, // Disable health checks
+		CheckInterval: 0, // Disable health checks for deterministic testing
 	}
 
 	group := NewProxyGroup(cfg)
-	group.Stop() // Stop health check to avoid interference
+	defer group.Stop()
 
 	// Reset counter
 	atomic.StoreInt32(&group.current, 0)
@@ -243,9 +247,65 @@ func TestProxyGroup_DialUDP(t *testing.T) {
 	}
 }
 
-// TestProxyGroup_Failover_OnConnectionFailure is skipped due to mock GetStats() timing issues
+// TestProxyGroup_Failover_OnConnectionFailure tests failover when connection fails
 func TestProxyGroup_Failover_OnConnectionFailure(t *testing.T) {
-	t.Skip("Skipped due to mock GetStats() timing issues - selectProxy logic is tested in TestSelectProxy_Failover")
+	// Create mock proxies with health check override
+	healthy := true
+	// proxy1 reports healthy but fails on dial
+	proxy1 := &mockProxyWithHealth{
+		addr: "proxy1://",
+		failDial: true,
+		healthCheckOK: &healthy,
+	}
+	// proxy2 is healthy and succeeds
+	proxy2 := &mockProxyWithHealth{
+		addr: "proxy2://",
+		healthCheckOK: &healthy,
+	}
+	proxy3 := &mockProxyWithHealth{
+		addr: "proxy3://",
+		healthCheckOK: &healthy,
+	}
+
+	proxies := []Proxy{proxy1, proxy2, proxy3}
+
+	cfg := &ProxyGroupConfig{
+		Name:          "failover-group",
+		Proxies:       proxies,
+		Policy:        Failover,
+		CheckInterval: time.Hour, // Disable periodic health checks during test
+	}
+
+	group := NewProxyGroup(cfg)
+	defer group.Stop()
+
+	// Wait for initial health check to complete
+	time.Sleep(100 * time.Millisecond)
+
+	metadata := &M.Metadata{
+		Network: M.TCP,
+		SrcIP:   net.ParseIP("192.168.137.100"),
+		SrcPort: 12345,
+		DstIP:   net.ParseIP("8.8.8.8"),
+		DstPort: 443,
+	}
+
+	// Should failover to proxy2 when proxy1.DialContext fails
+	conn, err := group.DialContext(context.Background(), metadata)
+	if err != nil {
+		t.Fatalf("Failover connection failed: %v", err)
+	}
+	defer conn.Close()
+
+	// Verify failover: proxy1 tried once, proxy2 used for actual connection
+	tcp1, _ := proxy1.GetStats()
+	tcp2, _ := proxy2.GetStats()
+	if tcp1 != 1 {
+		t.Errorf("Expected proxy1 to be tried once (then fail), got %d dials", tcp1)
+	}
+	if tcp2 < 1 {
+		t.Errorf("Expected proxy2 to be dialed at least once after failover, got %d dials", tcp2)
+	}
 }
 
 func TestProxyGroup_EmptyGroup(t *testing.T) {
