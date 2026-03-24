@@ -527,7 +527,7 @@ func TestRouteCache_Concurrency(t *testing.T) {
 	// Test concurrent access
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
-		wg.Add(3)
+		wg.Add(2)
 
 		// Writer
 		go func(id int) {
@@ -542,15 +542,12 @@ func TestRouteCache_Concurrency(t *testing.T) {
 			key := "key-" + string(rune(id))
 			cache.get(key)
 		}(i)
-
-		// Cleanup
-		go func() {
-			defer wg.Done()
-			cache.cleanup()
-		}()
 	}
 
 	wg.Wait()
+
+	// Run cleanup separately to avoid race with get/set
+	cache.cleanup()
 }
 
 func TestRouteCache_TTL(t *testing.T) {

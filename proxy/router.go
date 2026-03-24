@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -35,9 +36,9 @@ type routeCache struct {
 	entries    map[string]*routeCacheEntry
 	maxSize    int
 	ttl        time.Duration
-	hits       uint64
-	misses     uint64
-	keyPool    sync.Pool // Pool for byte slice keys
+	hits       atomic.Uint64 // atomic counter for hits
+	misses     atomic.Uint64 // atomic counter for misses
+	keyPool    sync.Pool     // Pool for byte slice keys
 }
 
 func newRouteCache(maxSize int, ttl time.Duration) *routeCache {
@@ -59,16 +60,16 @@ func (c *routeCache) get(key string) (string, bool) {
 
 	entry, exists := c.entries[key]
 	if !exists {
-		c.misses++
+		c.misses.Add(1)
 		return "", false
 	}
 
 	if time.Now().After(entry.expiresAt) {
-		c.misses++
+		c.misses.Add(1)
 		return "", false
 	}
 
-	c.hits++
+	c.hits.Add(1)
 	return entry.outboundTag, true
 }
 
@@ -108,9 +109,7 @@ func (c *routeCache) cleanup() {
 }
 
 func (c *routeCache) stats() (hits, misses uint64) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.hits, c.misses
+	return c.hits.Load(), c.misses.Load()
 }
 
 // getKeyBuilder returns a byte slice from pool for building cache key

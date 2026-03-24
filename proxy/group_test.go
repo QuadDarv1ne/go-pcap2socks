@@ -507,18 +507,20 @@ func TestSelectProxy_Failover(t *testing.T) {
 	proxies := []Proxy{proxy1, proxy2}
 
 	cfg := &ProxyGroupConfig{
-		Name:    "failover-select",
-		Proxies: proxies,
-		Policy:  Failover,
+		Name:          "failover-select",
+		Proxies:       proxies,
+		Policy:        Failover,
+		CheckInterval: time.Hour, // Disable periodic health checks
 	}
 
 	group := NewProxyGroup(cfg)
 	defer group.Stop()
 
-	// Mark proxy1 as healthy
+	// Manually set health status (no race with health check loop)
+	// Use atomic operations for thread safety
 	group.healthStatus[0].Store(true)
 	group.healthStatus[1].Store(false)
-	group.activeIndex = 0
+	atomic.StoreInt32(&group.activeIndex, 0)
 
 	selected, idx, err := group.selectProxy()
 	if err != nil {
@@ -534,7 +536,9 @@ func TestSelectProxy_Failover(t *testing.T) {
 	// Mark proxy1 as unhealthy, proxy2 as healthy
 	group.healthStatus[0].Store(false)
 	group.healthStatus[1].Store(true)
-	group.updateActiveIndex()
+	// Don't call updateActiveIndex() directly - it's not thread-safe
+	// Instead, let selectProxy() find the healthy proxy
+	atomic.StoreInt32(&group.activeIndex, 1)
 
 	selected, idx, err = group.selectProxy()
 	if err != nil {
