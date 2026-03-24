@@ -10,140 +10,201 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var (
-	wsUpgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		CheckOrigin:     func(r *http.Request) bool { return true },
-	}
-
-	wsClients   = make(map[*websocket.Conn]bool)
-	wsClientsMu sync.RWMutex
-)
-
-// WSMessage represents a WebSocket message
-type WSMessage struct {
-	Type      string      `json:"type"`
-	Timestamp string      `json:"timestamp"`
-	Data      interface{} `json:"data"`
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all origins for local use
+	},
 }
 
-// handleWebSocket upgrades HTTP connection to WebSocket
-func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := wsUpgrader.Upgrade(w, r, nil)
+// WebSocketClient represents a connected WebSocket client
+type WebSocketClient struct {
+	conn     *websocket.Conn
+	send     chan []byte
+	lastPing time.Time
+}
+
+// WebSocketHub manages WebSocket connections
+type WebSocketHub struct {
+	mu       sync.RWMutex
+	clients  map[*WebSocketClient]bool
+	broadcast chan []byte
+	register   chan *WebSocketClient
+	unregister chan *WebSocketClient
+	stopChan   chan struct{}
+}
+
+// NewWebSocketHub creates a new WebSocket hub
+func NewWebSocketHub() *WebSocketHub {
+	return &WebSocketHub{
+		clients:    make(map[*WebSocketClient]bool),
+		broadcast:  make(chan []byte, 256),
+		register:   make(chan *WebSocketClient),
+		unregister: make(chan *WebSocketClient),
+		stopChan:   make(chan struct{}),
+	}
+}
+
+// Run starts the hub's main loop
+func (h *WebSocketHub) Run() {
+	for {
+		select {
+		case client := <-h.register:
+			h.mu.Lock()
+			h.clients[client] = true
+			h.mu.Unlock()
+			slog.Debug("WebSocket client connected", "total", len(h.clients))
+
+		case client := <-h.unregister:
+			h.mu.Lock()
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+			h.mu.Unlock()
+			slog.Debug("WebSocket client disconnected", "total", len(h.clients))
+
+		case message := <-h.broadcast:
+			h.mu.RLock()
+			for client := range h.clients {
+				select {
+				case client.send <- message:
+				default:
+					// Client buffer full, disconnect
+					close(client.send)
+					delete(h.clients, client)
+				}
+			}
+			h.mu.RUnlock()
+
+		case <-h.stopChan:
+			h.mu.Lock()
+			for client := range h.clients {
+				close(client.send)
+			}
+			h.clients = make(map[*WebSocketClient]bool)
+			h.mu.Unlock()
+			return
+		}
+	}
+}
+
+// Stop stops the hub
+func (h *WebSocketHub) Stop() {
+	close(h.stopChan)
+}
+
+// Broadcast sends a message to all connected clients
+func (h *WebSocketHub) Broadcast(data interface{}) {
+	message, err := json.Marshal(data)
+	if err != nil {
+		slog.Error("WebSocket broadcast marshal error", "err", err)
+		return
+	}
+
+	select {
+	case h.broadcast <- message:
+	default:
+		// Broadcast channel full
+	}
+}
+
+// HandleWebSocket handles WebSocket connections
+func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("WebSocket upgrade error", "err", err)
 		return
 	}
 
-	// Register client
-	wsClientsMu.Lock()
-	wsClients[conn] = true
-	wsClientsMu.Unlock()
+	client := &WebSocketClient{
+		conn:     conn,
+		send:     make(chan []byte, 256),
+		lastPing: time.Now(),
+	}
 
-	// Send initial status
-	s.sendWSMessage(conn, "status", s.getStatusData())
+	s.wsHub.register <- client
 
-	// Handle client messages
-	go s.handleWSMessages(conn)
+	// Start ping/pong heartbeat
+	go s.wsHub.runPingPong(client)
 
-	// Send periodic updates
-	s.sendWSUpdates(conn)
+	// Start write pump
+	go s.wsHub.writePump(client)
+
+	// Start read pump (handle client messages)
+	go s.wsHub.readPump(client)
 }
 
-func (s *Server) handleWSMessages(conn *websocket.Conn) {
+func (h *WebSocketHub) runPingPong(client *WebSocketClient) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+			client.lastPing = time.Now()
+		case <-h.stopChan:
+			return
+		}
+	}
+}
+
+func (h *WebSocketHub) writePump(client *WebSocketClient) {
 	defer func() {
-		wsClientsMu.Lock()
-		delete(wsClients, conn)
-		wsClientsMu.Unlock()
-		conn.Close()
+		client.conn.Close()
 	}()
 
 	for {
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			break
-		}
+		select {
+		case message, ok := <-client.send:
+			if !ok {
+				// Hub closed channel
+				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
 
-		var msg struct {
-			Type   string          `json:"type"`
-			Action string          `json:"action"`
-			Data   json.RawMessage `json:"data"`
-		}
-
-		if err := json.Unmarshal(message, &msg); err != nil {
-			continue
-		}
-
-		// Handle different message types
-		switch msg.Action {
-		case "start":
-			s.handleStart(nil, nil)
-			s.sendWSMessage(conn, "status", s.getStatusData())
-		case "stop":
-			s.handleStop(nil, nil)
-			s.sendWSMessage(conn, "status", s.getStatusData())
-		case "refresh":
-			s.sendWSMessage(conn, "status", s.getStatusData())
-		}
-	}
-}
-
-func (s *Server) sendWSUpdates(conn *websocket.Conn) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		if !wsClients[conn] {
+			if err := client.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				return
+			}
+		case <-h.stopChan:
 			return
 		}
-
-		s.sendWSMessage(conn, "status", s.getStatusData())
-		s.sendWSMessage(conn, "traffic", s.getTraffic())
 	}
 }
 
-func (s *Server) sendWSMessage(conn *websocket.Conn, msgType string, data interface{}) {
-	msg := WSMessage{
-		Type:      msgType,
-		Timestamp: time.Now().Format(time.RFC3339),
-		Data:      data,
-	}
+func (h *WebSocketHub) readPump(client *WebSocketClient) {
+	defer func() {
+		h.unregister <- client
+		client.conn.Close()
+	}()
 
-	wsClientsMu.RLock()
-	defer wsClientsMu.RUnlock()
+	for {
+		select {
+		case <-h.stopChan:
+			return
+		default:
+			_, message, err := client.conn.ReadMessage()
+			if err != nil {
+				return
+			}
 
-	if err := conn.WriteJSON(msg); err != nil {
-		slog.Debug("WebSocket write error", "err", err)
-	}
-}
+			// Handle client messages (e.g., subscribe/unsubscribe)
+			var msg struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(message, &msg); err != nil {
+				continue
+			}
 
-// BroadcastWSMessage sends a message to all connected clients
-func (s *Server) BroadcastWSMessage(msgType string, data interface{}) {
-	msg := WSMessage{
-		Type:      msgType,
-		Timestamp: time.Now().Format(time.RFC3339),
-		Data:      data,
-	}
-
-	wsClientsMu.RLock()
-	defer wsClientsMu.RUnlock()
-
-	for conn := range wsClients {
-		if err := conn.WriteJSON(msg); err != nil {
-			slog.Debug("WebSocket broadcast error", "err", err)
+			// Process message types
+			switch msg.Type {
+			case "ping":
+				client.conn.WriteMessage(websocket.PongMessage, []byte("pong"))
+			}
 		}
-	}
-}
-
-func (s *Server) getStatusData() interface{} {
-	return Status{
-		Running:        s.enabled,
-		ProxyMode:      "socks5",
-		Devices:        s.getDevices(),
-		Traffic:        s.getTraffic(),
-		Uptime:         time.Since(startTime).String(),
-		StartTime:      startTime,
-		SocksAvailable: true,
 	}
 }

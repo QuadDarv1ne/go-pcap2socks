@@ -57,6 +57,9 @@ var configData string
 // asyncHandler holds the async logger for graceful shutdown
 var asyncHandler *asynclogger.AsyncHandler
 
+// _apiServer is the global API server instance
+var _apiServer *api.Server
+
 func main() {
 	// Setup logging - check SLOG_LEVEL env var
 	logLevel := slog.LevelInfo // Default to info
@@ -479,7 +482,10 @@ func main() {
 		)
 
 		// Create API server with global stats store and profile manager
-		apiServer := api.NewServer(_statsStore, _profileManager, _upnpManager)
+		_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager)
+
+		// Start real-time WebSocket updates (1 second interval)
+		_apiServer.StartRealTimeUpdates(1 * time.Second)
 
 		// Setup HTTPS if configured
 		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
@@ -534,9 +540,9 @@ func main() {
 						}
 					}()
 				}
-				
-				if err := http.ListenAndServeTLS(fmt.Sprintf(":%d", config.API.Port), 
-					httpsCfg.CertFile, httpsCfg.KeyFile, apiServer); err != nil {
+
+				if err := http.ListenAndServeTLS(fmt.Sprintf(":%d", config.API.Port),
+					httpsCfg.CertFile, httpsCfg.KeyFile, _apiServer); err != nil {
 					slog.Error("HTTPS server error", slog.Any("err", err))
 				}
 			} else {
@@ -549,7 +555,7 @@ func main() {
 				port = config.API.Port
 			}
 			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
-			if err := http.ListenAndServe(fmt.Sprintf(":%d", port), apiServer); err != nil {
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", port), _apiServer); err != nil {
 				slog.Error("HTTP server error", slog.Any("err", err))
 			}
 		}
@@ -862,6 +868,12 @@ func Stop() {
 	if _arpMonitor != nil {
 		_arpMonitor.Stop()
 		slog.Info("ARP monitor stopped")
+	}
+
+	// Stop WebSocket real-time updates
+	if _apiServer != nil {
+		_apiServer.StopRealTimeUpdates()
+		slog.Info("WebSocket real-time updates stopped")
 	}
 
 	// Stop Telegram bot

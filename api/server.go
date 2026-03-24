@@ -29,6 +29,7 @@ type Server struct {
 	configPath  string
 	authToken   string // Optional authentication token
 	rateLimiter *rateLimiter
+	wsHub       *WebSocketHub
 	mu          sync.RWMutex
 	enabled     bool
 }
@@ -79,6 +80,10 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	// Initialize rate limiter: 100 requests per minute per IP
 	rateLimiter := newRateLimiter(100, 1*time.Minute)
 
+	// Initialize WebSocket hub
+	wsHub := NewWebSocketHub()
+	go wsHub.Run()
+
 	s := &Server{
 		mux:         http.NewServeMux(),
 		statsStore:  statsStore,
@@ -87,6 +92,7 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 		metrics:     metricsCollector,
 		configPath:  cfgFile,
 		rateLimiter: rateLimiter,
+		wsHub:       wsHub,
 		enabled:     true,
 	}
 
@@ -1118,4 +1124,65 @@ var getDHCPLeases func() []map[string]interface{}
 // SetGetDHCPLeasesFn sets the function to get DHCP leases
 func SetGetDHCPLeasesFn(fn func() []map[string]interface{}) {
 	getDHCPLeases = fn
+}
+
+// handleWebSocket handles WebSocket connections for real-time updates
+func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	s.HandleWebSocket(w, r)
+}
+
+// StartRealTimeUpdates starts broadcasting real-time stats to WebSocket clients
+func (s *Server) StartRealTimeUpdates(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for range ticker.C {
+			s.broadcastStats()
+		}
+	}()
+}
+
+// StopRealTimeUpdates stops the real-time updates
+func (s *Server) StopRealTimeUpdates() {
+	if s.wsHub != nil {
+		s.wsHub.Stop()
+	}
+}
+
+// broadcastStats broadcasts current stats to all WebSocket clients
+func (s *Server) broadcastStats() {
+	if s.wsHub == nil {
+		return
+	}
+
+	// Get current stats
+	traffic := s.getTraffic()
+	devices := s.getDevices()
+
+	// Build stats message
+	stats := map[string]interface{}{
+		"type":      "stats",
+		"timestamp": time.Now().Unix(),
+		"traffic": map[string]uint64{
+			"total":    traffic.Total,
+			"upload":   traffic.Upload,
+			"download": traffic.Download,
+		},
+		"devices": map[string]int{
+			"total":     len(devices),
+			"connected": countConnected(devices),
+		},
+	}
+
+	s.wsHub.Broadcast(stats)
+}
+
+// countConnected counts connected devices
+func countConnected(devices []Device) int {
+	count := 0
+	for _, d := range devices {
+		if d.Connected {
+			count++
+		}
+	}
+	return count
 }
