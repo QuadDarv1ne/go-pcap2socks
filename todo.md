@@ -352,18 +352,19 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.18.1-tests (dev)
-**Статус**: ✅ готов к использованию, все тесты проходят, failover исправлен
+**Версия**: v3.19.0-leastload (main)
+**Статус**: ✅ готов к использованию, LeastLoad с подсчётом подключений реализован
 
 ### Статус веток
 ```
-main: a58685b refactor: export TCPWaitTimeout constant ✅
-dev:  [local changes] исправлены тесты Failover и dialContext
+main: 44f65ea feat: реализовать LeastLoad с подсчётом активных подключений ✅
+dev:  44f65ea синхронизирован с main ✅
 ```
 
 ### Текущие задачи (в работе)
 - HTTP/3 UDP proxying через QUIC datagrams (RFC 9221)
 - Документация: ARCHITECTURE.md, godoc, QUICK_START.md (не создаётся без запроса)
+- Hotkey integration (требуется Windows GUI/tray)
 
 ---
 
