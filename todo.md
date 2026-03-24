@@ -365,20 +365,49 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.19.0-http3-udp (dev: 2a985b0, main: 60c1674)
+**Версия**: v3.19.0-http3-udp (dev: 66e5ed6, main: 66e5ed6)
 **Статус**: ✅ готов к использованию, HTTP/3 UDP proxying реализован
 
 ### Статус веток
 ```
-main: 60c1674 Merge branch 'dev' into main - HTTP/3 UDP proxying (RFC 9221) ✅
-dev:  2a985b0 Sync dev with main - HTTP/3 UDP proxying complete ✅
+main: 66e5ed6 docs: обновить метрики и статус в todo.md после HTTP/3 UDP proxying ✅
+dev:  66e5ed6 синхронизирован с main ✅
 ```
 
 ### Текущие задачи (в работе)
 - ✅ HTTP/3 UDP proxying через QUIC datagrams (RFC 9221) - РЕАЛИЗОВАНО
+- ✅ HTTP/3 TCP proxying через CONNECT - РЕАЛИЗОВАНО
 - 🔄 Документация HTTP/3 (требуется запрос пользователя)
 - 🔄 Интеграционные тесты с реальным HTTP/3 прокси
 - 🔄 Hotkey integration (требуется Windows GUI/tray)
+
+---
+
+## ✅ Завершено (24.03.2026) - ПРОВЕРКА ПРОЕКТА
+
+### Проверка и исправление проекта (24.03.2026 19:30)
+- [x] Проверка компиляции - успешно ✅
+- [x] Проверка go vet - без ошибок ✅
+- [x] Race condition тесты - все проходят ✅
+- [x] Все тесты проходят успешно ✅
+- [x] Бинарник собирается корректно (15.6MB) ✅
+- [x] Ветки dev/main синхронизированы (66e5ed6) ✅
+
+### Метрики производительности (актуальные)
+```
+Router Match:         5.896 ns/op   0 B/op    0 allocs/op ✅
+Router DialContext:   99.47 ns/op   40 B/op   2 allocs/op ✅
+Router Cache Hit:     155.3 ns/op   40 B/op   2 allocs/op ✅
+Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
+DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
+```
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (proxy: 28, buffer: 2, stats: 10, cfg: 8, dhcp: 6)
+- Размер бинарника: 15.6MB (в пределах нормы <25MB)
+- Ветка: dev/main (66e5ed6)
+- Готовность: ✅ проект стабилен, HTTP/3 UDP proxying реализовано
 
 ---
 

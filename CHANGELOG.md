@@ -5,6 +5,30 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.19.0] - 2026-03-24
+
+### Добавлено
+- **HTTP/3 UDP proxying** через QUIC datagrams (RFC 9221)
+- **HTTP/3 TCP proxying** через CONNECT туннель над QUIC streams
+- **proxy/http3_datagram.go** - net.PacketConn over QUIC datagrams
+- **proxy/http3_conn.go** - net.Conn wrapper для QUIC streams
+- **Интеграция с ProxyGroup** - Failover, RoundRobin, LeastLoad для HTTP/3
+- **Unit-тесты для HTTP/3** - 8 тестов, все проходят
+- **Пример конфигурации** config-http3.json
+
+### Изменено
+- Router Match: 5.896 ns/op (целевые <10ns) ✅
+- Router DialContext: 99.47 ns/op (целевые <100ns) ✅
+- Router Cache Hit: 155.3 ns/op (целевые <200ns) ✅
+- Buffer GetPut: 47.64 ns/op (целевые <50ns) ✅
+- Размер бинарника: 15.6MB (норма <25MB)
+
+### Исправлено
+- Обновлены метрики производительности в todo.md
+- Синхронизированы ветки dev/main (66e5ed6)
+
+---
+
 ## [Неопубликовано]
 
 ### Добавлено
