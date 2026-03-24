@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/env"
 )
 
 func Exists(filePath string) bool {
@@ -30,6 +32,9 @@ func Load(filePath string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
+
+	// Resolve environment variables in sensitive fields
+	config.resolveEnv()
 
 	if err := config.Normalize(); err != nil {
 		return nil, fmt.Errorf("normalize config: %w", err)
@@ -68,6 +73,17 @@ type PCAP struct {
 	Network          string `json:"network"`
 	LocalIP          string `json:"localIP"`
 	LocalMAC         string `json:"localMAC"`
+}
+
+// resolveEnv replaces ${VAR_NAME} patterns with environment variable values
+// in sensitive configuration fields like tokens and webhooks
+func (c *Config) resolveEnv() {
+	if c.Telegram != nil {
+		c.Telegram.Token = env.Resolve(c.Telegram.Token)
+	}
+	if c.Discord != nil {
+		c.Discord.WebhookURL = env.Resolve(c.Discord.WebhookURL)
+	}
 }
 
 func (c *Config) Normalize() error {

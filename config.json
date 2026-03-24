@@ -6,7 +6,7 @@
     "mtu": 1486
   },
   "dhcp": {
-    "enabled": true,
+    "enabled": false,
     "poolStart": "192.168.137.10",
     "poolEnd": "192.168.137.250",
     "leaseDuration": 86400
@@ -27,22 +27,23 @@
     {"tag": "dns-out", "dns": {}}
   ],
   "telegram": {
-    "token": "",
-    "chat_id": ""
+    "token": "${TELEGRAM_TOKEN}",
+    "chat_id": "${TELEGRAM_CHAT_ID}"
   },
   "discord": {
-    "webhook_url": ""
+    "webhook_url": "${DISCORD_WEBHOOK_URL}",
+    "username": "pcap2socks"
   },
   "hotkey": {
     "enabled": true,
     "toggle": "Ctrl+Alt+P"
   },
   "windivert": {
-    "enabled": true,
+    "enabled": false,
     "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
   },
   "upnp": {
-    "enabled": true,
+    "enabled": false,
     "autoForward": true,
     "leaseDuration": 3600,
     "gamePresets": {
