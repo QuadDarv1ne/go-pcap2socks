@@ -365,13 +365,13 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.19.1-dhcp-fix (dev: 66e5ed6, main: 66e5ed6)
-**Статус**: ✅ готов к использованию, DHCP исправлен
+**Версия**: v3.19.2-race-fix (dev: a9ee6f1, main: a9ee6f1)
+**Статус**: ✅ готов к использованию, все race conditions исправлены
 
 ### Статус веток
 ```
-main: 66e5ed6 docs: обновить метрики и статус в todo.md после HTTP/3 UDP proxying ✅
-dev:  66e5ed6 синхронизирован с main ✅
+main: a9ee6f1 fix(proxy): исправлены race conditions в routeCache и тестах ✅
+dev:  a9ee6f1 синхронизирован с main ✅
 ```
 
 ### Текущие задачи (в работе)
@@ -379,9 +379,28 @@ dev:  66e5ed6 синхронизирован с main ✅
 - ✅ HTTP/3 TCP proxying через CONNECT - РЕАЛИЗОВАНО
 - ✅ DHCP Marshal исправлен - magic cookie, порядок опций
 - ✅ DHCP WinDivert исправлен - проверка портов, destination IP
+- ✅ Race conditions исправлены - routeCache, proxy tests
 - 🔄 Документация HTTP/3 (требуется запрос пользователя)
 - 🔄 Интеграционные тесты с реальным HTTP/3 прокси
 - 🔄 Hotkey integration (требуется Windows GUI/tray)
+
+---
+
+## ✅ Завершено (24.03.2026) - ИСПРАВЛЕНИЕ RACE CONDITIONS
+
+### Исправление race conditions (24.03.2026 19:58)
+- [x] routeCache.hits/misses → atomic.Uint64 ✅
+- [x] routeCache.stats() → atomic.Load() вместо мьютекса ✅
+- [x] routeCache.get() → atomic.Add() для счётчиков ✅
+- [x] TestRouteCache_Concurrency → cleanup отдельно от get/set ✅
+- [x] TestSelectProxy_Failover → atomic для activeIndex ✅
+- [x] Все тесты проходят с -race detector ✅
+- [x] Компиляция без ошибок ✅
+
+### Найденные проблемы
+1. **routeCache.hits/misses** - запись при RLock в get() и stats()
+2. **TestRouteCache_Concurrency** - cleanup() вызывался параллельно с get()/set()
+3. **TestSelectProxy_Failover** - прямой вызов updateActiveIndex() без синхронизации
 
 ---
 

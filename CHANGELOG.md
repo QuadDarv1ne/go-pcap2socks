@@ -5,6 +5,17 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.19.2] - 2026-03-24
+
+### Исправлено
+- **proxy/router.go** - routeCache.hits/misses теперь atomic.Uint64
+- **proxy/router.go** - routeCache.stats() использует atomic.Load()
+- **proxy/router.go** - routeCache.get() использует atomic.Add() для счётчиков
+- **proxy/router_test.go** - TestRouteCache_Concurrency исправлен (cleanup отдельно)
+- **proxy/group_test.go** - TestSelectProxy_Failover исправлен (atomic для activeIndex)
+
+---
+
 ## [3.19.1] - 2026-03-24
 
 ### Исправлено
