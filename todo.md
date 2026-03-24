@@ -77,24 +77,37 @@
 
 ---
 
-## 🔥 В работе
+## ✅ Завершено (24.03.2026) - HTTP/3 UDP Proxying
 
-### HTTP/3 (QUIC) Support - TCP PROXYING РЕАЛИЗОВАН ✅
+### HTTP/3 (QUIC) Support - TCP/UDP PROXYING РЕАЛИЗОВАНО ✅
 - [x] Добавлена зависимость quic-go v0.59.0
 - [x] Создан proxy/http3.go с базовой структурой
 - [x] Добавлен ModeHTTP3 в proxy/mode.go
 - [x] Добавлен OutboundHTTP3 в cfg/config.go
 - [x] Интеграция в main.go для создания HTTP/3 прокси
-- [x] Unit-тесты для HTTP/3 (5 тестов, все проходят)
+- [x] Unit-тесты для HTTP/3 (8 тестов, все проходят)
 - [x] Пример конфигурации config-http3.json
 - [x] Реализация TCP proxying через HTTP/3 CONNECT (proxy/http3_conn.go)
 - [x] http3Conn wrapper для QUIC streams (реализует net.Conn)
-- [ ] Реализация UDP proxying через QUIC datagrams
-- [ ] Интеграция с ProxyGroup для failover
+- [x] Реализация UDP proxying через QUIC datagrams (RFC 9221)
+  - [x] Создан http3_datagram.go с quicDatagramConn (net.PacketConn)
+  - [x] Включена поддержка EnableDatagrams в quic.Config
+  - [x] DialUDP устанавливает QUIC соединение и создаёт datagram conn
+  - [x] Кодирование UDP адресата в datagram payload (port + IP + данные)
+  - [x] quicDatagramConn реализует ReadFrom/WriteTo для net.PacketConn
+  - [x] Интеграция с ProxyGroup (RoundRobin, LeastLoad, Failover)
+  - [x] Тест ProxyGroupIntegration для HTTP/3
 - [ ] Документация по использованию HTTP/3
 - [ ] Интеграционные тесты с реальным HTTP/3 прокси-сервером
 
-**Статус**: TCP proxying через HTTP/3 CONNECT реализован. DialContext открывает QUIC соединение, создаёт stream и устанавливает CONNECT туннель. UDP proxying требует QUIC datagrams (RFC 9221).
+**Статус**: TCP и UDP proxying через HTTP/3 полностью реализованы.
+- TCP: CONNECT туннель над QUIC streams (http3_conn.go)
+- UDP: QUIC datagrams (RFC 9221) с кодированием адреса (port + IP + payload)
+- ProxyGroup: полная интеграция с load balancing (Failover, RoundRobin, LeastLoad)
+
+---
+
+## 🔥 В работе
 
 ---
 
