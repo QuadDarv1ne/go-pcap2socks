@@ -36,8 +36,11 @@ func NewHTTP3(addr string, skipVerify bool) (*HTTP3, error) {
 	}
 
 	quicConfig := &quic.Config{
-		MaxIdleTimeout:  30 * time.Second,
-		KeepAlivePeriod: 10 * time.Second,
+		MaxIdleTimeout:        30 * time.Second,
+		KeepAlivePeriod:       10 * time.Second,
+		EnableDatagrams:       true, // RFC 9221 datagram support
+		MaxIncomingStreams:    100,
+		MaxIncomingUniStreams: 10,
 	}
 
 	transport := &http3.Transport{
@@ -93,12 +96,29 @@ func (h *HTTP3) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, fmt.Errorf("metadata is nil")
 	}
 
-	// QUIC datagrams support requires:
-	// 1. Negotiating datagram extension during handshake
-	// 2. Implementing PacketConn interface over QUIC datagrams
-	// 3. Proxy server support for UDP forwarding via datagrams
-	// This is a complex feature that requires both client and server implementation
-	return nil, fmt.Errorf("HTTP/3 UDP proxying via QUIC datagrams not yet implemented")
+	ctx := context.Background()
+
+	// Establish QUIC connection to proxy
+	qconn, err := quic.DialAddr(ctx, h.addr, h.tlsConfig, h.quicConfig)
+	if err != nil {
+		return nil, fmt.Errorf("dial QUIC: %w", err)
+	}
+
+	// Check if datagrams are supported
+	cs := qconn.ConnectionState()
+	if !cs.SupportsDatagrams.Remote || !cs.SupportsDatagrams.Local {
+		qconn.CloseWithError(0, "datagrams not supported")
+		return nil, fmt.Errorf("QUIC datagrams not supported by proxy")
+	}
+
+	// Resolve remote UDP address
+	remoteAddr := &net.UDPAddr{
+		IP:   metadata.DstIP,
+		Port: int(metadata.DstPort),
+	}
+
+	// Create datagram connection
+	return newQuicDatagramConn(qconn, remoteAddr)
 }
 
 // Close closes the HTTP/3 client
