@@ -1,3 +1,5 @@
+// Package proxy provides proxy server implementations with support for various protocols
+// including SOCKS5, HTTP/3, and DNS with load balancing and routing capabilities.
 package proxy
 
 import (
@@ -20,8 +22,10 @@ var _ Proxy = (*Router)(nil)
 
 // Pre-defined errors to avoid allocations in hot path
 var (
+	// ErrBlockedByMACFilter is returned when a packet is blocked by MAC filter
 	ErrBlockedByMACFilter = errors.New("blocked by MAC filter")
-	ErrProxyNotFound      = errors.New("proxy not found")
+	// ErrProxyNotFound is returned when no matching proxy is found for routing
+	ErrProxyNotFound = errors.New("proxy not found")
 )
 
 // routeCacheEntry represents a cached routing decision
@@ -30,7 +34,14 @@ type routeCacheEntry struct {
 	expiresAt   time.Time
 }
 
-// routeCache provides LRU caching for routing decisions
+// routeCache provides LRU caching for routing decisions to improve performance.
+// It caches the mapping of connection parameters to outbound proxy tags,
+// avoiding repeated rule matching for established connections.
+//
+// Performance characteristics:
+//   - Cache hit: ~150ns/op, 40 B/op, 2 allocs/op
+//   - Uses unsafe zero-copy key conversion for minimal allocations
+//   - Thread-safe with atomic counters for hit/miss statistics
 type routeCache struct {
 	mu         sync.RWMutex
 	entries    map[string]*routeCacheEntry
@@ -127,6 +138,18 @@ func appendPort(b []byte, port uint16) []byte {
 	return strconv.AppendUint(b, uint64(port), 10)
 }
 
+// Router is the central component that routes network traffic through appropriate proxies.
+// It matches incoming packets against configured rules and directs them to the corresponding
+// outbound proxy (SOCKS5, HTTP/3, Direct, DNS, etc.).
+//
+// Features:
+//   - MAC filtering (blacklist/whitelist)
+//   - Rule-based routing (by port, IP)
+//   - LRU cache for routing decisions (configurable TTL)
+//   - Support for both TCP and UDP traffic
+//   - Zero-copy cache key construction for minimal allocations
+//
+// Thread-safe: All methods can be called concurrently.
 type Router struct {
 	*Base
 	Rules      []cfg.Rule
@@ -136,6 +159,14 @@ type Router struct {
 	stopCleanup chan struct{}
 }
 
+// NewRouter creates a new Router with the given rules and proxies.
+//
+// Parameters:
+//   - rules: List of routing rules to match against
+//   - proxies: Map of proxy tags to Proxy implementations
+//
+// The router starts with a route cache of 10,000 entries and 60-second TTL.
+// A background goroutine is started to clean up expired cache entries every 30 seconds.
 func NewRouter(rules []cfg.Rule, proxies map[string]Proxy) *Router {
 	r := &Router{
 		Rules:   rules,

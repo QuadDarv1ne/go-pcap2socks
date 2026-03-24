@@ -1,3 +1,5 @@
+// Package proxy provides proxy server implementations with support for various protocols.
+// This file contains ProxyGroup for load balancing across multiple proxies.
 package proxy
 
 import (
@@ -12,15 +14,18 @@ import (
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
-// LoadBalancePolicy defines the load balancing strategy
+// LoadBalancePolicy defines the load balancing strategy for proxy groups.
 type LoadBalancePolicy int
 
 const (
-	// Failover - use backup only when primary fails
+	// Failover uses backup proxies only when primary fails.
+	// Connections always go to the first healthy proxy.
 	Failover LoadBalancePolicy = iota
-	// RoundRobin - distribute connections evenly
+	// RoundRobin distributes connections evenly across all healthy proxies.
+	// Each new connection goes to the next proxy in the list.
 	RoundRobin
-	// LeastLoad - send to proxy with least active connections
+	// LeastLoad sends connections to the proxy with the fewest active connections.
+	// Requires tracking active connection count per proxy.
 	LeastLoad
 )
 
@@ -37,7 +42,25 @@ func (p LoadBalancePolicy) String() string {
 	}
 }
 
-// ProxyGroup represents a group of proxies with load balancing
+// ProxyGroup represents a group of proxies with load balancing capabilities.
+// It allows distributing connections across multiple proxies using different
+// strategies: Failover, RoundRobin, or LeastLoad.
+//
+// Features:
+//   - Automatic health checking with configurable interval
+//   - Failover to backup proxies on connection failure
+//   - Round-robin distribution for even load distribution
+//   - Least-load selection based on active connection count
+//   - Thread-safe concurrent access
+//
+// Health Check:
+// The group periodically checks proxy health by making HTTP requests to a
+// configured URL. Proxies that fail health checks are skipped during selection.
+//
+// Connection Tracking:
+// For LeastLoad policy, each proxy maintains an atomic counter of active
+// connections. The counter is automatically incremented/decremented via
+// trackedConn wrappers.
 type ProxyGroup struct {
 	mu       sync.RWMutex
 	proxies  []Proxy
@@ -60,7 +83,15 @@ type ProxyGroup struct {
 	activeConns []atomic.Int32
 }
 
-// ProxyGroupConfig holds configuration for a proxy group
+// ProxyGroupConfig holds configuration for a proxy group.
+//
+// Fields:
+//   - Name: Identifier for the group (used in logs)
+//   - Proxies: List of Proxy instances to balance
+//   - Policy: Load balancing strategy (Failover/RoundRobin/LeastLoad)
+//   - CheckInterval: Time between health checks (default: 30s)
+//   - CheckTimeout: Timeout for health check requests (default: 5s)
+//   - CheckURL: URL to use for HTTP health checks
 type ProxyGroupConfig struct {
 	Name          string
 	Proxies       []Proxy
@@ -70,7 +101,22 @@ type ProxyGroupConfig struct {
 	CheckURL      string
 }
 
-// NewProxyGroup creates a new proxy group
+// NewProxyGroup creates a new proxy group with the given configuration.
+//
+// The group starts a background goroutine for health checking if CheckURL
+// is provided. The goroutine runs until Close() is called.
+//
+// Example:
+//
+//	cfg := &ProxyGroupConfig{
+//	    Name:          "proxy-group",
+//	    Proxies:       []Proxy{proxy1, proxy2},
+//	    Policy:        proxy.RoundRobin,
+//	    CheckInterval: 30 * time.Second,
+//	    CheckURL:      "https://www.google.com",
+//	}
+//	group := proxy.NewProxyGroup(cfg)
+//	defer group.Close()
 func NewProxyGroup(cfg *ProxyGroupConfig) *ProxyGroup {
 	if cfg.CheckInterval == 0 {
 		cfg.CheckInterval = 30 * time.Second
