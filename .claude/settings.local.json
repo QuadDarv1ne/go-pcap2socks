@@ -23,7 +23,11 @@
       "Bash(./go-pcap2socks.exe --version)",
       "Bash(curl -s http://localhost:8080/api/status)",
       "Bash(curl:*)",
-      "Bash(python -m json.tool)"
+      "Bash(python -m json.tool)",
+      "Bash(go clean:*)",
+      "Bash(fsutil volume:*)",
+      "Bash(powershell.exe -Command \"Stop-Process -Name 'go-pcap2socks' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2\")",
+      "Bash(powershell.exe -Command \"netstat -ano | findstr ':8080'\")"
     ]
   }
 }

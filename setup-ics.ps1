@@ -1,298 +1,113 @@
-﻿# go-pcap2socks: Настройка ICS (Internet Connection Sharing)
+# Скрипт настройки ICS (Internet Connection Sharing) для go-pcap2socks
 # Запускать от имени администратора!
-
-param(
-    [Parameter(HelpMessage = "Только настроить IP для Ethernet (без ICS)")]
-    [switch]$SetupOnly,
-    
-    [Parameter(HelpMessage = "Полная настройка ICS + IP")]
-    [switch]$Full,
-    
-    [Parameter(HelpMessage = "Отключить ICS")]
-    [switch]$Disable
-)
 
 $ErrorActionPreference = "Stop"
 
-function Write-Header {
-    param([string]$Text)
-    Write-Host "`n=== $Text ===" -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host "  Настройка ICS для go-pcap2socks" -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Получаем все активные сетевые адаптеры
+Write-Host "[1/5] Поиск сетевых адаптеров..." -ForegroundColor Yellow
+$adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+
+Write-Host ""
+Write-Host "Найдены активные адаптеры:" -ForegroundColor Green
+foreach ($adapter in $adapters) {
+    $ip = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    $ipStr = if ($ip) { $ip.IPAddress } else { "Нет IP" }
+    Write-Host "  - $($adapter.Name): $($adapter.InterfaceDescription) [$ipStr]" -ForegroundColor Gray
 }
 
-function Write-Success {
-    param([string]$Text)
-    Write-Host $Text -ForegroundColor Green
+Write-Host ""
+
+# Ищем WiFi адаптер (источник интернета)
+Write-Host "[2/5] Поиск WiFi адаптера (источник интернета)..." -ForegroundColor Yellow
+$wifiAdapter = Get-NetAdapter | Where-Object {
+    $_.Status -eq 'Up' -and
+    ($_.InterfaceDescription -like '*wireless*' -or $_.InterfaceDescription -like '*wifi*' -or $_.Name -like '*Wi-Fi*')
 }
 
-function Write-Error-Custom {
-    param([string]$Text)
-    Write-Host $Text -ForegroundColor Red
-}
-
-function Write-Warning-Custom {
-    param([string]$Text)
-    Write-Host $Text -ForegroundColor Yellow
-}
-
-# ============================================================================
-# ПОЛУЧЕНИЕ АДАПТЕРОВ
-# ============================================================================
-
-function Get-NetworkAdapters {
-    Write-Header "Поиск сетевых адаптеров"
-    
-    # Wi-Fi адаптеры (источник интернета)
-    $wifiAdapters = Get-NetAdapter | 
-        Where-Object { 
-            $_.Status -eq 'Up' -and 
-            ($_.Name -like "*Wi-Fi*" -or $_.Name -like "*Беспроводная*" -or $_.Name -like "*Wireless*") 
-        } | 
-        Sort-Object Name
-    
-    # Ethernet адаптеры (для раздачи)
-    $ethernetAdapters = Get-NetAdapter | 
-        Where-Object { 
-            $_.Status -eq 'Up' -and 
-            $_.Name -like "*Ethernet*" -and 
-            $_.Name -ne "Ethernet"  # Исключаем основной Ethernet
-        } | 
-        Sort-Object Name
-    
-    if ($wifiAdapters.Count -eq 0) {
-        Write-Error-Custom "❌ Wi-Fi адаптеры не найдены"
-        return $null
-    }
-    
-    if ($ethernetAdapters.Count -eq 0) {
-        Write-Error-Custom "❌ Ethernet адаптеры (кроме основного) не найдены"
-        return $null
-    }
-    
-    # Показываем найденные адаптеры
-    Write-Host "`n📡 Доступные Wi-Fi адаптеры:" -ForegroundColor Magenta
-    for ($i = 0; $i -lt $wifiAdapters.Count; $i++) {
-        $adapter = $wifiAdapters[$i]
-        Write-Host "  [$i] $($adapter.Name) (MAC: $($adapter.MacAddress))"
-    }
-    
-    Write-Host "`n🔌 Доступные Ethernet адаптеры:" -ForegroundColor Magenta
-    for ($i = 0; $i -lt $ethernetAdapters.Count; $i++) {
-        $adapter = $ethernetAdapters[$i]
-        Write-Host "  [$i] $($adapter.Name) (MAC: $($adapter.MacAddress))"
-    }
-    
-    # Выбор Wi-Fi
-    $wifiIndex = 0
-    if ($wifiAdapters.Count -gt 1) {
-        $wifiInput = Read-Host "`nВыберите Wi-Fi адаптер [0-$($wifiAdapters.Count-1)]"
-        if ($wifiInput -match '^\d+$' -and [int]$wifiInput -lt $wifiAdapters.Count) {
-            $wifiIndex = [int]$wifiInput
-        }
-    }
-    $wifiAdapter = $wifiAdapters[$wifiIndex]
-    Write-Success "✓ Выбран Wi-Fi: $($wifiAdapter.Name)"
-    
-    # Выбор Ethernet
-    $ethernetIndex = 0
-    if ($ethernetAdapters.Count -gt 1) {
-        $ethernetInput = Read-Host "Выберите Ethernet адаптер [0-$($ethernetAdapters.Count-1)]"
-        if ($ethernetInput -match '^\d+$' -and [int]$ethernetInput -lt $ethernetAdapters.Count) {
-            $ethernetIndex = [int]$ethernetInput
-        }
-    }
-    $ethernetAdapter = $ethernetAdapters[$ethernetIndex]
-    Write-Success "✓ Выбран Ethernet: $($ethernetAdapter.Name)"
-    
-    return @{
-        Wifi = $wifiAdapter
-        Ethernet = $ethernetAdapter
+if (-not $wifiAdapter) {
+    $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Sort-Object RouteMetric | Select-Object -First 1
+    if ($route) {
+        $wifiAdapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue
     }
 }
 
-# ============================================================================
-# НАСТРОЙКА IP
-# ============================================================================
-
-function Set-EthernetIP {
-    param($Adapter)
-    
-    Write-Header "Настройка IP для $($Adapter.Name)"
-    
-    try {
-        # Удаляем старые IP (если есть)
-        $oldIPs = Get-NetIPAddress -InterfaceAlias $Adapter.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        if ($oldIPs) {
-            foreach ($ip in $oldIPs) {
-                Remove-NetIPAddress -InterfaceAlias $Adapter.Name -IPAddress $ip.IPAddress -PrefixLength $ip.PrefixLength -Confirm:$false -ErrorAction SilentlyContinue
-                Write-Host "  Удалён старый IP: $($ip.IPAddress)" -ForegroundColor Gray
-            }
-        }
-        
-        # Устанавливаем статический IP 192.168.137.1 (требуется для ICS)
-        New-NetIPAddress -InterfaceAlias $Adapter.Name -IPAddress "192.168.137.1" -PrefixLength 24 -ErrorAction SilentlyContinue
-        Write-Success "✓ Установлен IP: 192.168.137.1/24"
-        
-    } catch {
-        Write-Error-Custom "❌ Ошибка настройки IP: $_"
-        return $false
-    }
-    
-    return $true
+if (-not $wifiAdapter) {
+    Write-Host "  Не удалось автоматически определить WiFi адаптер!" -ForegroundColor Red
+    Write-Host "  Выберите адаптер вручную:" -ForegroundColor Yellow
+    $wifiName = Read-Host "  Введите имя адаптера"
+    $wifiAdapter = Get-NetAdapter -Name $wifiName -ErrorAction Stop
 }
 
-# ============================================================================
-# ВКЛЮЧЕНИЕ ICS
-# ============================================================================
+Write-Host "  Выбран WiFi адаптер: $($wifiAdapter.Name)" -ForegroundColor Green
 
-function Enable-ICS {
-    param($WifiAdapter, $EthernetAdapter)
-    
-    Write-Header "Включение ICS"
-    
-    try {
-        $netShare = New-Object -ComObject HNetCfg.HNetShare
-        $connections = $netShare.EnumEveryConnection | Where-Object { $_ -ne $null }
-        
-        $wifiGuid = $WifiAdapter.InterfaceGuid.ToString("B").ToUpper()
-        $ethernetGuid = $EthernetAdapter.InterfaceGuid.ToString("B").ToUpper()
-        
-        Write-Host "  Wi-Fi GUID: $wifiGuid" -ForegroundColor Gray
-        Write-Host "  Ethernet GUID: $ethernetGuid" -ForegroundColor Gray
-        
-        foreach ($conn in $connections) {
-            try {
-                $props = $netShare.NetConnectionProps[$conn]
-                $connGuid = $props.Guid
-                
-                # Wi-Fi -> PUBLIC (источник интернета)
-                if ($connGuid -eq $wifiGuid) {
-                    $config = $netShare.INetSharingConfigurationForINetConnection[$conn]
-                    $config.EnableSharing(0)  # 0 = PUBLIC
-                    Write-Success "  ✓ $($props.Name) -> PUBLIC (источник)"
-                }
-                
-                # Ethernet -> PRIVATE (получатель)
-                if ($connGuid -eq $ethernetGuid) {
-                    $config = $netShare.INetSharingConfigurationForINetConnection[$conn]
-                    $config.EnableSharing(1)  # 1 = PRIVATE
-                    Write-Success "  ✓ $($props.Name) -> PRIVATE (клиент)"
-                }
-                
-            } catch {
-                Write-Warning-Custom "  ⚠ Ошибка обработки подключения: $_"
-            }
-        }
-        
-        return $true
-        
-    } catch {
-        Write-Error-Custom "❌ Ошибка включения ICS: $_"
-        return $false
-    }
+# Ищем Ethernet адаптер (для раздачи на PS4)
+Write-Host ""
+Write-Host "[3/5] Поиск Ethernet адаптера (для раздачи на PS4)..." -ForegroundColor Yellow
+$ethernetAdapter = Get-NetAdapter | Where-Object {
+    $_.Status -eq 'Up' -and
+    $_.Name -ne $wifiAdapter.Name
 }
 
-function Disable-ICS {
-    Write-Header "Отключение ICS"
-    
-    try {
-        $netShare = New-Object -ComObject HNetCfg.HNetShare
-        $connections = $netShare.EnumEveryConnection | Where-Object { $_ -ne $null }
-        
-        $disabledCount = 0
-        
-        foreach ($conn in $connections) {
-            try {
-                $config = $netShare.INetSharingConfigurationForINetConnection[$conn]
-                if ($config.SharingEnabled) {
-                    $config.DisableSharing()
-                    $disabledCount++
-                    Write-Success "  ✓ Отключён ICS для подключения"
-                }
-            } catch {
-                # Игнорируем ошибки (не все подключения имеют ICS)
-            }
-        }
-        
-        if ($disabledCount -eq 0) {
-            Write-Warning-Custom "  ⚠ ICS не был включён ни для одного подключения"
-        } else {
-            Write-Success "✓ ICS отключён для $disabledCount подключений"
-        }
-        
-        return $true
-        
-    } catch {
-        Write-Error-Custom "❌ Ошибка отключения ICS: $_"
-        return $false
-    }
-}
-
-# ============================================================================
-# ГЛАВНАЯ ЛОГИКА
-# ============================================================================
-
-Write-Header "go-pcap2socks: Настройка ICS"
-Write-Host "Версия: 2.0 (универсальный скрипт)" -ForegroundColor Gray
-Write-Host "Запуск от администратора: $([bool]([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))" -ForegroundColor Gray
-
-# Проверка прав администратора
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Error-Custom "❌ Требуется запуск от имени администратора!"
-    Write-Warning-Custom "  ПКМ на скрипте -> 'Запуск от имени администратора'"
+if (-not $ethernetAdapter) {
+    Write-Host "  Не найден активный Ethernet адаптер!" -ForegroundColor Red
     exit 1
 }
 
-# Режим отключения
-if ($Disable) {
-    Disable-ICS
-    Write-Header "Готово!"
-    Write-Success "✓ ICS отключён"
-    exit 0
+if ($ethernetAdapter.Count -gt 1) {
+    Write-Host "  Найдено несколько Ethernet адаптеров, выбираем первый..." -ForegroundColor Yellow
+    $ethernetAdapter = $ethernetAdapter | Select-Object -First 1
 }
 
-# Получаем адаптеры
-$adapters = Get-NetworkAdapters
-if ($null -eq $adapters) {
-    exit 1
-}
+Write-Host "  Выбран Ethernet адаптер: $($ethernetAdapter.Name)" -ForegroundColor Green
 
-# Только настройка IP
-if ($SetupOnly) {
-    if (Set-EthernetIP -Adapter $adapters.Ethernet) {
-        Write-Header "Готово!"
-        Write-Success "✓ IP настроен: 192.168.137.1"
-        Write-Warning-Custom "⚠ Теперь включите ICS вручную:"
-        Write-Host "  1. ncpa.cpl" -ForegroundColor White
-        Write-Host "  2. ПКМ на '$($adapters.Wifi.Name)' -> Свойства -> Доступ" -ForegroundColor White
-        Write-Host "  3. Включить 'Разрешить другим пользователям сети...'" -ForegroundColor White
-        Write-Host "  4. Выбрать '$($adapters.Ethernet.Name)'" -ForegroundColor White
+# Настраиваем IP на Ethernet адаптере
+Write-Host ""
+Write-Host "[4/5] Настройка IP адреса на Ethernet адаптере..." -ForegroundColor Yellow
+
+Remove-NetIPAddress -InterfaceIndex $ethernetAdapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue
+Remove-NetRoute -InterfaceIndex $ethernetAdapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue
+
+New-NetIPAddress -InterfaceIndex $ethernetAdapter.ifIndex -IPAddress "192.168.137.1" -PrefixLength 24
+
+Write-Host "  IP адрес установлен: 192.168.137.1/24" -ForegroundColor Green
+
+# Включаем ICS через COM
+Write-Host ""
+Write-Host "[5/5] Включение Internet Connection Sharing..." -ForegroundColor Yellow
+
+$netSharingMgr = New-Object -ComObject HNetCfg.HNetShare
+
+foreach ($connection in $netSharingMgr.EnumEveryConnection) {
+    $props = $netSharingMgr.NetConnectionProps.Invoke($connection)
+    
+    if ($props.Name -eq $wifiAdapter.Name) {
+        $config = $netSharingMgr.INetSharingConfigurationForINetConnection.Invoke($connection)
+        $config.EnableSharing(1)  # ICS_HOST
+        Write-Host "  ICS включен на WiFi: $($wifiAdapter.Name)" -ForegroundColor Green
     }
-    exit 0
+    
+    if ($props.Name -eq $ethernetAdapter.Name) {
+        $config = $netSharingMgr.INetSharingConfigurationForINetConnection.Invoke($connection)
+        $config.EnableSharing(2)  # ICS_CLIENT
+        Write-Host "  Ethernet настроен как клиент: $($ethernetAdapter.Name)" -ForegroundColor Green
+    }
 }
 
-# Полная настройка (по умолчанию)
-Write-Header "Полная настройка"
-
-$ipOk = Set-EthernetIP -Adapter $adapters.Ethernet
-if (!$ipOk) {
-    exit 1
-}
-
-$icsOk = Enable-ICS -WifiAdapter $adapters.Wifi -EthernetAdapter $adapters.Ethernet
-if (!$icsOk) {
-    Write-Warning-Custom "⚠ ICS не включился автоматически. Попробуйте вручную:"
-    Write-Host "  1. ncpa.cpl" -ForegroundColor White
-    Write-Host "  2. ПКМ на '$($adapters.Wifi.Name)' -> Свойства -> Доступ" -ForegroundColor White
-    Write-Host "  3. Включить 'Разрешить другим пользователям сети...'" -ForegroundColor White
-    Write-Host "  4. Выбрать '$($adapters.Ethernet.Name)'" -ForegroundColor White
-    exit 1
-}
-
-Write-Header "🎉 Готово!"
-Write-Success "✓ IP установлен: 192.168.137.1"
-Write-Success "✓ ICS включён"
-Write-Warning-Custom "⚠ Рекомендуется перезагрузить ПК для применения изменений"
-Write-Host "`nКоманды для будущего:" -ForegroundColor Magenta
-Write-Host "  .\setup-ics.ps1 -Full      # Полная настройка" -ForegroundColor White
-Write-Host "  .\setup-ics.ps1 -SetupOnly # Только IP" -ForegroundColor White
-Write-Host "  .\setup-ics.ps1 -Disable   # Отключить ICS" -ForegroundColor White
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host "  Настройка ICS завершена!" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Настройте PS4:" -ForegroundColor Cyan
+Write-Host "    IP: 192.168.137.100" -ForegroundColor Gray
+Write-Host "    Маска: 255.255.255.0" -ForegroundColor Gray
+Write-Host "    Шлюз: 192.168.137.1" -ForegroundColor Gray
+Write-Host "    DNS: 8.8.8.8" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  Теперь запустите: .\go-pcap2socks.exe" -ForegroundColor Cyan
+Write-Host ""
