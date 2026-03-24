@@ -40,6 +40,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/telegram"
+	"github.com/QuadDarv1ne/go-pcap2socks/tlsutil"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
@@ -480,8 +481,77 @@ func main() {
 		// Create API server with global stats store and profile manager
 		apiServer := api.NewServer(_statsStore, _profileManager, _upnpManager)
 
-		if err := http.ListenAndServe(":8080", apiServer); err != nil {
-			slog.Error("web UI server error", slog.Any("err", err))
+		// Setup HTTPS if configured
+		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
+			httpsCfg := config.API.HTTPS
+			
+			// Generate self-signed certificate if AutoTLS is enabled
+			if httpsCfg.AutoTLS {
+				executable, _ := os.Executable()
+				certFile := httpsCfg.CertFile
+				keyFile := httpsCfg.KeyFile
+				
+				if certFile == "" {
+					certFile = path.Join(path.Dir(executable), "server.crt")
+				}
+				if keyFile == "" {
+					keyFile = path.Join(path.Dir(executable), "server.key")
+				}
+				
+				// Generate certificate if it doesn't exist
+				if !tlsutil.CertExists(certFile, keyFile) {
+					slog.Info("Generating self-signed TLS certificate", 
+						"cert", certFile, "key", keyFile)
+					if err := tlsutil.GenerateSelfSignedCertToFile(certFile, keyFile, "localhost"); err != nil {
+						slog.Error("Failed to generate TLS certificate", slog.Any("err", err))
+					} else {
+						slog.Info("Self-signed TLS certificate generated successfully")
+					}
+				}
+				
+				httpsCfg.CertFile = certFile
+				httpsCfg.KeyFile = keyFile
+			}
+			
+			// Start HTTPS server
+			if httpsCfg.CertFile != "" && httpsCfg.KeyFile != "" {
+				slog.Info("Starting HTTPS server", 
+					"port", config.API.Port,
+					"url", fmt.Sprintf("https://localhost:%d", config.API.Port),
+					"cert", httpsCfg.CertFile,
+					"key", httpsCfg.KeyFile)
+				
+				// Optionally start HTTP server for redirect
+				if httpsCfg.ForceHTTPS {
+					go func() {
+						redirectMux := http.NewServeMux()
+						redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+							http.Redirect(w, r, fmt.Sprintf("https://%s%s", r.Host, r.URL.Path), http.StatusMovedPermanently)
+						})
+						slog.Info("Starting HTTP to HTTPS redirect server", "port", 80)
+						if err := http.ListenAndServe(":80", redirectMux); err != nil {
+							slog.Error("HTTP redirect server error", slog.Any("err", err))
+						}
+					}()
+				}
+				
+				if err := http.ListenAndServeTLS(fmt.Sprintf(":%d", config.API.Port), 
+					httpsCfg.CertFile, httpsCfg.KeyFile, apiServer); err != nil {
+					slog.Error("HTTPS server error", slog.Any("err", err))
+				}
+			} else {
+				slog.Error("HTTPS enabled but certificate files not configured")
+			}
+		} else {
+			// Start HTTP server (default)
+			port := 8080
+			if config.API != nil && config.API.Port > 0 {
+				port = config.API.Port
+			}
+			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", port), apiServer); err != nil {
+				slog.Error("HTTP server error", slog.Any("err", err))
+			}
 		}
 	}()
 

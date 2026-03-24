@@ -53,5 +53,17 @@
       "switch": [12400, 12401, 12402, 6657, 6667]
     }
   },
+  "api": {
+    "enabled": true,
+    "port": 8080,
+    "token": "${API_TOKEN}",
+    "https": {
+      "enabled": false,
+      "autotls": true,
+      "cert_file": "server.crt",
+      "key_file": "server.key",
+      "force_https": false
+    }
+  },
   "language": "ru"
 }
