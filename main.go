@@ -1,5 +1,7 @@
 package main
 
+//go:generate mt -manifest app.manifest -outputresource:$@;1
+
 import (
 	"bytes"
 	"context"
@@ -78,6 +80,13 @@ func main() {
 	syncHandler := slog.NewTextHandler(os.Stdout, opts)
 	asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
 	slog.SetDefault(slog.New(asyncHandler))
+
+	// Flush logs on exit to ensure all logs are written
+	defer func() {
+		if asyncHandler != nil {
+			asyncHandler.Flush()
+		}
+	}()
 
 	// Check for commands
 	if len(os.Args) > 1 {
