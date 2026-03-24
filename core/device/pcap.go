@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/arpr"
@@ -118,6 +119,15 @@ func OpenWithDHCP(captureCfg cfg.Capture, ifce net.Interface, netConfig *Network
 
 		err = t.handle.WritePacketData(arpGratuitous)
 		if err != nil {
+			// Check if it's a network adapter disconnected error
+			errStr := err.Error()
+			// Check for common network adapter disconnected errors (including Windows error codes)
+			if strings.Contains(errStr, "сетевой носитель отключен") ||
+				strings.Contains(errStr, "network medium disconnected") ||
+				strings.Contains(errStr, "adapter disconnected") ||
+				strings.Contains(errStr, "PacketSendPacket failed") {
+				return nil, fmt.Errorf("network adapter disconnected: check if the network cable is plugged in and the interface is enabled (interface: %s, IP: %s). Error: %v", t.Interface.Name, netConfig.LocalIP, err)
+			}
 			return nil, fmt.Errorf("write packet error: %w", err)
 		}
 	}

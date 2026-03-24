@@ -365,13 +365,13 @@ gVisor Stack:         tuned        256KB buf  ✅
 ---
 
 **Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.19.2-race-fix (dev: a9ee6f1, main: a9ee6f1)
+**Версия**: v3.19.3-logger-fix (dev: latest, main: a9ee6f1)
 **Статус**: ✅ готов к использованию, все race conditions исправлены
 
 ### Статус веток
 ```
 main: a9ee6f1 fix(proxy): исправлены race conditions в routeCache и тестах ✅
-dev:  a9ee6f1 синхронизирован с main ✅
+dev:  latest синхронизирован с main + async logger flush + network adapter error handling ✅
 ```
 
 ### Текущие задачи (в работе)
@@ -380,6 +380,8 @@ dev:  a9ee6f1 синхронизирован с main ✅
 - ✅ DHCP Marshal исправлен - magic cookie, порядок опций
 - ✅ DHCP WinDivert исправлен - проверка портов, destination IP
 - ✅ Race conditions исправлены - routeCache, proxy tests
+- ✅ Async logger flush - логи сбрасываются при завершении программы
+- ✅ Network adapter error handling - понятное сообщение при отключенном интерфейсе
 - 🔄 Документация HTTP/3 (требуется запрос пользователя)
 - 🔄 Интеграционные тесты с реальным HTTP/3 прокси
 - 🔄 Hotkey integration (требуется Windows GUI/tray)
@@ -437,6 +439,49 @@ DHCP Tests:           10 тестов     ✅ все проходят
 - Размер бинарника: 15.6MB (в пределах нормы <25MB)
 - Ветка: dev/main (66e5ed6)
 - Готовность: ✅ проект стабилен, DHCP исправлен
+
+---
+
+## ✅ Завершено (24.03.2026) - ASYNC LOGGER FLUSH И NETWORK ADAPTER ERROR HANDLING
+
+### Исправление async logger flush (24.03.2026)
+- [x] Добавлен `defer asyncHandler.Flush()` в main() ✅
+- [x] Логи теперь сбрасываются при завершении программы ✅
+- [x] Ошибки теперь отображаются в консоли, а не теряются ✅
+
+### Улучшение обработки ошибок сетевого адаптера (24.03.2026)
+- [x] Добавлена проверка на отключение адаптера в device.OpenWithDHCP() ✅
+- [x] Понятное сообщение об ошибке при PacketSendPacket failed ✅
+- [x] Указание интерфейса и IP в сообщении об ошибке ✅
+- [x] Поддержка русских и английских сообщений Windows ✅
+
+### Найденные проблемы
+1. **Async logger не сбрасывал буфер** - программа завершалась до записи логов
+2. **Непонятная ошибка при отключенном адаптере** - "write packet error: send error: PacketSendPacket failed..."
+3. **Отсутствие указания интерфейса** - непонятно, какой именно адаптер отключен
+
+### Решение
+```go
+// main.go - flush логов при завершении
+defer func() {
+    if asyncHandler != nil {
+        asyncHandler.Flush()
+    }
+}()
+
+// device/pcap.go - понятная ошибка при отключении адаптера
+if strings.Contains(errStr, "PacketSendPacket failed") {
+    return nil, fmt.Errorf("network adapter disconnected: check if the network cable is plugged in and the interface is enabled (interface: %s, IP: %s). Error: %v", t.Interface.Name, netConfig.LocalIP, err)
+}
+```
+
+### Пример ошибки
+```
+level=ERROR msg="run error" err="network adapter disconnected: 
+check if the network cable is plugged in and the interface is 
+enabled (interface: Ethernet, IP: 192.168.137.1). Error: send 
+error: PacketSendPacket failed: сетевой носитель отключен..."
+```
 
 ---
 
