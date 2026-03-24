@@ -94,10 +94,21 @@
 - [x] Добавить очистку неактивных устройств в stats/store.go - реализован cleanup с настраиваемым таймаутом
 - [x] Добавить аутентификацию API (api/server.go) - реализован token-based auth с middleware
 
-### Производительность (MEDIUM priority)
-- [ ] Оптимизировать UPnP discovery (кэшировать устройства на 5 мин)
-- [ ] Интегрировать dns/pool.go для connection pooling
-- [ ] Использовать unsafe конверсию []byte→string в router.go:188
+### Производительность (MEDIUM priority) - ✅ ВСЕ ИСПРАВЛЕНО
+- [x] Оптимизировать UPnP discovery (кэшировать устройства на 5 мин)
+  - **Файл**: tunnel/udp.go:28-44
+  - **Решение**: Добавлен кэш UPnP устройств с TTL 5 минут, double-checked locking
+  - **Статус**: ✅ Исправлено
+
+- [x] Интегрировать dns/pool.go для connection pooling
+  - **Файл**: proxy/dns.go
+  - **Решение**: Добавлены TCP connection pools для plain DNS серверов
+  - **Статус**: ✅ Исправлено
+
+- [x] Использовать unsafe конверсию []byte→string в router.go
+  - **Файл**: proxy/router.go:218,271
+  - **Решение**: Использован unsafe.Pointer для zero-copy конверсии cache key
+  - **Статус**: ✅ Исправлено
 
 ### Безопасность (MEDIUM priority)
 - [x] Rate limiting на API endpoints - реализован token bucket per IP (100 req/min)
@@ -110,10 +121,18 @@
 - [ ] Добавить godoc комментарии для ключевых типов
 - [ ] Актуализировать QUICK_START.md для v3.18.0
 
-### Технические долги
-- [ ] Удалить мёртвый код в api/server.go:567-590
-- [ ] Вынести общую DHCP логику из dhcp/ и windivert/
-- [ ] Заменить магические числа на константы (tunnel/tcp.go:14)
+### Технические долги - ✅ ВСЕ ИСПРАВЛЕНО
+- [x] Удалить мёртвый код в api/server.go:567-590
+  - **Решение**: Удалены handleProfileCreate, handleProfileDelete, handleProfileGet
+  - **Статус**: ✅ Исправлено
+
+- [x] Вынести общую DHCP логику из dhcp/ и windivert/
+  - **Решение**: Общая логика вынесена в dhcp/server.go
+  - **Статус**: ✅ Исправлено
+
+- [x] Заменить магические числа на константы (tunnel/tcp.go:14)
+  - **Решение**: Экспортирован TCPWaitTimeout с документацией
+  - **Статус**: ✅ Исправлено (a58685b)
 
 ---
 
@@ -316,15 +335,20 @@ gVisor Stack:         tuned        256KB buf  ✅
 
 ---
 
-**Последнее обновление**: 23 марта 2026 г.
-**Версия**: v3.18.0-security (main)
-**Статус**: ✅ готов к использованию, все критические проблемы безопасности исправлены
+**Последнее обновление**: 24 марта 2026 г.
+**Версия**: v3.18.0-perf (main)
+**Статус**: ✅ готов к использованию, все критические проблемы безопасности и производительности исправлены
 
 ### Статус веток
 ```
-main: cb1ad70 security: добавлена валидация размера запросов ✅
-dev:  cb1ad70 синхронизирован с main ✅
+main: a58685b refactor: export TCPWaitTimeout constant ✅
+dev:  a58685b синхронизирован с main ✅
 ```
+
+### Текущие задачи (в работе)
+- HTTP/3 UDP proxying через QUIC datagrams (RFC 9221)
+- Пропущенные тесты: TestProxyGroup_Failover (timing issues)
+- Документация: ARCHITECTURE.md, godoc, QUICK_START.md
 
 ---
 
@@ -345,11 +369,16 @@ dev:  cb1ad70 синхронизирован с main ✅
 12. Metadata pool
 13. gVisor stack tuning
 
-### Выполнено 4 критических исправлений безопасности:
+### Выполнено 4 критических исправления безопасности:
 14. Исправлен race condition в proxy/group.go (atomic.StoreInt32)
 15. Добавлена аутентификация API (token-based auth + middleware)
 16. Исправлена path traversal уязвимость (filepath.Abs проверка)
 17. Добавлена очистка неактивных устройств (stats/store.go cleanup)
+
+### Выполнено 3 оптимизации производительности (23.03.2026):
+18. UPnP device caching (tunnel/udp.go - кэш на 5 минут)
+19. DNS TCP connection pools (proxy/dns.go - fallback на UDP)
+20. Zero-copy cache key конверсия (proxy/router.go - unsafe.Pointer)
 
 ### Итоговые улучшения:
 - Router Match: 7.72 → 4.38 ns/op (**-43%**)
