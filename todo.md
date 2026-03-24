@@ -703,10 +703,34 @@ dev:  e85a10c синхронизирована с main ✅
 - ✅ ARCHITECTURE.md - РЕАЛИЗОВАНО (docs/ARCHITECTURE.md, 572 строки)
 - ✅ Godoc комментарии - РЕАЛИЗОВАНО (proxy/router.go, proxy/group.go)
 - ✅ QUICK_START.md - РЕАЛИЗОВАНО (полный гайд по v3.19.3)
+- ✅ Web UI с реальным временем статистики - РЕАЛИЗОВАНО (api/websocket.go)
 - 🔄 Hotkey integration (требуется Windows GUI/tray)
 
 ### Будущие улучшения (FUTURE)
 - [ ] Multi-WAN балансировка
 - [ ] Поддержка WireGuard outbound
 - [ ] Улучшенная интеграция с Windows Firewall
-- [ ] Web UI с реальным временем статистики
+
+---
+
+## ✅ Завершено (24.03.2026 22:15) - WEBSOCKET REAL-TIME STATS
+
+### Реализация WebSocket для Web UI
+- [x] api/websocket.go: WebSocketHub для управления подключениями ✅
+- [x] Real-time broadcast статистики (1 секунда интервал) ✅
+- [x] Ping/pong heartbeat для поддержания соединения ✅
+- [x] Интеграция в main.go с авто-остановкой при shutdown ✅
+- [x] Зависимость: github.com/gorilla/websocket ✅
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (api, proxy, cfg)
+- Размер бинарника: 17MB
+- Ветка: main/dev (e8c2e8f)
+- Готовность: ✅ проект стабилен
+
+---
+
+**Последнее обновление**: 24 марта 2026 г. (22:15)
+**Версия**: v3.19.3 (dev/main: e8c2e8f)
+**Статус**: ✅ готов к использованию
