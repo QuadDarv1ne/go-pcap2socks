@@ -27,7 +27,8 @@
       "Bash(go clean:*)",
       "Bash(fsutil volume:*)",
       "Bash(powershell.exe -Command \"Stop-Process -Name 'go-pcap2socks' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2\")",
-      "Bash(powershell.exe -Command \"netstat -ano | findstr ':8080'\")"
+      "Bash(powershell.exe -Command \"netstat -ano | findstr ':8080'\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File run-debug.ps1 2>&1)"
     ]
   }
 }
