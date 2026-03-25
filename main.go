@@ -456,6 +456,54 @@ func main() {
 			return leases
 		})
 
+		// Set DHCP metrics getter for API
+		api.SetGetDHCPMetricsFn(func() map[string]interface{} {
+			if _dhcpServer == nil {
+				return map[string]interface{}{
+					"available": false,
+					"message":   "DHCP server not running",
+				}
+			}
+
+			// Try to get metrics from DHCP server
+			var metrics map[string]interface{}
+
+			// Check if it's standard DHCP server with metrics
+			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+				metricsCollector := stdDHCP.GetMetrics()
+				if metricsCollector != nil {
+					snapshot := metricsCollector.GetMetrics()
+					metrics = map[string]interface{}{
+						"available":       true,
+						"uptime_seconds":  snapshot.UptimeSeconds,
+						"active_leases":   snapshot.ActiveLeases,
+						"total_allocations": snapshot.TotalAllocations,
+						"total_renewals":  snapshot.TotalRenewals,
+						"discover_count":  snapshot.DiscoverCount,
+						"offer_count":     snapshot.OfferCount,
+						"request_count":   snapshot.RequestCount,
+						"ack_count":       snapshot.AckCount,
+						"nak_count":       snapshot.NakCount,
+						"release_count":   snapshot.ReleaseCount,
+						"decline_count":   snapshot.DeclineCount,
+						"error_count":     snapshot.ErrorCount,
+						"last_request_mac": snapshot.LastRequestMAC,
+						"last_request_ip": snapshot.LastRequestIP,
+						"start_time":      snapshot.StartTime.Format(time.RFC3339),
+					}
+				}
+			}
+
+			if metrics == nil {
+				metrics = map[string]interface{}{
+					"available": false,
+					"message":   "DHCP metrics not available",
+				}
+			}
+
+			return metrics
+		})
+
 		// Set service control callbacks for API
 		api.SetServiceCallbacks(
 			func() error {
@@ -1144,13 +1192,13 @@ func openConfigInEditor() {
 // autoConfigure автоматически конфигурирует сеть
 func autoConfigure() {
 	slog.Info("Автоматическая конфигурация сети...")
-	slog.Info("Поиск VPN адаптера и Ethernet для раздачи интернета")
+	slog.Info("Поиск лучшего сетевого интерфейса для раздачи интернета")
 
-	// Find best interface for ICS (typically Ethernet with 192.168.137.1)
+	// Find best interface
 	interfaceConfig := findBestInterface()
 	if interfaceConfig.Name == "" {
 		slog.Error("Не найдено подходящего сетевого интерфейса")
-		slog.Info("Убедитесь, что VPN подключён и Ethernet кабель вставлен")
+		slog.Info("Убедитесь, что сетевой кабель подключен или Wi-Fi активен")
 		return
 	}
 
@@ -1184,19 +1232,29 @@ func autoConfigure() {
 	}
 	dnsJSON += "]"
 
-	// Create clean JSON config manually - Direct mode for VPN sharing
+	// Calculate DHCP pool range based on detected network
+	// Use gateway IP as server IP, and pool from .100 to .200
+	gatewayIPStr := interfaceConfig.IP
+	gatewayIP := net.ParseIP(gatewayIPStr)
+	_, network, _ := net.ParseCIDR(interfaceConfig.Network)
+
+	// Calculate pool start and end
+	poolStart := calculatePoolStart(network, gatewayIP)
+	poolEnd := calculatePoolEnd(network, gatewayIP)
+
+	// Create clean JSON config manually - Auto-detected network
 	configJSON := fmt.Sprintf(`{
   "pcap": {
     "interfaceGateway": "%s",
-    "network": "192.168.137.0/24",
-    "localIP": "192.168.137.1",
+    "network": "%s",
+    "localIP": "%s",
     "localMAC": "%s",
     "mtu": %d
   },
   "dhcp": {
     "enabled": true,
-    "poolStart": "192.168.137.10",
-    "poolEnd": "192.168.137.250",
+    "poolStart": "%s",
+    "poolEnd": "%s",
     "leaseDuration": 86400
   },
   "dns": {
@@ -1238,7 +1296,7 @@ func autoConfigure() {
     }
   },
   "language": "ru"
-}`, interfaceConfig.IP, interfaceConfig.MAC, interfaceConfig.RecommendedMTU, dnsJSON)
+}`, interfaceConfig.IP, interfaceConfig.Network, interfaceConfig.IP, interfaceConfig.MAC, interfaceConfig.RecommendedMTU, poolStart, poolEnd, dnsJSON)
 
 	// Write config file
 	err = os.WriteFile(cfgFile, []byte(configJSON), 0666)
@@ -1250,29 +1308,67 @@ func autoConfigure() {
 	slog.Info("Конфигурация создана", "file", cfgFile)
 	slog.Info("")
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	slog.Info("  НАСТРОЙКА СОЗДАНА - Режим раздачи интернета с VPN")
+	slog.Info("  НАСТРОЙКА СОЗДАНА - Автоматическая конфигурация сети")
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	slog.Info(fmt.Sprintf("  IP адрес:         192.168.137.1"))
-	slog.Info(fmt.Sprintf("  Маска подсети:    255.255.255.0"))
-	slog.Info(fmt.Sprintf("  Диапазон для PS4: 192.168.137.2 - 192.168.137.254"))
+	slog.Info(fmt.Sprintf("  Интерфейс:        %s", interfaceConfig.Name))
+	slog.Info(fmt.Sprintf("  IP адрес:         %s", gatewayIP))
+	slog.Info(fmt.Sprintf("  Сеть:             %s", interfaceConfig.Network))
+	slog.Info(fmt.Sprintf("  Маска подсети:    %s", interfaceConfig.Netmask))
+	slog.Info(fmt.Sprintf("  Диапазон DHCP:    %s - %s", poolStart, poolEnd))
 	slog.Info(fmt.Sprintf("  MTU:              %d", interfaceConfig.RecommendedMTU))
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	slog.Info("")
 	slog.Info("📡 СЛЕДУЮЩИЕ ШАГИ:")
 	slog.Info("")
-	slog.Info("  1. Запустите скрипт настройки ICS (от администратора):")
-	slog.Info("     .\\setup-vpn-ics.ps1 -Auto")
+	slog.Info("  1. Настройте устройство (PS4, Xbox, Switch) на автоматическое получение IP:")
+	slog.Info("     Настройки → Настройки сети → Настроить автоматически → Кабель (LAN)")
 	slog.Info("")
-	slog.Info("  2. Настройте PS4:")
-	slog.Info("     Настройки → Настройки сети → Настроить вручную → Кабель (LAN)")
-	slog.Info("     IP: 192.168.137.100, Маска: 255.255.255.0, Шлюз: 192.168.137.1")
-	slog.Info("     DNS: 8.8.8.8, MTU: 1486, Прокси: Не использовать")
+	slog.Info("  2. Если автоматическое получение не работает, используйте ручную настройку:")
+	slog.Info(fmt.Sprintf("     IP: %s, Маска: %s, Шлюз: %s", poolStart, interfaceConfig.Netmask, gatewayIP))
+	slog.Info(fmt.Sprintf("     DNS: %s, MTU: %d", dnsServers[0], interfaceConfig.RecommendedMTU))
 	slog.Info("")
 	slog.Info("  3. Запустите go-pcap2socks:")
 	slog.Info("     .\\go-pcap2socks.exe")
 	slog.Info("")
-	slog.Info("  Веб-интерфейс: http://localhost:8080")
+	slog.Info(fmt.Sprintf("  Веб-интерфейс: http://localhost:8080"))
+	slog.Info(fmt.Sprintf("  API: http://localhost:8080/api"))
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+}
+
+// calculatePoolStart calculates the first IP in the DHCP pool
+func calculatePoolStart(network *net.IPNet, gatewayIP net.IP) string {
+	gatewayInt := binary.BigEndian.Uint32(gatewayIP.To4())
+
+	// Start from gateway + 100
+	poolStartInt := gatewayInt + 100
+
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, poolStartInt)
+	return ip.String()
+}
+
+// calculatePoolEnd calculates the last IP in the DHCP pool
+func calculatePoolEnd(network *net.IPNet, gatewayIP net.IP) string {
+	gatewayInt := binary.BigEndian.Uint32(gatewayIP.To4())
+
+	// End at gateway + 200
+	poolEndInt := gatewayInt + 200
+
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, poolEndInt)
+	return ip.String()
+}
+
+// calculateBroadcast calculates the broadcast IP for a network
+func calculateBroadcast(network *net.IPNet) string {
+	_, ones := network.Mask.Size()
+	networkInt := binary.BigEndian.Uint32(network.IP.To4())
+	hostBits := 32 - ones
+	broadcastInt := networkInt | (uint32(1)<<hostBits - 1)
+
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, broadcastInt)
+	return ip.String()
 }
 
 type InterfaceConfig struct {

@@ -10,6 +10,11 @@ import (
 	"github.com/threatwinds/godivert"
 )
 
+// UsePacketLayer enables full Ethernet frame capture/send
+// This allows proper unicast delivery to specific MAC addresses
+// Note: Currently godivert library only supports network layer mode
+const UsePacketLayer = false
+
 // Filter for DHCP packets (UDP ports 67 and 68)
 const DHCPFilter = "udp.DstPort == 67 or udp.SrcPort == 68"
 
@@ -42,12 +47,28 @@ func NewHandle(filter string) (*Handle, error) {
 		filter = DHCPFilter
 	}
 
-	h, err := godivert.NewWinDivertHandle(filter)
+	// Use packet layer for full Ethernet frame support if enabled
+	var h *godivert.WinDivertHandle
+	var err error
+
+	if UsePacketLayer {
+		// Packet layer includes Ethernet headers for proper L2 framing
+		// Note: This requires godivert support which is not currently available
+		h, err = godivert.NewWinDivertHandle(filter)
+	} else {
+		// Network layer only (default)
+		h, err = godivert.NewWinDivertHandle(filter)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("windivert open: %w", err)
 	}
 
-	slog.Info("WinDivert handle opened", "filter", filter)
+	mode := "network"
+	if UsePacketLayer {
+		mode = "packet"
+	}
+	slog.Info("WinDivert handle opened", "filter", filter, "mode", mode)
 
 	return &Handle{
 		handle:   h,
@@ -128,6 +149,35 @@ func (h *Handle) parsePacket(packet *godivert.Packet) *Packet {
 	}
 
 	return parsed
+}
+
+// GetClientMAC extracts client MAC from DHCP packet payload
+// DHCP client hardware address is at offset 28-33 in DHCP message (after 4-byte opcode header)
+func GetClientMAC(dhcpData []byte) net.HardwareAddr {
+	if len(dhcpData) < 34 {
+		return nil
+	}
+	// DHCP message format:
+	// [0] - op code
+	// [1] - hardware type (1 = Ethernet)
+	// [2] - hardware address length (6 for Ethernet)
+	// [3] - hops
+	// [4-7] - transaction ID
+	// [8-9] - seconds elapsed
+	// [10-11] - flags
+	// [12-15] - client IP (ciaddr)
+	// [16-19] - your IP (yiaddr)
+	// [20-23] - server IP (siaddr)
+	// [24-27] - gateway IP (giaddr)
+	// [28-33] - client hardware address (16 bytes, first 6 are MAC)
+	hwType := dhcpData[1]
+	hwLen := dhcpData[2]
+	if hwType != 1 || hwLen != 6 {
+		return nil
+	}
+	mac := make(net.HardwareAddr, 6)
+	copy(mac, dhcpData[28:34])
+	return mac
 }
 
 // Helper function to convert godivert.Direction to string

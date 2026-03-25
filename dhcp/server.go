@@ -20,23 +20,63 @@ type Server struct {
 	nextIP   net.IP
 	stopChan chan struct{}
 	reserved map[string]bool // Track reserved IPs to prevent conflicts
+	leaseDB  *LeaseDB        // Persistent lease database
+	metrics  *MetricsCollector
+}
+
+// ServerOption is a function that configures the server
+type ServerOption func(*Server)
+
+// WithLeaseDB sets the persistent lease database
+func WithLeaseDB(db *LeaseDB) ServerOption {
+	return func(s *Server) {
+		s.leaseDB = db
+	}
+}
+
+// WithMetrics sets the metrics collector
+func WithMetrics(m *MetricsCollector) ServerOption {
+	return func(s *Server) {
+		s.metrics = m
+	}
 }
 
 // NewServer creates a new DHCP server
-func NewServer(config *ServerConfig) *Server {
+func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 	s := &Server{
 		config:   config,
 		leases:   make(map[string]*DHCPLease),
 		nextIP:   config.FirstIP,
 		stopChan: make(chan struct{}),
 		reserved: make(map[string]bool),
+		metrics:  NewMetricsCollector(), // Default metrics collector
+	}
+
+	// Apply options
+	for _, opt := range options {
+		opt(s)
 	}
 
 	// Reserve gateway IP
 	s.reserved[config.ServerIP.String()] = true
 
+	// Load leases from persistent database if available
+	if s.leaseDB != nil {
+		if err := s.leaseDB.Load(); err != nil {
+			slog.Warn("Failed to load lease database", "err", err)
+		}
+		// Restore leases from database
+		for mac, lease := range s.leaseDB.GetAllLeases() {
+			s.leases[mac] = lease
+		}
+		slog.Info("DHCP server restored leases from database", "count", len(s.leases))
+	}
+
 	// Start lease cleanup goroutine
 	go s.cleanupLoop()
+
+	// Start metrics logging goroutine
+	go s.metricsLoop()
 
 	return s
 }
@@ -69,24 +109,41 @@ func (s *Server) HandleRequest(data []byte) ([]byte, error) {
 }
 
 func (s *Server) handleDiscover(msg *DHCPMessage) ([]byte, error) {
-	slog.Info("DHCP Discover", "mac", msg.ClientHardware.String())
+	macStr := msg.ClientHardware.String()
+	slog.Info("DHCP Discover", "mac", macStr)
+
+	s.metrics.RecordDiscover()
+	s.metrics.RecordLastRequest(macStr, "")
 
 	// Allocate IP
 	ip, err := s.allocateIP(msg.ClientHardware)
 	if err != nil {
 		slog.Error("DHCP IP allocation failed", "err", err)
+		s.metrics.RecordError()
 		return nil, err
 	}
 
 	// Build DHCPOFFER
 	response := s.buildResponse(msg, DHCPOffer, ip)
 
-	slog.Info("DHCP Offer sent", "mac", msg.ClientHardware.String(), "ip", ip.String())
+	s.metrics.RecordOffer()
+
+	slog.Info("DHCP Offer sent",
+		"mac", macStr,
+		"ip", ip.String(),
+		"server_id", s.config.ServerIP.String(),
+		"subnet_mask", net.IP(s.config.Network.Mask).String(),
+		"router", s.config.ServerIP.String(),
+		"dns_servers", s.config.DNSServers,
+		"lease_time", s.config.LeaseDuration.Seconds())
 	return response, nil
 }
 
 func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
-	slog.Info("DHCP Request", "mac", msg.ClientHardware.String())
+	macStr := msg.ClientHardware.String()
+	slog.Info("DHCP Request", "mac", macStr)
+
+	s.metrics.RecordRequest()
 
 	// Check if client is requesting a specific IP
 	requestedIP := net.IP(msg.Options[OptionRequestedIP])
@@ -97,25 +154,30 @@ func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
 	// Validate requested IP
 	if requestedIP == nil || !s.config.Network.Contains(requestedIP) {
 		slog.Warn("DHCP Request with invalid IP", "ip", requestedIP)
+		s.metrics.RecordError()
 		return nil, nil
 	}
 
 	// Check if we have a lease for this MAC
 	s.mu.RLock()
-	lease, exists := s.leases[msg.ClientHardware.String()]
+	lease, exists := s.leases[macStr]
 	s.mu.RUnlock()
 
+	isRenewal := false
 	if exists && lease.IP.Equal(requestedIP) {
 		// Renew existing lease
 		s.mu.Lock()
 		lease.ExpiresAt = time.Now().Add(s.config.LeaseDuration)
 		s.mu.Unlock()
+		isRenewal = true
+		slog.Debug("DHCP lease renewed", "mac", macStr, "ip", requestedIP.String())
 	} else {
 		// New lease
 		var err error
 		requestedIP, err = s.allocateIP(msg.ClientHardware)
 		if err != nil {
 			slog.Error("DHCP IP allocation failed", "err", err)
+			s.metrics.RecordError()
 			return nil, err
 		}
 	}
@@ -123,23 +185,36 @@ func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
 	// Build DHCPACK
 	response := s.buildResponse(msg, DHCPAck, requestedIP)
 
-	slog.Info("DHCP Ack sent", "mac", msg.ClientHardware.String(), "ip", requestedIP.String())
+	s.metrics.RecordAck(macStr, requestedIP.String(), isRenewal)
+
+	slog.Info("DHCP Ack sent", "mac", macStr, "ip", requestedIP.String())
 	return response, nil
 }
 
 func (s *Server) handleRelease(msg *DHCPMessage) ([]byte, error) {
-	slog.Info("DHCP Release", "mac", msg.ClientHardware.String())
+	macStr := msg.ClientHardware.String()
+	slog.Info("DHCP Release", "mac", macStr)
+
+	s.metrics.RecordRelease()
 
 	s.mu.Lock()
-	delete(s.leases, msg.ClientHardware.String())
+	delete(s.leases, macStr)
 	s.mu.Unlock()
+
+	// Delete from persistent database
+	if s.leaseDB != nil {
+		s.leaseDB.DeleteLease(msg.ClientHardware)
+	}
 
 	// No response needed for RELEASE
 	return nil, nil
 }
 
 func (s *Server) handleInform(msg *DHCPMessage) ([]byte, error) {
-	slog.Info("DHCP Inform", "mac", msg.ClientHardware.String())
+	macStr := msg.ClientHardware.String()
+	slog.Info("DHCP Inform", "mac", macStr)
+
+	s.metrics.RecordRequest()
 
 	// Build DHCPACK with server info but no IP assignment
 	response := s.buildResponse(msg, DHCPAck, nil)
@@ -167,8 +242,11 @@ func (s *Server) buildResponse(request *DHCPMessage, messageType uint8, ip net.I
 	response.Options[OptionServerIdentifier] = s.config.ServerIP.To4()
 
 	if ip != nil {
-		// Subnet mask
+		// Subnet mask - convert net.IPMask to 4-byte IP format
 		mask := s.config.Network.Mask
+		if len(mask) == 16 {
+			mask = mask[12:16] // Convert IPv6 mask to IPv4
+		}
 		response.Options[OptionSubnetMask] = mask
 
 		// Router (gateway)
@@ -193,6 +271,15 @@ func (s *Server) buildResponse(request *DHCPMessage, messageType uint8, ip net.I
 		binary.BigEndian.PutUint32(leaseTimeBuf[:4], leaseTime)
 		response.Options[OptionLeaseTime] = append([]byte(nil), leaseTimeBuf[:4]...)
 		pool.Put(leaseTimeBuf)
+
+		slog.Debug("DHCP Offer options built",
+			"message_type", messageType,
+			"server_id", s.config.ServerIP.String(),
+			"subnet_mask", net.IP(mask).String(),
+			"router", s.config.ServerIP.String(),
+			"dns_servers", s.config.DNSServers,
+			"lease_time_seconds", leaseTime,
+			"your_ip", ip.String())
 	}
 
 	return response.Marshal()
@@ -202,10 +289,12 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	macStr := mac.String()
+
 	// Check if MAC already has a lease
-	if lease, exists := s.leases[mac.String()]; exists {
+	if lease, exists := s.leases[macStr]; exists {
 		if time.Now().Before(lease.ExpiresAt) {
-			slog.Debug("DHCP: reusing existing lease", "mac", mac.String(), "ip", lease.IP.String())
+			slog.Debug("DHCP: reusing existing lease", "mac", macStr, "ip", lease.IP.String())
 			return lease.IP, nil
 		}
 	}
@@ -255,8 +344,14 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 				ExpiresAt:   time.Now().Add(s.config.LeaseDuration),
 				Transaction: 0,
 			}
-			s.leases[mac.String()] = lease
-			slog.Info("DHCP: IP allocated", "mac", mac.String(), "ip", currentIP.String())
+			s.leases[macStr] = lease
+
+			// Save to persistent database
+			if s.leaseDB != nil {
+				s.leaseDB.SetLease(lease)
+			}
+
+			slog.Info("DHCP: IP allocated", "mac", macStr, "ip", currentIP.String())
 			return currentIP, nil
 		}
 
@@ -300,23 +395,68 @@ func (s *Server) cleanupLeases() {
 	defer s.mu.Unlock()
 
 	now := time.Now()
+	deleted := 0
 	for mac, lease := range s.leases {
 		if now.After(lease.ExpiresAt) {
 			delete(s.leases, mac)
+			deleted++
 			slog.Debug("DHCP lease expired", "mac", mac, "ip", lease.IP.String())
 		}
+	}
+
+	// Sync with persistent database
+	if deleted > 0 && s.leaseDB != nil {
+		s.leaseDB.CleanupExpired()
+		slog.Info("DHCP leases cleaned up", "deleted", deleted)
 	}
 }
 
 // Stop stops the DHCP server
 func (s *Server) Stop() {
 	close(s.stopChan)
+
+	// Save leases to persistent database
+	if s.leaseDB != nil {
+		if err := s.leaseDB.Close(); err != nil {
+			slog.Error("Failed to save lease database on stop", "err", err)
+		}
+	}
 }
 
 // Start starts the DHCP server (cleanup loop already started in NewServer)
 func (s *Server) Start() error {
 	// Cleanup loop is already running from NewServer
 	return nil
+}
+
+// metricsLoop logs periodic metrics
+func (s *Server) metricsLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.logMetrics()
+		case <-s.stopChan:
+			return
+		}
+	}
+}
+
+// logMetrics logs current server metrics
+func (s *Server) logMetrics() {
+	s.mu.RLock()
+	leaseCount := int64(len(s.leases))
+	s.mu.RUnlock()
+
+	s.metrics.UpdateActiveLeases(leaseCount)
+	s.metrics.LogMetrics()
+}
+
+// GetMetrics returns the metrics collector
+func (s *Server) GetMetrics() *MetricsCollector {
+	return s.metrics
 }
 
 // GetLeases returns current leases

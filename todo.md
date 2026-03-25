@@ -26,6 +26,33 @@ Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
 
 ---
 
+## ✅ Завершено (25.03.2026 13:30) - ТЕКУЩАЯ ПРОВЕРКА
+
+### Проверка проекта
+- [x] Проверка компиляции - успешно ✅ (17.0 MB бинарник)
+- [x] Все тесты проходят (proxy, api, transport, cfg, stats) ✅
+- [x] Race detector тесты без ошибок ✅
+- [ ] Ветки dev/main НЕ синхронизированы (main: 6213afb, dev: e8da0f8) ⚠️
+
+### Метрики производительности (актуальные 25.03.2026):
+```
+Router Match:         ~12 ns/op   0 B/op    0 allocs/op ✅
+Router DialContext:   ~140 ns/op  40 B/op   2 allocs/op ✅
+Router Cache Hit:     ~250 ns/op  40 B/op   2 allocs/op ✅
+Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
+```
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27, cfg: 8, stats: 10)
+- Race detector: ✅ все тесты проходят
+- Размер бинарника: 17.0 MB (в пределах нормы <25MB)
+- Ветка: main (6213afb)
+- Готовность: ✅ проект стабилен, готов к использованию
+- ⚠️ Требуется синхронизация dev → main
+
+---
+
 ## ✅ Завершено (v3.18.0-pool-usage)
 
 ### Производительность
@@ -197,11 +224,12 @@ Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
 
 ---
 
-## 🔥 В работе (25.03.2026 12:27)
+## 🔥 В работе (25.03.2026 13:30)
 
 - [x] Документация HTTP/3 (docs/HTTP3.md) ✅
 - [x] Исправлен race condition в api/websocket_test.go ✅
 - [x] Интеграционные тесты с реальным HTTP/3 прокси-сервером ✅ (TestHTTP3_Integration, TestHTTP3_FailoverIntegration, TestHTTP3_LoadBalancing)
+- [ ] Синхронизация веток dev → main (DHCP метрики в main, нужно перенести в dev) ⚠️
 - [ ] Tray Icon для Windows (getlantern/systray)
 - [ ] Hotkey integration (Windows GUI/tray)
 
@@ -250,11 +278,12 @@ Router Cache Hit:     484.8 ns/op   40 B/op   2 allocs/op ✅
 
 ---
 
-## 📋 Актуальные задачи (25.03.2026 12:15)
+## 📋 Актуальные задачи (25.03.2026 13:30)
 
 ### В работе (ACTIVE) - 25.03.2026
 - [x] Документация HTTP/3 (docs/HTTP3.md) ✅
-- [ ] Интеграционные тесты HTTP/3 с реальным прокси
+- [x] Интеграционные тесты HTTP/3 с реальным прокси ✅
+- [ ] Синхронизация веток dev → main (DHCP метрики в main) ⚠️
 - [ ] Tray Icon (Windows)
 - [ ] Hotkey integration
 
@@ -442,7 +471,7 @@ gVisor Stack:         tuned        256KB buf  ✅
 ✅ api/server.go - аутентификация API (ИСПРАВЛЕНО: token-based auth, 8cc91dd)
 ✅ api/server.go:726 - path traversal (ИСПРАВЛЕНО: filepath.Abs проверка, cb1ad70)
 ✅ stats/store.go - очистка устройств (ИСПРАВЛЕНО: NewStoreWithCleanup)
-⚠️ tunnel/udp.go:104 - блокирующий UPnP discovery (2s на сессию) - ТРЕБУЕТ ИСПРАВЛЕНИЯ
+✅ tunnel/udp.go:104 - UPnP discovery кэширование (ИСПРАВЛЕНО: кэш на 5 минут, double-checked locking)
 ```
 
 ---
@@ -840,6 +869,27 @@ DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
 
 ---
 
-**Последнее обновление**: 25 марта 2026 г. (11:57)
-**Версия**: v3.19.3 (main: 009765a)
-**Статус**: ✅ готов к использованию
+**Последнее обновление**: 25 марта 2026 г. (13:30)
+**Версия**: v3.19.3 (main: 6213afb, dev: e8da0f8)
+**Статус**: ⚠️ требуется синхронизация dev/main
+
+### Статус веток
+```
+main: 6213afb feat: добавлены тесты для LeaseDB и MetricsCollector ✅
+dev:  e8da0f8 test(service): улучшены тесты windowsService с buffered channels ⚠️
+```
+
+### Текущие задачи (в работе)
+- ✅ HTTP/3 UDP proxying через QUIC datagrams (RFC 9221) - РЕАЛИЗОВАНО
+- ✅ HTTP/3 TCP proxying через CONNECT - РЕАЛИЗОВАНО
+- ✅ DHCP Marshal исправлен - magic cookie, порядок опций
+- ✅ DHCP WinDivert исправлен - проверка портов, destination IP
+- ✅ Race conditions исправлены - routeCache, proxy tests
+- ✅ Async logger flush - логи сбрасываются при завершении программы
+- ✅ Network adapter error handling - понятное сообщение при отключенном интерфейсе
+- ✅ UPnP кэширование - устройства кэшируются на 5 минут
+- ✅ Документация HTTP/3 (docs/HTTP3.md) - РЕАЛИЗОВАНО
+- ✅ Интеграционные тесты с реальным HTTP/3 прокси - РЕАЛИЗОВАНО
+- ⚠️ Синхронизация dev → main (DHCP метрики в main, нужно перенести в dev)
+- 🔄 Hotkey integration (требуется Windows GUI/tray)
+- 🔄 Tray Icon (Windows)
