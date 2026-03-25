@@ -661,7 +661,10 @@ func (s *Server) handleHotkey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get registered hotkeys
-	hotkeys := s.hotkeyManager.GetRegisteredHotkeys()
+	var hotkeys []hotkey.HotkeyConfig
+	if s.hotkeyManager != nil {
+		hotkeys = s.hotkeyManager.GetRegisteredHotkeys()
+	}
 
 	// Format hotkeys for response
 	type HotkeyInfo struct {

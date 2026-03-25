@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 )
@@ -385,3 +387,180 @@ func TestAPIResponse(t *testing.T) {
 		t.Errorf("Expected error 'test error', got %s", parsed.Error)
 	}
 }
+
+func TestHandleHotkey_Success(t *testing.T) {
+	statsStore := stats.NewStore()
+	// Test with nil hotkey manager - should return enabled=false
+	server := NewServer(statsStore, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/hotkey", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response APIResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if !response.Success {
+		t.Error("Expected success to be true")
+	}
+
+	data, ok := response.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected data to be a map")
+	}
+
+	// With nil hotkey manager, enabled should be false
+	enabled, ok := data["enabled"].(bool)
+	if ok && enabled {
+		t.Error("Expected enabled to be false with nil hotkey manager")
+	}
+
+	// Hotkeys should be empty or null
+	hotkeys, ok := data["hotkeys"].([]interface{})
+	if ok && len(hotkeys) > 0 {
+		t.Errorf("Expected 0 hotkeys, got %d", len(hotkeys))
+	}
+}
+
+func TestHandleHotkey_NoHotkeys(t *testing.T) {
+	statsStore := stats.NewStore()
+	server := NewServer(statsStore, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/hotkey", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response APIResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	data, ok := response.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected data to be a map")
+	}
+
+	enabled, ok := data["enabled"].(bool)
+	if ok && enabled {
+		t.Error("Expected enabled to be false when no hotkeys registered")
+	}
+}
+
+func TestHandleHotkey_MethodNotAllowed(t *testing.T) {
+	statsStore := stats.NewStore()
+	server := NewServer(statsStore, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/hotkey", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405, got %d", w.Code)
+	}
+}
+
+func TestHandleHotkeyToggle_Success(t *testing.T) {
+	statsStore := stats.NewStore()
+	server := NewServer(statsStore, nil, nil, nil)
+
+	body := `{"action": "toggle", "hotkey": "toggle_proxy"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/hotkey/toggle", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response APIResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if !response.Success {
+		t.Error("Expected success to be true")
+	}
+
+	data, ok := response.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected data to be a map")
+	}
+
+	if data["action"] != "toggle" {
+		t.Errorf("Expected action 'toggle', got %v", data["action"])
+	}
+
+	if data["status"] != "acknowledged" {
+		t.Errorf("Expected status 'acknowledged', got %v", data["status"])
+	}
+}
+
+func TestHandleHotkeyToggle_InvalidMethod(t *testing.T) {
+	statsStore := stats.NewStore()
+	server := NewServer(statsStore, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/hotkey/toggle", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405, got %d", w.Code)
+	}
+}
+
+func TestHandleHotkeyToggle_InvalidBody(t *testing.T) {
+	statsStore := stats.NewStore()
+	server := NewServer(statsStore, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/hotkey/toggle", strings.NewReader("invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+func TestKeyToString(t *testing.T) {
+	tests := []struct {
+		vk       int
+		expected string
+	}{
+		{hotkey.VK_P, "P"},
+		{hotkey.VK_R, "R"},
+		{hotkey.VK_S, "S"},
+		{hotkey.VK_L, "L"},
+		{0xFF, "?"}, // Unknown key
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			result := keyToString(tt.vk)
+			if result != tt.expected {
+				t.Errorf("keyToString(%d) = %s, expected %s", tt.vk, result, tt.expected)
+			}
+		})
+	}
+}
+
