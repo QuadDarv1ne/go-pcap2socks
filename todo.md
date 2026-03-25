@@ -784,9 +784,29 @@ Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят
+- Тесты: ✅ все проходят (api: 42, proxy: 50+)
 - Размер бинарника: 17MB (в пределах нормы <25MB)
-- Ветка: main (6297fef), dev (6bc3ec7)
+- Ветка: main/dev (ac0cdc3)
+- Готовность: ✅ проект стабилен, готов к использованию
+
+---
+
+## ✅ Завершено (25.03.2026) - Unit-тесты и улучшения HTTP/3
+
+### Выполненные улучшения
+- [x] WebSocket hub unit-тесты (12 тестов) - api/websocket_test.go ✅
+- [x] Интерфейс wsConn для тестируемости WebSocket ✅
+- [x] sync.Once для безопасного Stop() ✅
+- [x] HTTP/3 datagram валидация ввода (empty packet, nil IP, invalid port) ✅
+- [x] HTTP/3 datagram deadline support (SetReadDeadline, SetWriteDeadline) ✅
+- [x] Тесты валидации HTTP/3 datagram (7 тестов) ✅
+- [x] Тесты deadline support (4 теста) ✅
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (api: 42, proxy: 50+)
+- Размер бинарника: 17MB (в пределах нормы <25MB)
+- Ветка: main/dev (ac0cdc3)
 - Готовность: ✅ проект стабилен, готов к использованию
 
 ---
@@ -794,7 +814,6 @@ Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
 ## 📋 Актуальные задачи (25.03.2026)
 
 ### В работе (ACTIVE) - 25.03.2026
-- [ ] Мониторинг стабильности WebSocket real-time stats (api/websocket.go)
 - [ ] Документация HTTP/3 (требуется запрос пользователя)
 - [ ] Интеграционные тесты с реальным HTTP/3 прокси
 - [ ] Hotkey integration (требуется Windows GUI/tray)
