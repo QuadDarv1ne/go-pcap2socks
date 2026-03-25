@@ -129,6 +129,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/config/auto", s.rateLimitMiddleware(s.authMiddleware(s.handleAutoConfig)))
 	s.mux.HandleFunc("/api/dhcp", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCP)))
 	s.mux.HandleFunc("/api/dhcp/leases", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPLeases)))
+	s.mux.HandleFunc("/api/dhcp/metrics", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPMetrics)))
 	s.mux.HandleFunc("/api/profiles", s.rateLimitMiddleware(s.authMiddleware(s.handleProfiles)))
 	s.mux.HandleFunc("/api/profiles/switch", s.rateLimitMiddleware(s.authMiddleware(s.handleProfileSwitch)))
 	s.mux.HandleFunc("/api/upnp", s.rateLimitMiddleware(s.authMiddleware(s.handleUPnP)))
@@ -1197,6 +1198,32 @@ var getDHCPLeases func() []map[string]interface{}
 // SetGetDHCPLeasesFn sets the function to get DHCP leases
 func SetGetDHCPLeasesFn(fn func() []map[string]interface{}) {
 	getDHCPLeases = fn
+}
+
+// getDHCPMetrics returns current DHCP metrics from global server
+var getDHCPMetrics func() map[string]interface{}
+
+// SetGetDHCPMetricsFn sets the function to get DHCP metrics
+func SetGetDHCPMetricsFn(fn func() map[string]interface{}) {
+	getDHCPMetrics = fn
+}
+
+// handleDHCPMetrics returns DHCP server metrics
+func (s *Server) handleDHCPMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	metrics := getDHCPMetrics()
+	if metrics == nil {
+		metrics = map[string]interface{}{
+			"available": false,
+			"message":   "DHCP metrics not available",
+		}
+	}
+
+	s.sendSuccess(w, metrics)
 }
 
 // handleWebSocket handles WebSocket connections for real-time updates
