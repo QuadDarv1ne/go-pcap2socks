@@ -19,8 +19,9 @@ func TestAuthMiddleware_NoToken(t *testing.T) {
 
 	handler(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
+	// Теперь если токен не установлен — доступ блокируется (503)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Expected status 503, got %d", w.Code)
 	}
 }
 
