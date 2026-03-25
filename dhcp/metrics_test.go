@@ -236,9 +236,9 @@ func TestMetricsSnapshot(t *testing.T) {
 		t.Errorf("ActiveLeases: expected 3, got %d", snapshot.ActiveLeases)
 	}
 
-	// Verify uptime is positive
-	if snapshot.UptimeSeconds <= 0 {
-		t.Errorf("UptimeSeconds should be positive, got %d", snapshot.UptimeSeconds)
+	// Verify uptime is non-negative (can be 0 if test runs fast)
+	if snapshot.UptimeSeconds < 0 {
+		t.Errorf("UptimeSeconds should be non-negative, got %d", snapshot.UptimeSeconds)
 	}
 
 	// Verify start time is set
