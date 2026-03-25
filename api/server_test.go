@@ -13,7 +13,7 @@ import (
 
 func TestServerRoutes(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 
 	tests := []struct {
 		method       string
@@ -46,7 +46,7 @@ func TestServerRoutes(t *testing.T) {
 
 func TestStatusHandler(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 
 	// Set running state
 	SetIsRunningFn(func() bool { return true })
@@ -83,7 +83,7 @@ func TestStatusHandler(t *testing.T) {
 
 func TestTrafficHandler(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/traffic", nil)
 	w := httptest.NewRecorder()
@@ -120,7 +120,7 @@ func TestTrafficHandler(t *testing.T) {
 
 func TestDevicesHandler(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 
 	// Add a test device
 	statsStore.RecordTraffic("192.168.137.100", "aa:bb:cc:dd:ee:ff", 1024, true)
@@ -157,7 +157,7 @@ func TestDevicesHandler(t *testing.T) {
 
 func TestServiceStartHandler(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 
 	startCalled := false
 	SetServiceCallbacks(
@@ -184,7 +184,7 @@ func TestServiceStartHandler(t *testing.T) {
 
 func TestServiceStopHandler(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 
 	stopCalled := false
 	SetServiceCallbacks(
@@ -225,7 +225,7 @@ func TestProfilesHandler(t *testing.T) {
 		return
 	}
 
-	server := NewServer(statsStore, profileMgr, nil)
+	server := NewServer(statsStore, profileMgr, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/profiles", nil)
 	w := httptest.NewRecorder()
@@ -249,7 +249,7 @@ func TestProfilesHandler(t *testing.T) {
 
 func TestUPnPHandler(t *testing.T) {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/upnp", nil)
 	w := httptest.NewRecorder()
@@ -279,7 +279,7 @@ func TestSetStartTime(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 	server.ServeHTTP(w, req)
 
 	var response APIResponse
@@ -317,7 +317,7 @@ func TestSetIsRunningFn(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil)
 	server.ServeHTTP(w, req)
 
 	var response APIResponse

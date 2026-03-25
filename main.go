@@ -482,7 +482,7 @@ func main() {
 		)
 
 		// Create API server with global stats store and profile manager
-		_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager)
+		_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
 
 		// Start real-time WebSocket updates (1 second interval)
 		_apiServer.StartRealTimeUpdates(1 * time.Second)
@@ -1519,7 +1519,7 @@ func runWebServer() {
 	}
 
 	// Create API server with profile manager (UPnP not available in standalone mode)
-	apiServer := api.NewServer(statsStore, profileMgr, nil)
+	apiServer := api.NewServer(statsStore, profileMgr, nil, nil)
 
 	// Start HTTP server
 	addr := fmt.Sprintf(":%d", port)
@@ -1548,7 +1548,7 @@ func runAPIServer() {
 	}
 
 	// Create API server with profile manager (UPnP not available in standalone mode)
-	apiServer := api.NewServer(statsStore, profileMgr, nil)
+	apiServer := api.NewServer(statsStore, profileMgr, nil, nil)
 
 	// Start HTTP server
 	err = http.ListenAndServe(":8081", apiServer)

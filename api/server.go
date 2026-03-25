@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
@@ -21,17 +22,18 @@ import (
 )
 
 type Server struct {
-	mux         *http.ServeMux
-	statsStore  *stats.Store
-	profileMgr  *profiles.Manager
-	upnpMgr     *upnpmanager.Manager
-	metrics     *metrics.Collector
-	configPath  string
-	authToken   string // Optional authentication token
-	rateLimiter *rateLimiter
-	wsHub       *WebSocketHub
-	mu          sync.RWMutex
-	enabled     bool
+	mux           *http.ServeMux
+	statsStore    *stats.Store
+	profileMgr    *profiles.Manager
+	upnpMgr       *upnpmanager.Manager
+	metrics       *metrics.Collector
+	configPath    string
+	authToken     string // Optional authentication token
+	rateLimiter   *rateLimiter
+	wsHub         *WebSocketHub
+	hotkeyManager *hotkey.Manager
+	mu            sync.RWMutex
+	enabled       bool
 }
 
 type APIResponse struct {
@@ -64,7 +66,7 @@ type Traffic struct {
 	Packets  uint64 `json:"packets"`
 }
 
-func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager) *Server {
+func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager, hotkeyMgr *hotkey.Manager) *Server {
 	executable, _ := os.Executable()
 	cfgFile := path.Join(path.Dir(executable), "config.json")
 
@@ -85,15 +87,16 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	go wsHub.Run()
 
 	s := &Server{
-		mux:         http.NewServeMux(),
-		statsStore:  statsStore,
-		profileMgr:  profileMgr,
-		upnpMgr:     upnpMgr,
-		metrics:     metricsCollector,
-		configPath:  cfgFile,
-		rateLimiter: rateLimiter,
-		wsHub:       wsHub,
-		enabled:     true,
+		mux:           http.NewServeMux(),
+		statsStore:    statsStore,
+		profileMgr:    profileMgr,
+		upnpMgr:       upnpMgr,
+		metrics:       metricsCollector,
+		configPath:    cfgFile,
+		rateLimiter:   rateLimiter,
+		wsHub:         wsHub,
+		hotkeyManager: hotkeyMgr,
+		enabled:       true,
 	}
 
 	s.setupRoutes()
@@ -657,10 +660,45 @@ func (s *Server) handleHotkey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement hotkey status
+	// Get registered hotkeys
+	hotkeys := s.hotkeyManager.GetRegisteredHotkeys()
+
+	// Format hotkeys for response
+	type HotkeyInfo struct {
+		Name     string `json:"name"`
+		Shortcut string `json:"shortcut"`
+		Enabled  bool   `json:"enabled"`
+	}
+
+	hotkeyList := make([]HotkeyInfo, 0, len(hotkeys))
+	for _, hk := range hotkeys {
+		modifiers := ""
+		if hk.Modifiers&hotkey.MOD_CTRL != 0 {
+			modifiers += "Ctrl+"
+		}
+		if hk.Modifiers&hotkey.MOD_ALT != 0 {
+			modifiers += "Alt+"
+		}
+		if hk.Modifiers&hotkey.MOD_SHIFT != 0 {
+			modifiers += "Shift+"
+		}
+		if hk.Modifiers&hotkey.MOD_WIN != 0 {
+			modifiers += "Win+"
+		}
+
+		// Convert virtual key to string
+		keyStr := keyToString(hk.VirtualKey)
+
+		hotkeyList = append(hotkeyList, HotkeyInfo{
+			Name:     hk.Name,
+			Shortcut: modifiers + keyStr,
+			Enabled:  true,
+		})
+	}
+
 	s.sendSuccess(w, map[string]interface{}{
-		"enabled": false,
-		"toggle":  "Ctrl+Alt+P",
+		"enabled": s.hotkeyManager != nil && len(hotkeys) > 0,
+		"hotkeys": hotkeyList,
 	})
 }
 
@@ -670,9 +708,41 @@ func (s *Server) handleHotkeyToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement hotkey toggle
-	slog.Info("Proxy toggle requested via hotkey")
-	s.sendSuccess(w, "Proxy toggled")
+	// Parse request body
+	var req struct {
+		Action string `json:"action"` // "toggle", "enable", "disable"
+		Hotkey string `json:"hotkey"` // hotkey name
+	}
+
+	if err := s.decodeJSONBodyWithLimit(w, r, &req, 1024); err != nil {
+		s.sendError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	slog.Info("Hotkey action requested", "action", req.Action, "hotkey", req.Hotkey)
+
+	// For now, just acknowledge the request
+	// Full implementation would require callback integration
+	s.sendSuccess(w, map[string]interface{}{
+		"action": req.Action,
+		"status": "acknowledged",
+	})
+}
+
+// keyToString converts virtual key code to string representation
+func keyToString(vk int) string {
+	switch vk {
+	case hotkey.VK_P:
+		return "P"
+	case hotkey.VK_R:
+		return "R"
+	case hotkey.VK_S:
+		return "S"
+	case hotkey.VK_L:
+		return "L"
+	default:
+		return "?"
+	}
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
