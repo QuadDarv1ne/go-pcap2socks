@@ -1,10 +1,10 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (25.03.2026 20:30) - ТЕКУЩАЯ ПРОВЕРКА
+## ✅ Завершено (25.03.2026 21:00) - ТЕКУЩАЯ ПРОВЕРКА
 
 ### Проверка проекта
 - [x] Проверка компиляции - успешно ✅ (17.4 MB бинарник)
-- [x] Все тесты проходят (proxy: ✅, stats: ✅, cfg: ✅, dhcp: ✅) ✅
+- [x] Все тесты проходят (proxy: ✅, stats: ✅, cfg: ✅, dhcp: ✅, upnp: ✅, api: ✅) ✅
 - [x] Race detector тесты без ошибок ✅
 - [x] Ветки dev/main синхронизированы и отправлены ✅
 
@@ -18,12 +18,19 @@ Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (proxy: 50+, stats: 10, cfg: 8, dhcp: 10)
+- Тесты: ✅ все проходят (proxy: 50+, stats: 10, cfg: 8, dhcp: 10, upnp: 7, api: 49)
 - Race detector: ✅ все тесты проходят
 - Размер бинарника: 17.4 MB (в пределах нормы <25MB)
-- Ветка: main/dev (0315f81)
+- Ветка: main/dev (10b5b2f)
 - Отправлено: ✅ origin/main, origin/dev
 - Готовность: ✅ проект стабилен, готов к использованию
+
+### Новые возможности UPnP
+- ✅ API endpoint `/api/upnp/preset` для применения игровых пресетов
+- ✅ Пресеты: PS4, PS5, Xbox, Switch
+- ✅ Тесты для UPnP manager (7 тестов)
+- ✅ GetGamePresetPorts() функция
+- ✅ GetConfig() метод в Manager
 
 ---
 
@@ -868,8 +875,8 @@ dev:  b9da6b7 fix(dhcp): исправлен тест TestMetricsSnapshot ✅
 
 ---
 
-**Последнее обновление**: 25 марта 2026 г. (20:30)
-**Версия**: v3.19.3 (main/dev: 0315f81)
+**Последнее обновление**: 25 марта 2026 г. (21:00)
+**Версия**: v3.19.3 (main/dev: 10b5b2f)
 **Статус**: ✅ готов к использованию
 
 ### Правила проекта
@@ -880,16 +887,18 @@ dev:  b9da6b7 fix(dhcp): исправлен тест TestMetricsSnapshot ✅
 
 ---
 
-## 🔧 В работе (25.03.2026 20:30)
+## 🔧 В работе (25.03.2026 21:00)
 
 ### Текущие задачи
+- [x] UPnP API endpoint для игровых пресетов ✅
+- [x] UPnP тесты (7 тестов) ✅
 - [ ] DHCP WinDivert интеграция (тестирование на реальных устройствах)
-- [ ] UPnP port forwarding (игровые консоли PS4/PS5/Xbox)
+- [ ] UPnP port forwarding (тестирование на реальном роутере)
 - [ ] Cross-platform сборка (Windows/Linux/macOS)
 - [ ] Tray Icon (Windows) - getlantern/systray
 - [ ] Hotkey integration (Windows GUI/tray)
 
 ### Приоритеты
 1. **HIGH**: DHCP WinDivert - стабилизация работы с реальными клиентами
-2. **MEDIUM**: UPnP port forwarding - авто-проброс для игр
+2. **MEDIUM**: UPnP port forwarding - тестирование на реальном роутере
 3. **LOW**: Cross-platform - поддержка Linux/macOS
