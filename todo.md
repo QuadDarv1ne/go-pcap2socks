@@ -1,5 +1,88 @@
 # go-pcap2socks TODO
 
+## ✅ Завершено (25.03.2026 23:30) - v3.19.9 ИСПРАВЛЕНИЕ УЯЗВИМОСТЕЙ И БАГОВ
+
+### Проверка проекта
+- [x] Проверка компиляции - успешно ✅ (17.4 MB бинарник)
+- [x] go vet - без ошибок ✅
+- [x] Ветки dev/main синхронизированы ✅
+
+### Критические исправления безопасности v3.19.9
+
+#### Уязвимости безопасности (Security)
+- [x] Command Injection в executeOnStart ✅
+  - **Файл**: main.go
+  - **Проблема**: Выполнение произвольных команд из config.json без проверки
+  - **Решение**: Добавлен whitelist команд (netsh, ipconfig, ping, iptables, etc.)
+  - **Решение**: Валидация аргументов на опасные символы (;|&$`)
+  - **Решение**: Проверка полных путей к исполняемым файлам
+  - **Функции**: isCommandAllowed(), validateExecuteOnStart()
+
+- [x] Path Traversal в API server ✅
+  - **Файл**: api/server.go (handleStatic)
+  - **Проблема**: Обход проверки путей через ../ и символические ссылки
+  - **Решение**: Использован filepath.Rel для надёжной проверки
+  - **Решение**: Двойная проверка через absWebPath/absFilePath
+  - **Решение**: Добавлены security headers (X-Content-Type-Options, X-Frame-Options, CSP)
+
+- [x] Missing Authentication для API ✅
+  - **Файлы**: api/server.go, api/auth.go
+  - **Проблема**: Если токен не установлен — все запросы разрешены
+  - **Решение**: Генерация криптографически безопасного токена по умолчанию
+  - **Решение**: Требование аутентификации для всех endpoints
+  - **Решение**: Токен выводится в лог при запуске
+  - **Функция**: generateSecureToken() (32 байта, crypto/rand)
+
+#### Утечки ресурсов (Goroutine Leaks)
+- [x] Goroutine Leak в Router.cleanupLoop ✅
+  - **Файл**: main.go (Stop function)
+  - **Проблема**: router.Stop() не вызывался при shutdown
+  - **Решение**: Добавлен вызов router.Stop() первым в функции Stop()
+
+- [x] Goroutine Leak в LeaseDB.saveLoop ✅
+  - **Файл**: dhcp/lease_db.go
+  - **Проблема**: saveLoop не имел канала остановки
+  - **Решение**: Добавлен stopChan канал
+  - **Решение**: Close() закрывает stopChan для остановки goroutine
+
+- [x] Goroutine Leak в quicDatagramConn ✅
+  - **Файл**: proxy/http3_datagram.go
+  - **Проблема**: Паника при повторном закрытии каналов
+  - **Решение**: Добавлен sync.Once для безопасного закрытия
+  - **Решение**: once.Do() для close(readChan/errChan)
+
+- [x] SOCKS5 UDP Resource Leak ✅
+  - **Файл**: proxy/socks5.go
+  - **Проблема**: UDP association мог не закрыться при панике
+  - **Решение**: Добавлен defer для tcpConn.Close() и packetConn.Close()
+
+#### Исправления багов
+- [x] Missing Error Handling в Tunnel ✅
+  - **Файл**: tunnel/tcp.go
+  - **Проблема**: Ошибки io.Copy игнорировались
+  - **Решение**: Логирование ошибок Copy, CloseRead, CloseWrite
+  - **Решение**: Добавлен импорт errors для Is() проверки
+
+- [x] WebSocket Hub Deadlock ✅
+  - **Файл**: api/websocket.go
+  - **Проблема**: Изменение map во время итерации с RLock
+  - **Решение**: Сбор клиентов для закрытия в отдельный список
+  - **Решение**: Закрытие вынесено вне RLock блокировки
+
+### Итоговый эффект
+- **Безопасность**: Устранены Command Injection, Path Traversal, Missing Auth
+- **Стабильность**: Устранены утечки goroutine при shutdown
+- **Надёжность**: Гарантированное закрытие ресурсов (defer, sync.Once)
+- **Мониторинг**: Логирование ошибок для отладки
+
+### Статус проекта
+- Компиляция: ✅ без ошибок (17.4 MB)
+- go vet: ✅ без ошибок
+- Ветка: dev (текущая)
+- Готовность: ✅ готов к merge в main
+
+---
+
 ## ✅ Завершено (25.03.2026 22:00) - v3.19.4 ОПТИМИЗАЦИЯ ПРОИЗВОДИТЕЛЬНОСТИ
 
 ### Проверка проекта

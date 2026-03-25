@@ -62,6 +62,65 @@ var asyncHandler *asynclogger.AsyncHandler
 // _apiServer is the global API server instance
 var _apiServer *api.Server
 
+// allowedCommands - whitelist разрешённых команд для executeOnStart
+// Это предотвращает Command Injection уязвимость
+var allowedCommands = map[string]bool{
+	// Windows команды
+	"netsh": true,
+	"ipconfig": true,
+	"ping": true,
+	"route": true,
+	"arp": true,
+	"nssm": true,
+	"sc": true,
+	// Linux/macOS команды
+	"iptables": true,
+	"ip": true,
+	"ifconfig": true,
+	"systemctl": true,
+	// Скрипты (только из безопасных путей)
+	// Добавляйте явно только доверенные скрипты
+}
+
+// isCommandAllowed проверяет, разрешена ли команда к выполнению
+func isCommandAllowed(cmd string) bool {
+	// Разрешаем полные пути к исполняемым файлам
+	if strings.HasPrefix(cmd, "C:\\") || strings.HasPrefix(cmd, "D:\\") ||
+		strings.HasPrefix(cmd, "/usr/") || strings.HasPrefix(cmd, "/bin/") ||
+		strings.HasPrefix(cmd, "/opt/") {
+		// Проверяем, что путь не содержит опасных конструкций
+		if strings.Contains(cmd, "..") || strings.Contains(cmd, ";") ||
+			strings.Contains(cmd, "|") || strings.Contains(cmd, "&") ||
+			strings.Contains(cmd, "$") || strings.Contains(cmd, "`") {
+			return false
+		}
+		return true
+	}
+	// Проверяем whitelist для простых имён команд
+	return allowedCommands[cmd]
+}
+
+// validateExecuteOnStart проверяет безопасность команд для выполнения
+func validateExecuteOnStart(cmds []string) error {
+	if len(cmds) == 0 {
+		return nil
+	}
+
+	cmd := cmds[0]
+	if !isCommandAllowed(cmd) {
+		return fmt.Errorf("command not allowed for security reasons: %s. Allowed commands: netsh, ipconfig, ping, route, arp, iptables, ip, ifconfig, systemctl, or full paths to trusted executables", cmd)
+	}
+
+	// Проверяем аргументы на наличие опасных конструкций
+	for i, arg := range cmds[1:] {
+		if strings.ContainsAny(arg, ";|&$`") {
+			return fmt.Errorf("argument %d contains dangerous characters: %s", i+1, arg)
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	// Setup logging - check SLOG_LEVEL env var
 	logLevel := slog.LevelInfo // Default to info
@@ -348,7 +407,14 @@ func main() {
 		}
 	}
 
+	// Выполнение команд из executeOnStart с проверкой безопасности
 	if len(config.ExecuteOnStart) > 0 {
+		// Валидация команд для предотвращения Command Injection
+		if err := validateExecuteOnStart(config.ExecuteOnStart); err != nil {
+			slog.Error("executeOnStart validation failed", "err", err)
+			return
+		}
+
 		slog.Info(msgs.ExecutingCommands, "cmd", config.ExecuteOnStart)
 
 		var cmd *exec.Cmd
@@ -542,6 +608,15 @@ func main() {
 
 		// Create API server with global stats store and profile manager
 		_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
+
+		// Set auth token from config if provided, otherwise use auto-generated token
+		if config.API != nil && config.API.Token != "" {
+			_apiServer.SetAuthToken(config.API.Token)
+			slog.Info("API authentication token loaded from config")
+		} else {
+			// Token was auto-generated in NewServer, log it for the user
+			slog.Info("API authentication token auto-generated. Set 'token' in config.json to use a custom token.", "token", _apiServer.GetAuthToken())
+		}
 
 		// Start real-time WebSocket updates (1 second interval)
 		_apiServer.StartRealTimeUpdates(1 * time.Second)
@@ -904,6 +979,14 @@ func IsRunning() bool {
 func Stop() {
 	slog.Info("Stopping service...")
 	_running = false
+
+	// Stop router first to stop cleanup goroutine
+	if _defaultProxy != nil {
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			router.Stop()
+			slog.Info("Router stopped")
+		}
+	}
 
 	// Stop proxy groups
 	for _, p := range _defaultProxy.(*proxy.Router).Proxies {

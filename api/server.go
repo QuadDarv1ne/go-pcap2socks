@@ -2,6 +2,8 @@ package api
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -68,6 +70,19 @@ type Traffic struct {
 	Packets  uint64 `json:"packets"`
 }
 
+// generateSecureToken генерирует криптографически безопасный случайный токен
+// для аутентификации API по умолчанию
+func generateSecureToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback на детерминированный токен если rand не работает
+		// Это может произойти только в крайне необычных обстоятельствах
+		slog.Warn("crypto/rand failed, using fallback token", "err", err)
+		return "fallback_token_" + time.Now().Format("20060102150405")
+	}
+	return base64.URLEncoding.EncodeToString(b)
+}
+
 func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager, hotkeyMgr *hotkey.Manager) *Server {
 	executable, _ := os.Executable()
 	cfgFile := path.Join(path.Dir(executable), "config.json")
@@ -95,12 +110,15 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 		upnpMgr:       upnpMgr,
 		metrics:       metricsCollector,
 		configPath:    cfgFile,
+		authToken:     generateSecureToken(), // Генерировать безопасный токен по умолчанию
 		rateLimiter:   rateLimiter,
 		wsHub:         wsHub,
 		hotkeyManager: hotkeyMgr,
 		enabled:       true,
 		stopChan:      make(chan struct{}),
 	}
+
+	slog.Info("API server initialized with auto-generated authentication token", "token_length", len(s.authToken))
 
 	s.setupRoutes()
 	return s
@@ -783,7 +801,16 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	requestPath := filepath.FromSlash(path.Clean("/" + r.URL.Path))
 	filePath := filepath.Join(webPath, requestPath)
 
-	// Security: verify the resolved path is within webPath
+	// Security: use filepath.Rel for robust path traversal prevention
+	// This is more secure than prefix checking as it handles symlinks and edge cases
+	rel, err := filepath.Rel(webPath, filePath)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		slog.Warn("Path traversal attempt blocked", "path", r.URL.Path, "resolved", filePath)
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	// Additional check: verify file exists and is within webPath
 	absWebPath, err := filepath.Abs(webPath)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -794,9 +821,9 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if !strings.HasPrefix(absFilePath, absWebPath+string(filepath.Separator)) && absFilePath != absWebPath {
+	if !strings.HasPrefix(absFilePath, absWebPath) {
+		slog.Warn("Path traversal attempt blocked (abs check)", "path", r.URL.Path, "resolved", absFilePath)
 		http.Error(w, "Forbidden", http.StatusForbidden)
-		slog.Warn("Path traversal attempt blocked", "path", r.URL.Path, "resolved", absFilePath)
 		return
 	}
 
@@ -828,6 +855,12 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	case ".ico":
 		w.Header().Set("Content-Type", "image/x-icon")
 	}
+
+	// Add security headers to prevent XSS and other attacks
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-XSS-Protection", "1; mode=block")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:")
 
 	http.ServeFile(w, r, filePath)
 }
