@@ -316,9 +316,9 @@ func TestWebSocketHub_BroadcastToFullBuffer(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Client should be disconnected due to full buffer
-	hub.mu.RLock()
+	hub.mu.Lock()
 	clientCount := len(hub.clients)
-	hub.mu.RUnlock()
+	hub.mu.Unlock()
 
 	if clientCount != 0 {
 		t.Errorf("expected client to be disconnected due to full buffer, got %d clients", clientCount)
