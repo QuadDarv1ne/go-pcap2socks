@@ -382,6 +382,8 @@ func (s *Store) SetCustomName(mac, name string) {
 		device.mu.Lock()
 		if device.MAC == mac {
 			device.CustomName = name
+			device.mu.Unlock()
+			return
 		}
 		device.mu.Unlock()
 	}
@@ -414,6 +416,8 @@ func (s *Store) SetRateLimit(mac string, upload, download uint64) {
 		if device.MAC == mac {
 			device.RateLimitUpload = upload
 			device.RateLimitDownload = download
+			device.mu.Unlock()
+			return
 		}
 		device.mu.Unlock()
 	}

@@ -5,7 +5,6 @@ package proxy
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"strconv"
@@ -193,16 +192,6 @@ func (r *Router) cleanupLoop() {
 		select {
 		case <-ticker.C:
 			r.routeCache.cleanup()
-
-			// Log cache stats periodically
-			hits, misses := r.routeCache.stats()
-			if hits+misses > 0 {
-				hitRate := float64(hits) / float64(hits+misses) * 100
-				slog.Debug("Route cache stats",
-					"hits", hits,
-					"misses", misses,
-					"hit_rate", fmt.Sprintf("%.2f%%", hitRate))
-			}
 		case <-r.stopCleanup:
 			return
 		}

@@ -66,7 +66,6 @@ func (h *WebSocketHub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			slog.Debug("WebSocket client connected", "total", len(h.clients))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -75,7 +74,6 @@ func (h *WebSocketHub) Run() {
 				close(client.send)
 			}
 			h.mu.Unlock()
-			slog.Debug("WebSocket client disconnected", "total", len(h.clients))
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
