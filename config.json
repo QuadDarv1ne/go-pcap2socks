@@ -6,9 +6,9 @@
     "mtu": 1486
   },
   "dhcp": {
-    "enabled": false,
-    "poolStart": "192.168.137.10",
-    "poolEnd": "192.168.137.250",
+    "enabled": true,
+    "poolStart": "192.168.137.100",
+    "poolEnd": "192.168.137.200",
     "leaseDuration": 86400
   },
   "dns": {
@@ -27,8 +27,7 @@
     {"tag": "dns-out", "dns": {}}
   ],
   "telegram": {
-    "token": "${TELEGRAM_TOKEN}",
-    "chat_id": "${TELEGRAM_CHAT_ID}"
+    "enabled": false
   },
   "discord": {
     "webhook_url": "${DISCORD_WEBHOOK_URL}",
@@ -39,8 +38,8 @@
     "toggle": "Ctrl+Alt+P"
   },
   "windivert": {
-    "enabled": false,
-    "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
+    "enabled": true,
+    "filter": "(udp.DstPort == 67 or udp.SrcPort == 68) and !loopback and !impostor"
   },
   "upnp": {
     "enabled": false,

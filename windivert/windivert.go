@@ -10,6 +10,11 @@ import (
 	"github.com/threatwinds/godivert"
 )
 
+// UsePacketLayer enables full Ethernet frame capture/send
+// This allows proper unicast delivery to specific MAC addresses
+// Note: Currently godivert library only supports network layer mode
+const UsePacketLayer = false
+
 // Filter for DHCP packets (UDP ports 67 and 68)
 const DHCPFilter = "udp.DstPort == 67 or udp.SrcPort == 68"
 
@@ -42,12 +47,28 @@ func NewHandle(filter string) (*Handle, error) {
 		filter = DHCPFilter
 	}
 
-	h, err := godivert.NewWinDivertHandle(filter)
+	// Use packet layer for full Ethernet frame support if enabled
+	var h *godivert.WinDivertHandle
+	var err error
+
+	if UsePacketLayer {
+		// Packet layer includes Ethernet headers for proper L2 framing
+		// Note: This requires godivert support which is not currently available
+		h, err = godivert.NewWinDivertHandle(filter)
+	} else {
+		// Network layer only (default)
+		h, err = godivert.NewWinDivertHandle(filter)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("windivert open: %w", err)
 	}
 
-	slog.Info("WinDivert handle opened", "filter", filter)
+	mode := "network"
+	if UsePacketLayer {
+		mode = "packet"
+	}
+	slog.Info("WinDivert handle opened", "filter", filter, "mode", mode)
 
 	return &Handle{
 		handle:   h,

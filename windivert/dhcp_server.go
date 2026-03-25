@@ -10,6 +10,22 @@ import (
 	"github.com/threatwinds/godivert"
 )
 
+// broadcastMAC is the Ethernet broadcast MAC address
+var broadcastMAC = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+
+// bytesEqual compares two byte slices for equality
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // DHCPServer represents a DHCP server using WinDivert
 type DHCPServer struct {
 	mu       sync.RWMutex
@@ -129,6 +145,15 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 
 	dhcpData := packet.Raw[dhcpStart:]
 
+	// Check broadcast flag in DHCP Discover (flags field at offset 10-11 in DHCP header)
+	// If high bit is set (0x8000), client wants broadcast response
+	broadcastFlag := false
+	if len(dhcpData) >= 12 {
+		flags := uint16(dhcpData[10])<<8 | uint16(dhcpData[11])
+		broadcastFlag = (flags & 0x8000) != 0
+		slog.Debug("DHCP flags", "flags", fmt.Sprintf("0x%04X", flags), "broadcast", broadcastFlag)
+	}
+
 	// Handle DHCP request
 	responseData, err := s.server.HandleRequest(dhcpData)
 	if err != nil {
@@ -143,10 +168,10 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		return
 	}
 
-	slog.Info("DHCP response generated", "mac", packet.SrcMAC.String(), "response_len", len(responseData))
+	slog.Info("DHCP response generated", "mac", packet.SrcMAC.String(), "response_len", len(responseData), "broadcast", broadcastFlag)
 
 	// Build and send DHCP response packet
-	err = s.sendDHCPResponse(packet, responseData)
+	err = s.sendDHCPResponse(packet, responseData, broadcastFlag)
 	if err != nil {
 		slog.Error("DHCP send response error", "err", err)
 	}
@@ -156,11 +181,11 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 }
 
 // sendDHCPResponse builds and sends a DHCP response packet
-func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
-	// Determine destination IP
-	// For DHCP OFFER/ACK, use broadcast (255.255.255.255) if client doesn't have IP yet
-	// or use the client's assigned IP if it's a renewal
+func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte, broadcastFlag bool) error {
+	// Determine destination IP based on broadcast flag and client state
+	// If client set broadcast flag, we MUST use broadcast address
 	dstIP := net.IPv4(255, 255, 255, 255) // Default broadcast
+	dstMAC := broadcastMAC                 // Default broadcast MAC
 
 	// Check DHCP message type and client IP
 	// DHCP message starts at dhcpData[0]
@@ -169,25 +194,53 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 	if len(dhcpData) >= 20 {
 		clientIP := net.IP(dhcpData[12:16]).To4()
 		yourIP := net.IP(dhcpData[16:20]).To4()
-		
-		// If client already has an IP (ciaddr != 0), use that
+
+		// If client already has an IP (ciaddr != 0), use unicast
 		if !clientIP.Equal(net.IPv4zero) {
 			dstIP = clientIP
-		} else if !yourIP.Equal(net.IPv4zero) {
-			// For OFFER/ACK, use the assigned IP for unicast if possible
-			// But broadcast is safer for compatibility
+			dstMAC = request.SrcMAC // Use client's MAC for unicast
+			slog.Debug("DHCP unicast response (client has IP)", "dst_ip", dstIP.String(), "dst_mac", dstMAC.String())
+		} else if broadcastFlag {
+			// Client explicitly requested broadcast response
 			dstIP = net.IPv4(255, 255, 255, 255)
+			dstMAC = broadcastMAC
+			slog.Debug("DHCP broadcast response (flag set)", "dst_ip", dstIP.String(), "your_ip", yourIP.String())
+		} else if !yourIP.Equal(net.IPv4zero) {
+			// For OFFER/ACK to clients without IP and no broadcast flag
+			// Use unicast to client MAC - critical for PS4 and other devices
+			dstIP = yourIP
+			dstMAC = request.SrcMAC // Use client's MAC from request
+			slog.Debug("DHCP unicast response (no flag)", "dst_ip", dstIP.String(), "dst_mac", dstMAC.String(), "your_ip", yourIP.String())
 		}
 	}
 
-	// Build IP+UDP+DHCP packet (WinDivert network layer - no Ethernet header)
-	responsePacket, err := buildIPUDPPacket(
-		s.localIP, // Source IP (server)
-		dstIP,     // Destination IP (client or broadcast)
-		67,        // Source port (DHCP server)
-		68,        // Destination port (DHCP client)
-		dhcpData,
-	)
+	// Build packet based on WinDivert mode
+	// Packet layer includes Ethernet header for proper L2 delivery
+	var responsePacket []byte
+	var err error
+
+	if UsePacketLayer {
+		// Build full Ethernet+IP+UDP+DHCP packet for packet layer mode
+		responsePacket, err = buildEthernetIPUDPPacket(
+			dstMAC,        // Destination MAC (client)
+			s.localMAC,    // Source MAC (server)
+			s.localIP,     // Source IP (server)
+			dstIP,         // Destination IP (client or broadcast)
+			67,            // Source port (DHCP server)
+			68,            // Destination port (DHCP client)
+			dhcpData,
+		)
+	} else {
+		// Build IP+UDP+DHCP packet for network layer mode (no Ethernet header)
+		responsePacket, err = buildIPUDPPacket(
+			s.localIP, // Source IP (server)
+			dstIP,     // Destination IP (client or broadcast)
+			67,        // Source port (DHCP server)
+			68,        // Destination port (DHCP client)
+			dhcpData,
+		)
+	}
+
 	if err != nil {
 		return fmt.Errorf("build DHCP response: %w", err)
 	}
@@ -213,10 +266,18 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte) error {
 		return fmt.Errorf("send DHCP response: %w", err)
 	}
 
+	packetType := "unicast"
+	if bytesEqual(dstMAC, broadcastMAC) {
+		packetType = "broadcast"
+	}
+
 	slog.Info("DHCP response sent via WinDivert",
 		"dst_ip", dstIP.String(),
+		"dst_mac", dstMAC.String(),
 		"packet_len", len(responsePacket),
-		"ifidx", request.Addr.IfIdx)
+		"packet_type", packetType,
+		"ifidx", request.Addr.IfIdx,
+		"broadcast", broadcastFlag)
 
 	return nil
 }
@@ -294,4 +355,116 @@ func calculateIPChecksum(header []byte) uint16 {
 	}
 
 	return uint16(^sum)
+}
+
+// buildEthernetIPUDPPacket builds a full Ethernet+IP+UDP packet with payload
+// This is used for WinDivert packet layer which requires Ethernet framing
+func buildEthernetIPUDPPacket(dstMAC, srcMAC net.HardwareAddr, srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) ([]byte, error) {
+	// Ethernet header (14 bytes) + IP header (20 bytes) + UDP header (8 bytes) + payload
+	ethHeaderLen := 14
+	ipHeaderLen := 20
+	udpHeaderLen := 8
+	totalLen := ethHeaderLen + ipHeaderLen + udpHeaderLen + len(payload)
+
+	packet := make([]byte, totalLen)
+
+	// Build Ethernet header
+	copy(packet[0:6], dstMAC)   // Destination MAC
+	copy(packet[6:12], srcMAC)  // Source MAC
+	packet[12] = 0x08           // Ethernet type: IPv4 (0x0800)
+	packet[13] = 0x00
+
+	// Build IP header (starts at offset 14)
+	ipStart := ethHeaderLen
+	packet[ipStart+0] = 0x45                // Version 4, IHL 5 (20 bytes)
+	packet[ipStart+1] = 0x00                // DSCP, ECN
+	ipTotalLen := ipHeaderLen + udpHeaderLen + len(payload)
+	packet[ipStart+2] = byte(ipTotalLen >> 8) // Total length (IP header + UDP header + payload)
+	packet[ipStart+3] = byte(ipTotalLen)
+	packet[ipStart+4] = 0x00 // Identification
+	packet[ipStart+5] = 0x00
+	packet[ipStart+6] = 0x00 // Flags, Fragment offset
+	packet[ipStart+7] = 0x00
+	packet[ipStart+8] = 64 // TTL
+	packet[ipStart+9] = 17 // Protocol: UDP
+	// Checksum will be calculated later (bytes 10-11)
+	copy(packet[ipStart+12:ipStart+16], srcIP.To4())
+	copy(packet[ipStart+16:ipStart+20], dstIP.To4())
+
+	// Calculate IP checksum
+	ipChecksum := calculateIPChecksum(packet[ipStart : ipStart+ipHeaderLen])
+	packet[ipStart+10] = byte(ipChecksum >> 8)
+	packet[ipStart+11] = byte(ipChecksum)
+
+	// Build UDP header
+	udpStart := ipStart + ipHeaderLen
+	packet[udpStart+0] = byte(srcPort >> 8)
+	packet[udpStart+1] = byte(srcPort)
+	packet[udpStart+2] = byte(dstPort >> 8)
+	packet[udpStart+3] = byte(dstPort)
+	udpLen := udpHeaderLen + len(payload)
+	packet[udpStart+4] = byte(udpLen >> 8)
+	packet[udpStart+5] = byte(udpLen)
+
+	// Calculate UDP checksum (optional for IPv4, but recommended)
+	udpChecksum := calculateUDPChecksum(packet, srcIP, dstIP, ethHeaderLen)
+	packet[udpStart+6] = byte(udpChecksum >> 8)
+	packet[udpStart+7] = byte(udpChecksum)
+
+	// Copy payload
+	copy(packet[ipStart+udpHeaderLen:], payload)
+
+	return packet, nil
+}
+
+// calculateUDPChecksum calculates UDP checksum using pseudo-header
+func calculateUDPChecksum(packet []byte, srcIP, dstIP net.IP, ethOffset int) uint16 {
+	ipStart := ethOffset
+	ipHeaderLen := 20
+	udpStart := ipStart + ipHeaderLen
+	udpHeaderLen := 8
+
+	// UDP payload length
+	udpLen := int(packet[udpStart+4])<<8 | int(packet[udpStart+5])
+	totalLen := udpHeaderLen + udpLen
+
+	// Set checksum field to 0 for calculation
+	packet[udpStart+6] = 0
+	packet[udpStart+7] = 0
+
+	var sum uint32
+
+	// UDP pseudo-header (12 bytes)
+	// Source IP (4 bytes)
+	sum += uint32(srcIP[0])<<8 | uint32(srcIP[1])
+	sum += uint32(srcIP[2])<<8 | uint32(srcIP[3])
+	// Destination IP (4 bytes)
+	sum += uint32(dstIP[0])<<8 | uint32(dstIP[1])
+	sum += uint32(dstIP[2])<<8 | uint32(dstIP[3])
+	// Zero + Protocol (1 byte) + UDP Length (2 bytes)
+	sum += uint32(17) // Protocol: UDP
+	sum += uint32(udpLen)
+
+	// UDP header + payload
+	for i := 0; i < totalLen; i += 2 {
+		if udpStart+i+1 < len(packet) {
+			sum += uint32(packet[udpStart+i])<<8 | uint32(packet[udpStart+i+1])
+		} else if udpStart+i < len(packet) {
+			// Odd byte - pad with zero
+			sum += uint32(packet[udpStart+i]) << 8
+		}
+	}
+
+	// Add carry
+	for (sum >> 16) != 0 {
+		sum = (sum & 0xFFFF) + (sum >> 16)
+	}
+
+	checksum := uint16(^sum)
+	// If checksum is 0, use 0xFFFF (per RFC 768)
+	if checksum == 0 {
+		checksum = 0xFFFF
+	}
+
+	return checksum
 }

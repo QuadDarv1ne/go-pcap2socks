@@ -81,7 +81,14 @@ func (s *Server) handleDiscover(msg *DHCPMessage) ([]byte, error) {
 	// Build DHCPOFFER
 	response := s.buildResponse(msg, DHCPOffer, ip)
 
-	slog.Info("DHCP Offer sent", "mac", msg.ClientHardware.String(), "ip", ip.String())
+	slog.Info("DHCP Offer sent",
+		"mac", msg.ClientHardware.String(),
+		"ip", ip.String(),
+		"server_id", s.config.ServerIP.String(),
+		"subnet_mask", net.IP(s.config.Network.Mask).String(),
+		"router", s.config.ServerIP.String(),
+		"dns_servers", s.config.DNSServers,
+		"lease_time", s.config.LeaseDuration.Seconds())
 	return response, nil
 }
 
@@ -167,8 +174,11 @@ func (s *Server) buildResponse(request *DHCPMessage, messageType uint8, ip net.I
 	response.Options[OptionServerIdentifier] = s.config.ServerIP.To4()
 
 	if ip != nil {
-		// Subnet mask
+		// Subnet mask - convert net.IPMask to 4-byte IP format
 		mask := s.config.Network.Mask
+		if len(mask) == 16 {
+			mask = mask[12:16] // Convert IPv6 mask to IPv4
+		}
 		response.Options[OptionSubnetMask] = mask
 
 		// Router (gateway)
@@ -193,6 +203,15 @@ func (s *Server) buildResponse(request *DHCPMessage, messageType uint8, ip net.I
 		binary.BigEndian.PutUint32(leaseTimeBuf[:4], leaseTime)
 		response.Options[OptionLeaseTime] = append([]byte(nil), leaseTimeBuf[:4]...)
 		pool.Put(leaseTimeBuf)
+
+		slog.Debug("DHCP Offer options built",
+			"message_type", messageType,
+			"server_id", s.config.ServerIP.String(),
+			"subnet_mask", net.IP(mask).String(),
+			"router", s.config.ServerIP.String(),
+			"dns_servers", s.config.DNSServers,
+			"lease_time_seconds", leaseTime,
+			"your_ip", ip.String())
 	}
 
 	return response.Marshal()
