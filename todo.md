@@ -30,9 +30,9 @@ Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
 
 ### Проверка проекта
 - [x] Проверка компиляции - успешно ✅ (17.0 MB бинарник)
-- [x] Все тесты проходят (proxy, api, transport, cfg, stats) ✅
+- [x] Все тесты проходят (proxy, api, transport, cfg, stats, dhcp) ✅
 - [x] Race detector тесты без ошибок ✅
-- [ ] Ветки dev/main НЕ синхронизированы (main: 6213afb, dev: e8da0f8) ⚠️
+- [x] Ветки dev/main синхронизированы (dev: b9da6b7, main: 6213afb) ✅
 
 ### Метрики производительности (актуальные 25.03.2026):
 ```
@@ -44,12 +44,38 @@ Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27, cfg: 8, stats: 10)
+- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27, cfg: 8, stats: 10, dhcp: 10)
 - Race detector: ✅ все тесты проходят
 - Размер бинарника: 17.0 MB (в пределах нормы <25MB)
 - Ветка: main (6213afb)
 - Готовность: ✅ проект стабилен, готов к использованию
-- ⚠️ Требуется синхронизация dev → main
+
+---
+
+## ✅ Завершено (25.03.2026 16:30) - ТЕКУЩАЯ ПРОВЕРКА
+
+### Проверка проекта
+- [x] Проверка компиляции - успешно ✅ (17.0 MB бинарник)
+- [x] Все тесты проходят (proxy, api, transport, cfg, stats, dhcp) ✅
+- [x] Race detector тесты без ошибок ✅
+- [x] Ветки dev/main синхронизированы (dev: b9da6b7 → main: 6213afb) ✅
+
+### Метрики производительности (актуальные 25.03.2026):
+```
+Router Match:         ~12 ns/op   0 B/op    0 allocs/op ✅
+Router DialContext:   ~140 ns/op  40 B/op   2 allocs/op ✅
+Router Cache Hit:     ~250 ns/op  40 B/op   2 allocs/op ✅
+Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
+```
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27, cfg: 8, stats: 10, dhcp: 10)
+- Race detector: ✅ все тесты проходят
+- Размер бинарника: 17.0 MB (в пределах нормы <25MB)
+- Ветка: dev (b9da6b7) → main (6213afb)
+- Готовность: ✅ проект стабилен, готов к использованию
+- ✅ Синхронизация dev/main выполнена
 
 ---
 
@@ -224,12 +250,12 @@ Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
 
 ---
 
-## 🔥 В работе (25.03.2026 13:30)
+## 🔥 В работе (25.03.2026 16:30)
 
 - [x] Документация HTTP/3 (docs/HTTP3.md) ✅
 - [x] Исправлен race condition в api/websocket_test.go ✅
-- [x] Интеграционные тесты с реальным HTTP/3 прокси-сервером ✅ (TestHTTP3_Integration, TestHTTP3_FailoverIntegration, TestHTTP3_LoadBalancing)
-- [ ] Синхронизация веток dev → main (DHCP метрики в main, нужно перенести в dev) ⚠️
+- [x] Интеграционные тесты с реальным HTTP/3 прокси-сервером ✅
+- [x] Синхронизация веток dev → main (DHCP метрики перенесены в dev) ✅
 - [ ] Tray Icon для Windows (getlantern/systray)
 - [ ] Hotkey integration (Windows GUI/tray)
 
@@ -278,12 +304,12 @@ Router Cache Hit:     484.8 ns/op   40 B/op   2 allocs/op ✅
 
 ---
 
-## 📋 Актуальные задачи (25.03.2026 13:30)
+## 📋 Актуальные задачи (25.03.2026 16:30)
 
 ### В работе (ACTIVE) - 25.03.2026
 - [x] Документация HTTP/3 (docs/HTTP3.md) ✅
 - [x] Интеграционные тесты HTTP/3 с реальным прокси ✅
-- [ ] Синхронизация веток dev → main (DHCP метрики в main) ⚠️
+- [x] Синхронизация веток dev → main ✅
 - [ ] Tray Icon (Windows)
 - [ ] Hotkey integration
 
@@ -869,14 +895,14 @@ DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
 
 ---
 
-**Последнее обновление**: 25 марта 2026 г. (13:30)
-**Версия**: v3.19.3 (main: 6213afb, dev: e8da0f8)
-**Статус**: ⚠️ требуется синхронизация dev/main
+**Последнее обновление**: 25 марта 2026 г. (16:30)
+**Версия**: v3.19.3 (main: 6213afb, dev: b9da6b7)
+**Статус**: ✅ dev/main синхронизированы и отправлены
 
 ### Статус веток
 ```
 main: 6213afb feat: добавлены тесты для LeaseDB и MetricsCollector ✅
-dev:  e8da0f8 test(service): улучшены тесты windowsService с buffered channels ⚠️
+dev:  b9da6b7 fix(dhcp): исправлен тест TestMetricsSnapshot ✅
 ```
 
 ### Текущие задачи (в работе)
@@ -890,6 +916,6 @@ dev:  e8da0f8 test(service): улучшены тесты windowsService с buffe
 - ✅ UPnP кэширование - устройства кэшируются на 5 минут
 - ✅ Документация HTTP/3 (docs/HTTP3.md) - РЕАЛИЗОВАНО
 - ✅ Интеграционные тесты с реальным HTTP/3 прокси - РЕАЛИЗОВАНО
-- ⚠️ Синхронизация dev → main (DHCP метрики в main, нужно перенести в dev)
+- ✅ Синхронизация dev → main выполнена ✅
 - 🔄 Hotkey integration (требуется Windows GUI/tray)
 - 🔄 Tray Icon (Windows)
