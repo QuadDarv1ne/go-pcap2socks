@@ -3,6 +3,7 @@ package upnp
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -210,6 +211,14 @@ func (m *Manager) GetActiveMappings() int {
 	return len(m.activeMaps)
 }
 
+// GetConfig returns the UPnP configuration
+func (m *Manager) GetConfig() *cfg.UPnP {
+	if m == nil {
+		return nil
+	}
+	return m.config
+}
+
 // AddDynamicMapping adds a port mapping dynamically (e.g., when game starts)
 func (m *Manager) AddDynamicMapping(protocol string, externalPort, internalPort int, description string) error {
 	if m == nil {
@@ -219,9 +228,9 @@ func (m *Manager) AddDynamicMapping(protocol string, externalPort, internalPort 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	leaseDuration := m.config.LeaseDuration
-	if leaseDuration == 0 {
-		leaseDuration = 3600
+	leaseDuration := 3600 // Default 1 hour
+	if m.config != nil && m.config.LeaseDuration > 0 {
+		leaseDuration = m.config.LeaseDuration
 	}
 
 	mapping := cfg.PortMapping{
@@ -273,4 +282,19 @@ func (m *Manager) RefreshMappings() error {
 	time.Sleep(500 * time.Millisecond)
 
 	return m.ApplyPortMappings()
+}
+
+// GetGamePresetPorts returns the ports for a game preset
+func GetGamePresetPorts(game string) []int {
+	game = strings.ToLower(game)
+	switch game {
+	case "ps4", "ps5":
+		return []int{3478, 3479, 3480}
+	case "xbox":
+		return []int{3074, 3075, 3478, 3479, 3480}
+	case "switch":
+		return []int{12400, 12401, 12402, 6657, 6667}
+	default:
+		return []int{}
+	}
 }

@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -137,6 +138,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/upnp/add", s.rateLimitMiddleware(s.authMiddleware(s.handleUPnPAddPort)))
 	s.mux.HandleFunc("/api/upnp/remove", s.rateLimitMiddleware(s.authMiddleware(s.handleUPnPRemovePort)))
 	s.mux.HandleFunc("/api/upnp/apply", s.rateLimitMiddleware(s.authMiddleware(s.handleUPnPApplyMappings)))
+	s.mux.HandleFunc("/api/upnp/preset", s.rateLimitMiddleware(s.authMiddleware(s.handleUPnPApplyPreset)))
 	s.mux.HandleFunc("/api/hotkey", s.rateLimitMiddleware(s.authMiddleware(s.handleHotkey)))
 	s.mux.HandleFunc("/api/hotkey/toggle", s.rateLimitMiddleware(s.authMiddleware(s.handleHotkeyToggle)))
 	s.mux.HandleFunc("/api/macfilter", s.rateLimitMiddleware(s.authMiddleware(s.handleMACFilter)))
@@ -651,6 +653,83 @@ func (s *Server) handleUPnPApplyMappings(w http.ResponseWriter, r *http.Request)
 
 	s.sendSuccess(w, map[string]interface{}{
 		"message":         "Port mappings applied",
+		"active_mappings": s.upnpMgr.GetActiveMappings(),
+	})
+}
+
+func (s *Server) handleUPnPApplyPreset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Game string `json:"game"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Game == "" {
+		s.sendError(w, "game parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	if s.upnpMgr == nil {
+		s.sendError(w, "UPnP not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Get available presets from config
+	availablePresets := []string{"ps4", "ps5", "xbox", "switch"}
+	isValidPreset := false
+	for _, preset := range availablePresets {
+		if strings.ToLower(req.Game) == preset {
+			isValidPreset = true
+			break
+		}
+	}
+
+	if !isValidPreset {
+		s.sendError(w, "Invalid game preset. Available: "+strings.Join(availablePresets, ", "), http.StatusBadRequest)
+		return
+	}
+
+	// Apply preset by adding port mappings
+	leaseDuration := 3600
+	if s.upnpMgr != nil && s.upnpMgr.GetConfig() != nil {
+		leaseDuration = s.upnpMgr.GetConfig().LeaseDuration
+		if leaseDuration == 0 {
+			leaseDuration = 3600
+		}
+	}
+
+	// Get ports for preset
+	ports := upnpmanager.GetGamePresetPorts(req.Game)
+	mappingsApplied := 0
+
+	for _, port := range ports {
+		// Add TCP mapping
+		if err := s.upnpMgr.AddDynamicMapping("TCP", port, port, fmt.Sprintf("go-pcap2socks %s", req.Game)); err != nil {
+			slog.Debug("TCP port mapping failed", "port", port, "game", req.Game, "err", err)
+		} else {
+			mappingsApplied++
+		}
+
+		// Add UDP mapping
+		if err := s.upnpMgr.AddDynamicMapping("UDP", port, port, fmt.Sprintf("go-pcap2socks %s", req.Game)); err != nil {
+			slog.Debug("UDP port mapping failed", "port", port, "game", req.Game, "err", err)
+		} else {
+			mappingsApplied++
+		}
+	}
+
+	s.sendSuccess(w, map[string]interface{}{
+		"message":         fmt.Sprintf("Game preset '%s' applied: %d port mappings (TCP+UDP)", req.Game, mappingsApplied),
+		"game":            req.Game,
+		"ports":           ports,
 		"active_mappings": s.upnpMgr.GetActiveMappings(),
 	})
 }
