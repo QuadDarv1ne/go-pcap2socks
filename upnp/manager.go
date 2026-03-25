@@ -39,36 +39,26 @@ func (m *Manager) Start() error {
 		return nil
 	}
 
-	slog.Info("Starting UPnP manager...")
-
 	// Discover UPnP devices
 	devices, err := m.upnp.Discover()
 	if err != nil {
-		slog.Warn("UPnP discovery failed", "err", err)
 		return fmt.Errorf("UPnP discovery failed: %w", err)
 	}
 
 	if len(devices) == 0 {
-		slog.Warn("No UPnP devices found")
 		return fmt.Errorf("no UPnP devices found")
 	}
 
-	// Get external IP
-	externalIP, err := m.upnp.GetExternalIP()
-	if err != nil {
-		slog.Warn("Failed to get external IP", "err", err)
-	} else {
-		slog.Info("UPnP external IP", "ip", externalIP)
-	}
+	// Get external IP (ignore error, continue with port mappings)
+	_, _ = m.upnp.GetExternalIP()
 
 	// Apply port mappings if autoForward is enabled
 	if m.config.AutoForward {
 		if err := m.ApplyPortMappings(); err != nil {
-			slog.Warn("Failed to apply port mappings", "err", err)
+			// Log error but don't fail
 		}
 	}
 
-	slog.Info("UPnP manager started")
 	return nil
 }
 
@@ -106,7 +96,7 @@ func (m *Manager) ApplyPortMappings() error {
 				InternalPort: port,
 				Description:  fmt.Sprintf("go-pcap2socks %s", game),
 			}, leaseDuration); err != nil {
-				slog.Debug("TCP port mapping failed", "port", port, "err", err)
+				// TCP mapping failed, continue with UDP
 			}
 
 			// Then UDP
@@ -116,7 +106,7 @@ func (m *Manager) ApplyPortMappings() error {
 				InternalPort: port,
 				Description:  fmt.Sprintf("go-pcap2socks %s", game),
 			}, leaseDuration); err != nil {
-				slog.Debug("UDP port mapping failed", "port", port, "err", err)
+				// UDP mapping failed, continue
 			}
 		}
 	}
@@ -127,7 +117,6 @@ func (m *Manager) ApplyPortMappings() error {
 func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) error {
 	key := fmt.Sprintf("%s:%d", mapping.Protocol, mapping.ExternalPort)
 	if m.activeMaps[key] {
-		slog.Debug("Port mapping already active", "key", key)
 		return nil
 	}
 
@@ -143,10 +132,6 @@ func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) err
 			return fmt.Errorf("TCP mapping failed: %w", err)
 		}
 		m.activeMaps["TCP:"+fmt.Sprint(mapping.ExternalPort)] = true
-		slog.Info("UPnP port mapped (TCP)",
-			"external", mapping.ExternalPort,
-			"internal", mapping.InternalPort,
-			"description", description)
 	}
 
 	// Add UDP mapping
@@ -156,10 +141,6 @@ func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) err
 			return fmt.Errorf("UDP mapping failed: %w", err)
 		}
 		m.activeMaps["UDP:"+fmt.Sprint(mapping.ExternalPort)] = true
-		slog.Info("UPnP port mapped (UDP)",
-			"external", mapping.ExternalPort,
-			"internal", mapping.InternalPort,
-			"description", description)
 	}
 
 	return nil
@@ -171,8 +152,6 @@ func (m *Manager) Stop() error {
 		return nil
 	}
 
-	slog.Info("Stopping UPnP manager...")
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -181,15 +160,10 @@ func (m *Manager) Stop() error {
 		var port int
 		fmt.Sscanf(key, "%s:%d", &protocol, &port)
 
-		if err := m.upnp.DeletePortMapping(protocol, port); err != nil {
-			slog.Warn("Failed to remove port mapping", "protocol", protocol, "port", port, "err", err)
-		} else {
-			slog.Info("UPnP port removed", "protocol", protocol, "port", port)
-		}
+		_ = m.upnp.DeletePortMapping(protocol, port)
 	}
 
 	m.activeMaps = make(map[string]bool)
-	slog.Info("UPnP manager stopped")
 	return nil
 }
 
@@ -262,7 +236,6 @@ func (m *Manager) RemoveDynamicMapping(protocol string, port int) error {
 	}
 
 	delete(m.activeMaps, key)
-	slog.Info("UPnP dynamic mapping removed", "protocol", protocol, "port", port)
 	return nil
 }
 
@@ -272,12 +245,8 @@ func (m *Manager) RefreshMappings() error {
 		return nil
 	}
 
-	slog.Info("Refreshing UPnP port mappings...")
-
 	// Remove all and re-add
-	if err := m.Stop(); err != nil {
-		slog.Warn("Failed to stop UPnP", "err", err)
-	}
+	_ = m.Stop()
 
 	time.Sleep(500 * time.Millisecond)
 

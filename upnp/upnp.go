@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -54,8 +53,6 @@ func New() *UPnP {
 }
 
 func (u *UPnP) Discover() ([]Device, error) {
-	slog.Info("Discovering UPnP devices...")
-
 	// Send M-SEARCH request
 	conn, err := net.Dial("udp4", "239.255.255.250:1900")
 	if err != nil {
@@ -98,7 +95,6 @@ func (u *UPnP) Discover() ([]Device, error) {
 		}
 	}
 
-	slog.Info("UPnP discovery complete", "devices", len(u.discovered))
 	return u.discovered, nil
 }
 
