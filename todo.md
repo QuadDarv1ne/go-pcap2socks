@@ -1,6 +1,6 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (25.03.2026 18:00) - ФИНАЛЬНАЯ ПРОВЕРКА
+## ✅ Завершено (25.03.2026 20:00) - ТЕКУЩАЯ ПРОВЕРКА
 
 ### Проверка проекта
 - [x] Проверка компиляции - успешно ✅ (17.4 MB бинарник)
@@ -18,11 +18,11 @@ Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27)
+- Тесты: ✅ все проходят (proxy: 50+, stats: 10, cfg: 8)
 - Race detector: ✅ все тесты проходят
 - Размер бинарника: 17.4 MB (в пределах нормы <25MB)
-- Ветка: dev (61d4f9d), main (e118fdd)
-- Отправлено: ✅ origin/dev, origin/main
+- Ветка: main/dev (e149ffa)
+- Отправлено: ✅ origin/main, origin/dev
 - Готовность: ✅ проект стабилен, готов к использованию
 
 ---
@@ -868,8 +868,8 @@ dev:  b9da6b7 fix(dhcp): исправлен тест TestMetricsSnapshot ✅
 
 ---
 
-**Последнее обновление**: 25 марта 2026 г. (18:00)
-**Версия**: v3.19.3 (main: e118fdd, dev: 61d4f9d)
+**Последнее обновление**: 25 марта 2026 г. (20:00)
+**Версия**: v3.19.3 (main/dev: e149ffa)
 **Статус**: ✅ готов к использованию
 
 ### Правила проекта
@@ -880,7 +880,7 @@ dev:  b9da6b7 fix(dhcp): исправлен тест TestMetricsSnapshot ✅
 
 ---
 
-## 🔧 В работе (25.03.2026 18:00)
+## 🔧 В работе (25.03.2026 20:00)
 
 ### Текущие задачи
 - [ ] DHCP WinDivert интеграция (тестирование на реальных устройствах)
@@ -888,3 +888,8 @@ dev:  b9da6b7 fix(dhcp): исправлен тест TestMetricsSnapshot ✅
 - [ ] Cross-platform сборка (Windows/Linux/macOS)
 - [ ] Tray Icon (Windows) - getlantern/systray
 - [ ] Hotkey integration (Windows GUI/tray)
+
+### Приоритеты
+1. **HIGH**: DHCP WinDivert - стабилизация работы с реальными клиентами
+2. **MEDIUM**: UPnP port forwarding - авто-проброс для игр
+3. **LOW**: Cross-platform - поддержка Linux/macOS
