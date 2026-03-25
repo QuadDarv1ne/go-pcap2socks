@@ -1,7 +1,6 @@
 package windivert
 
 import (
-	"bytes"
 	"fmt"
 	"log/slog"
 	"net"
