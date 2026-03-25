@@ -661,47 +661,11 @@ func (s *Server) handleHotkey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get registered hotkeys
-	var hotkeys []hotkey.HotkeyConfig
-	if s.hotkeyManager != nil {
-		hotkeys = s.hotkeyManager.GetRegisteredHotkeys()
-	}
-
-	// Format hotkeys for response
-	type HotkeyInfo struct {
-		Name     string `json:"name"`
-		Shortcut string `json:"shortcut"`
-		Enabled  bool   `json:"enabled"`
-	}
-
-	hotkeyList := make([]HotkeyInfo, 0, len(hotkeys))
-	for _, hk := range hotkeys {
-		modifiers := ""
-		if hk.Modifiers&hotkey.MOD_CTRL != 0 {
-			modifiers += "Ctrl+"
-		}
-		if hk.Modifiers&hotkey.MOD_ALT != 0 {
-			modifiers += "Alt+"
-		}
-		if hk.Modifiers&hotkey.MOD_SHIFT != 0 {
-			modifiers += "Shift+"
-		}
-		if hk.Modifiers&hotkey.MOD_WIN != 0 {
-			modifiers += "Win+"
-		}
-
-		// Convert virtual key to string
-		keyStr := keyToString(hk.VirtualKey)
-
-		hotkeyList = append(hotkeyList, HotkeyInfo{
-			Name:     hk.Name,
-			Shortcut: modifiers + keyStr,
-			Enabled:  true,
-		})
-	}
+	// Get registered hotkeys (Windows only)
+	hotkeyList := s.getHotkeysList()
 
 	s.sendSuccess(w, map[string]interface{}{
-		"enabled": s.hotkeyManager != nil && len(hotkeys) > 0,
+		"enabled": s.hotkeyManager != nil && len(hotkeyList) > 0,
 		"hotkeys": hotkeyList,
 	})
 }
@@ -731,22 +695,6 @@ func (s *Server) handleHotkeyToggle(w http.ResponseWriter, r *http.Request) {
 		"action": req.Action,
 		"status": "acknowledged",
 	})
-}
-
-// keyToString converts virtual key code to string representation
-func keyToString(vk int) string {
-	switch vk {
-	case hotkey.VK_P:
-		return "P"
-	case hotkey.VK_R:
-		return "R"
-	case hotkey.VK_S:
-		return "S"
-	case hotkey.VK_L:
-		return "L"
-	default:
-		return "?"
-	}
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {

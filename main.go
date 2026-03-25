@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
-	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -21,7 +20,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
 	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
@@ -45,11 +43,14 @@ import (
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
-	"github.com/QuadDarv1ne/go-pcap2socks/windivert"
 	"github.com/jackpal/gateway"
-	"golang.org/x/sys/windows"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
+
+// Note: Windows-specific functions are in platform-specific files:
+// - main_windows.go: getSystemDNSServers, adapterAddresses
+// - dhcp_server_windows.go: createDHCPServer (WinDivert support)
+// - dhcp_server_unix.go: createDHCPServer (standard DHCP only)
 
 //go:embed config.json
 var configData string
@@ -427,16 +428,25 @@ func main() {
 			// Try to get leases from DHCP server
 			var leases []map[string]interface{}
 
-			// Check if it's WinDivert DHCP server
-			if wdDHCP, ok := _dhcpServer.(*windivert.DHCPServer); ok {
-				dhcpLeases := wdDHCP.GetLeases()
-				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-				for mac, lease := range dhcpLeases {
-					leases = append(leases, map[string]interface{}{
-						"mac":        mac,
-						"ip":         lease.IP.String(),
-						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-					})
+			// Check if it's WinDivert DHCP server (Windows only)
+			if isWinDivertServer(_dhcpServer) {
+				leasesData := getWinDivertLeases(_dhcpServer)
+				if leasesData != nil {
+					if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
+						leases = make([]map[string]interface{}, 0, len(leasesList))
+						for mac, lease := range leasesList {
+							if leaseMap, ok := lease.(struct {
+								IP        net.IP
+								ExpiresAt time.Time
+							}); ok {
+								leases = append(leases, map[string]interface{}{
+									"mac":        mac,
+									"ip":         leaseMap.IP.String(),
+									"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
+								})
+							}
+						}
+					}
 				}
 			}
 
@@ -780,36 +790,24 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			DNSServers:    dnsServers,
 		}
 
-		// Use WinDivert DHCP server if enabled in config
-		useWinDivert := cfg.WinDivert != nil && cfg.WinDivert.Enabled
-		if useWinDivert {
-			// Create WinDivert DHCP server
-			windivertDHCP, err := windivert.NewDHCPServer(dhcpConfig, netConfig.LocalMAC)
-			if err != nil {
-				slog.Error("WinDivert DHCP server creation failed", "err", err)
-				return err
-			}
-			_dhcpServer = windivertDHCP
-			slog.Info("WinDivert DHCP server initialized",
-				"pool", fmt.Sprintf("%s-%s", poolStart, poolEnd),
-				"lease", fmt.Sprintf("%ds", cfg.DHCP.LeaseDuration))
-		} else {
-			// Use standard DHCP server integrated with device
-			_dhcpServer = dhcp.NewServer(dhcpConfig)
-			slog.Info("DHCP server initialized",
-				"pool", fmt.Sprintf("%s-%s", poolStart, poolEnd),
-				"lease", fmt.Sprintf("%ds", cfg.DHCP.LeaseDuration))
-		}
-
-		// Set dhcpServer for device if it implements the interface
-		if ds, ok := _dhcpServer.(device.DHCPServer); ok {
-			dhcpServer = ds
+		// Create DHCP server (platform-specific implementation)
+		dhcpServerImpl, err := createDHCPServer(cfg, dhcpConfig, netConfig)
+		if err != nil {
+			return err
 		}
 
 		// Start DHCP server
-		if err := _dhcpServer.Start(); err != nil {
-			slog.Error("DHCP server start failed", "err", err)
-			return err
+		if starter, ok := dhcpServerImpl.(interface{ Start() error }); ok {
+			if err := starter.Start(); err != nil {
+				slog.Error("DHCP server start failed", "err", err)
+				return err
+			}
+		}
+
+		// Set dhcpServer for device if it implements the interface
+		if ds, ok := dhcpServerImpl.(device.DHCPServer); ok {
+			dhcpServer = ds
+			_dhcpServer = dhcpServerImpl
 		}
 	}
 
@@ -872,11 +870,8 @@ var (
 	// _upnpManager holds the UPnP manager
 	_upnpManager *upnpmanager.Manager
 
-	// _dhcpServer holds the DHCP server (can be *dhcp.Server or *windivert.DHCPServer)
-	_dhcpServer interface {
-		Start() error
-		Stop()
-	}
+	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
+	_dhcpServer interface{}
 )
 
 // GetStatsStore returns the global statistics store
@@ -964,7 +959,9 @@ func Stop() {
 
 	// Stop DHCP server
 	if _dhcpServer != nil {
-		_dhcpServer.Stop()
+		if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
+			stopper.Stop()
+		}
 		slog.Info("DHCP server stopped")
 	}
 
@@ -1491,86 +1488,6 @@ func isPrivateIP(ip net.IP) bool {
 		}
 	}
 	return false
-}
-
-// getSystemDNSServers retrieves DNS servers for a specific network interface
-func getSystemDNSServers(interfaceName string) []string {
-	dnsServers := make([]string, 0, 2)
-
-	addresses, err := adapterAddresses()
-	if err != nil {
-		slog.Debug("Failed to get adapter addresses", "err", err)
-		return dnsServers
-	}
-
-	for _, aa := range addresses {
-		if aa.OperStatus != windows.IfOperStatusUp {
-			continue
-		}
-
-		ifName := windows.UTF16PtrToString(aa.FriendlyName)
-		if ifName != interfaceName {
-			continue
-		}
-
-		for dns := aa.FirstDnsServerAddress; dns != nil; dns = dns.Next {
-			rawSockaddr, err := dns.Address.Sockaddr.Sockaddr()
-			if err != nil {
-				continue
-			}
-
-			var dnsServerAddr netip.Addr
-			switch sockaddr := rawSockaddr.(type) {
-			case *syscall.SockaddrInet4:
-				dnsServerAddr = netip.AddrFrom4(sockaddr.Addr)
-			case *syscall.SockaddrInet6:
-				// Skip fec0/10 IPv6 addresses (deprecated site local anycast)
-				if sockaddr.Addr[0] == 0xfe && sockaddr.Addr[1] == 0xc0 {
-					continue
-				}
-				dnsServerAddr = netip.AddrFrom16(sockaddr.Addr)
-			default:
-				continue
-			}
-
-			ipStr := dnsServerAddr.String()
-			// Only add IPv4 DNS servers
-			if dnsServerAddr.Is4() {
-				dnsServers = append(dnsServers, ipStr)
-			}
-		}
-		break
-	}
-
-	return dnsServers
-}
-
-// adapterAddresses retrieves adapter addresses for DNS lookup
-func adapterAddresses() ([]*windows.IpAdapterAddresses, error) {
-	var b []byte
-	l := uint32(15000) // recommended initial size
-	for {
-		b = make([]byte, l)
-		const flags = windows.GAA_FLAG_INCLUDE_PREFIX | windows.GAA_FLAG_INCLUDE_GATEWAYS
-		err := windows.GetAdaptersAddresses(syscall.AF_UNSPEC, flags, 0, (*windows.IpAdapterAddresses)(unsafe.Pointer(&b[0])), &l)
-		if err == nil {
-			if l == 0 {
-				return nil, nil
-			}
-			break
-		}
-		if err.(syscall.Errno) != syscall.ERROR_BUFFER_OVERFLOW {
-			return nil, os.NewSyscallError("getadaptersaddresses", err)
-		}
-		if l <= uint32(len(b)) {
-			return nil, os.NewSyscallError("getadaptersaddresses", err)
-		}
-	}
-	var aas []*windows.IpAdapterAddresses
-	for aa := (*windows.IpAdapterAddresses)(unsafe.Pointer(&b[0])); aa != nil; aa = aa.Next {
-		aas = append(aas, aa)
-	}
-	return aas, nil
 }
 
 // formatBytes formats bytes into human-readable format
