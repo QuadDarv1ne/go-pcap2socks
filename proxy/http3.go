@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -21,11 +22,12 @@ var _ Proxy = (*HTTP3)(nil)
 type HTTP3 struct {
 	*Base
 
-	client     *http.Client
-	transport  *http3.Transport
-	addr       string
-	tlsConfig  *tls.Config
-	quicConfig *quic.Config
+	client      *http.Client
+	transport   *http3.Transport
+	addr        string
+	host        string // host:port for quic.DialAddr
+	tlsConfig   *tls.Config
+	quicConfig  *quic.Config
 }
 
 // NewHTTP3 creates a new HTTP/3 proxy
@@ -53,16 +55,27 @@ func NewHTTP3(addr string, skipVerify bool) (*HTTP3, error) {
 		Timeout:   30 * time.Second,
 	}
 
+	// Parse URL to extract host:port for quic.DialAddr
+	u, err := url.Parse(addr)
+	if err != nil {
+		return nil, fmt.Errorf("parse URL: %w", err)
+	}
+	host := u.Host
+	if u.Port() == "" {
+		host = net.JoinHostPort(u.Host, "443")
+	}
+
 	return &HTTP3{
 		Base: &Base{
 			addr: addr,
 			mode: ModeHTTP3,
 		},
-		client:     client,
-		transport:  transport,
-		addr:       addr,
-		tlsConfig:  tlsConfig,
-		quicConfig: quicConfig,
+		client:      client,
+		transport:   transport,
+		addr:        addr,
+		host:        host,
+		tlsConfig:   tlsConfig,
+		quicConfig:  quicConfig,
 	}, nil
 }
 
@@ -75,7 +88,7 @@ func (h *HTTP3) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn
 	targetAddr := metadata.DestinationAddress()
 
 	// Establish QUIC connection to proxy
-	qconn, err := quic.DialAddr(ctx, h.addr, h.tlsConfig, h.quicConfig)
+	qconn, err := quic.DialAddr(ctx, h.host, h.tlsConfig, h.quicConfig)
 	if err != nil {
 		return nil, fmt.Errorf("dial QUIC: %w", err)
 	}
@@ -99,7 +112,7 @@ func (h *HTTP3) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	ctx := context.Background()
 
 	// Establish QUIC connection to proxy
-	qconn, err := quic.DialAddr(ctx, h.addr, h.tlsConfig, h.quicConfig)
+	qconn, err := quic.DialAddr(ctx, h.host, h.tlsConfig, h.quicConfig)
 	if err != nil {
 		return nil, fmt.Errorf("dial QUIC: %w", err)
 	}

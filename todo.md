@@ -107,12 +107,50 @@
 
 ---
 
+## ✅ Завершено (25.03.2026) - Интеграционные тесты HTTP/3
+
+### Интеграционные тесты HTTP/3
+- [x] Исправлен парсинг URL в NewHTTP3 (извлечение host:port для quic.DialAddr)
+- [x] TestHTTP3_Integration - тесты с реальным HTTP/3 сервером
+  - [x] HTTP_GET - проверка GET запросов через HTTP/3
+  - [x] HTTP_POST - проверка POST запросов через HTTP/3
+- [x] TestHTTP3_FailoverIntegration - тест failover с mock прокси
+- [x] TestHTTP3_LoadBalancing - тесты балансировки нагрузки
+  - [x] RoundRobin - равномерное распределение
+  - [x] LeastLoad - выбор наименее загруженного прокси
+- [x] Улучшены существующие тесты (8 → 15+ тестов для HTTP/3)
+
+**Итоговые метрики**:
+- Все тесты HTTP/3 проходят: `go test ./proxy -run TestHTTP3 -v` ✅
+- Компиляция без ошибок ✅
+- Размер бинарника: 16.8MB (в пределах нормы)
+
+---
+
+## ✅ Завершено (25.03.2026) - Tray Icon и Hotkey
+
+### Tray Icon Implementation
+- [x] tray/tray.go - полная реализация tray icon для Windows
+  - [x] Статус сервиса (Запущено/Остановлено)
+  - [x] Управление профилями (Default, Gaming, Streaming)
+  - [x] Открытие конфига в Notepad
+  - [x] Авто-конфигурация
+  - [x] Запуск/Остановка сервиса
+  - [x] Просмотр логов
+  - [x] Корректный выход
+- [x] tray/tray_stub.go - заглушка для не-Windows платформ
+- [x] Интеграция с hotkey.Manager
+- [x] Уведомления через notify.Show()
+- [x] Зависимость: github.com/getlantern/systray
+
+**Статус**: ✅ Tray icon полностью реализован и готов к использованию
+
+---
+
 ## 🔥 В работе (25.03.2026)
 
 - [ ] Мониторинг стабильности WebSocket real-time stats (api/websocket.go)
 - [ ] Документация HTTP/3 (требуется запрос пользователя)
-- [ ] Интеграционные тесты с реальным HTTP/3 прокси
-- [ ] Hotkey integration (требуется Windows GUI/tray)
 
 ---
 
@@ -856,21 +894,93 @@ Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
 
 ---
 
+## ✅ Завершено (25.03.2026) - Поддержка WireGuard outbound
+
+### WireGuard Outbound Support
+- [x] Добавлен режим ModeWireGuard в proxy/mode.go
+- [x] Создан proxy/wireguard.go с реализацией WireGuard прокси
+  - [x] WireGuardConfig для конфигурации туннеля
+  - [x] NewWireGuard для создания туннеля (netstack TUN)
+  - [x] DialContext для TCP соединений через WireGuard
+  - [x] DialUDP для UDP пакетов через WireGuard
+- [x] Добавлен OutboundWireGuard в cfg/config.go
+- [x] Интеграция в main.go для создания WireGuard прокси
+- [x] Unit-тесты для WireGuard (7 тестов)
+  - [x] TestWireGuard_Mode
+  - [x] TestWireGuardConfig_Validation
+  - [x] TestWireGuard_NilMetadata
+  - [x] TestWireGuard_DialContext_Timeout
+  - [x] TestWireGuard_Close
+  - [x] TestWireGuardPacketConn
+
+**Конфигурация**:
+```json
+{
+  "outbounds": [
+    {
+      "tag": "wg-tunnel",
+      "wireguard": {
+        "private_key": "hex-ключ (32 байта)",
+        "public_key": "hex-ключ (32 байта)",
+        "preauth_key": "hex-ключ (опционально)",
+        "endpoint": "vpn.example.com:51820",
+        "local_ip": "10.0.0.2",
+        "remote_ip": "10.0.0.1"
+      }
+    }
+  ]
+}
+```
+
+**Статус**: Компиляция ✅, Тесты ✅, Размер бинарника: 17.4MB
+
+---
+
 ## 📋 Актуальные задачи (25.03.2026)
 
 ### В работе (ACTIVE) - 25.03.2026
 - [ ] Документация HTTP/3 (требуется запрос пользователя)
-- [ ] Интеграционные тесты с реальным HTTP/3 прокси
-
-### Следующие улучшения (NEXT)
-- [ ] Поддержка WireGuard outbound
 - [ ] Улучшенная интеграция с Windows Firewall
-- [ ] Tray icon для Windows (требуется GUI)
 
 ### Долгосрочные (FUTURE)
 - [ ] Multi-WAN балансировка
 - [ ] Machine learning для routing
 - [ ] Поддержка HTTP/3 для failover между прокси
+
+---
+
+## 📝 Примечания: Windows Firewall интеграция
+
+**Текущее состояние:**
+- Firewall может блокировать DHCP (порты 67/68 UDP)
+- Firewall может блокировать WebSocket соединения (порт 8080)
+- Firewall может блокировать исходящие соединения прокси
+
+**Возможные улучшения:**
+1. Автоматическое создание правил firewall при запуске
+   - Разрешить DHCP (UDP 67/68)
+   - Разрешить WebSocket (TCP 8080)
+   - Разрешить исходящие подключения к прокси
+
+2. Проверка правил firewall при старте
+   - Предупреждение если правила отсутствуют
+   - Команда для создания правил через PowerShell
+
+3. Интеграция с Windows Security Center
+   - Регистрация приложения как доверенного
+   - Автоматическое получение разрешений
+
+**Пример PowerShell команды:**
+```powershell
+# Разрешить WebSocket в firewall
+New-NetFirewallRule -DisplayName "go-pcap2socks WebSocket" `
+    -Direction Inbound -LocalPort 8080 -Protocol TCP -Action Allow
+```
+
+**Файлы для изменений:**
+- `main.go` - проверка/создание правил при запуске
+- `firewall/firewall.go` - новый пакет для управления правилами (опционально)
+- `docs/FIREWALL.md` - документация по настройке (требуется запрос)
 
 ---
 

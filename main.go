@@ -624,6 +624,20 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			if err != nil {
 				return fmt.Errorf("create HTTP/3 proxy: %w", err)
 			}
+		case outbound.WireGuard != nil:
+			// Create WireGuard tunnel proxy
+			wgCfg := proxy.WireGuardConfig{
+				PrivateKey: outbound.WireGuard.PrivateKey,
+				PublicKey:  outbound.WireGuard.PublicKey,
+				PreauthKey: outbound.WireGuard.PreauthKey,
+				Endpoint:   outbound.WireGuard.Endpoint,
+				LocalIP:    outbound.WireGuard.LocalIP,
+				RemoteIP:   outbound.WireGuard.RemoteIP,
+			}
+			p, err = proxy.NewWireGuard(wgCfg)
+			if err != nil {
+				return fmt.Errorf("create WireGuard proxy: %w", err)
+			}
 		default:
 			return fmt.Errorf("%s: %+v", msgs.InvalidOutbound, outbound)
 		}

@@ -209,13 +209,14 @@ func (r *Rule) Normalize() error {
 }
 
 type Outbound struct {
-	Direct *OutboundDirect `json:"direct,omitempty"`
-	Socks  *OutboundSocks  `json:"socks,omitempty"`
-	Reject *OutboundReject `json:"reject,omitempty"`
-	DNS    *OutboundDNS    `json:"dns,omitempty"`
-	Group  *OutboundGroup  `json:"group,omitempty"`
-	HTTP3  *OutboundHTTP3  `json:"http3,omitempty"`
-	Tag    string          `json:"tag,omitempty"`
+	Direct    *OutboundDirect    `json:"direct,omitempty"`
+	Socks     *OutboundSocks     `json:"socks,omitempty"`
+	Reject    *OutboundReject    `json:"reject,omitempty"`
+	DNS       *OutboundDNS       `json:"dns,omitempty"`
+	Group     *OutboundGroup     `json:"group,omitempty"`
+	HTTP3     *OutboundHTTP3     `json:"http3,omitempty"`
+	WireGuard *OutboundWireGuard `json:"wireguard,omitempty"`
+	Tag       string             `json:"tag,omitempty"`
 }
 
 type OutboundDirect struct{}
@@ -233,6 +234,16 @@ type OutboundDNS struct{}
 type OutboundHTTP3 struct {
 	Address    string `json:"address"`              // e.g. "https://proxy.example.com:443"
 	SkipVerify bool   `json:"skip_verify,omitempty"` // Skip TLS verification
+}
+
+// OutboundWireGuard represents WireGuard tunnel configuration
+type OutboundWireGuard struct {
+	PrivateKey string `json:"private_key"` // Local private key (base64)
+	PublicKey  string `json:"public_key"`  // Remote peer public key (base64)
+	PreauthKey string `json:"preauth_key,omitempty"` // Pre-shared key (base64, optional)
+	Endpoint   string `json:"endpoint"`    // Remote endpoint (host:port)
+	LocalIP    string `json:"local_ip"`    // Local tunnel IP (e.g., "10.0.0.2")
+	RemoteIP   string `json:"remote_ip"`   // Remote tunnel IP (e.g., "10.0.0.1")
 }
 
 // OutboundGroup represents a group of proxies with load balancing

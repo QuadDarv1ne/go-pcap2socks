@@ -9,6 +9,7 @@ const (
 	ModeReject
 	ModeDNS
 	ModeHTTP3
+	ModeWireGuard
 )
 
 type Mode uint8
@@ -27,6 +28,8 @@ func (mode Mode) String() string {
 		return "dns"
 	case ModeHTTP3:
 		return "http3"
+	case ModeWireGuard:
+		return "wireguard"
 	default:
 		return fmt.Sprintf("proto(%d)", mode)
 	}
