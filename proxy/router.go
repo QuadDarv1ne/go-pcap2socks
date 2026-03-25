@@ -239,7 +239,7 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 
 	// Check cache first
 	if outboundTag, found := d.routeCache.get(cacheKey); found {
-		if proxy, ok := d.Proxies[outboundTag]; ok {
+		if proxy, ok := d.Proxies[outboundTag]; ok && proxy != nil {
 			return proxy.DialContext(ctx, metadata)
 		}
 	}
@@ -262,7 +262,7 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 	d.routeCache.set(cacheKey, selectedTag)
 
 	// Dial using selected proxy
-	if proxy, ok := d.Proxies[selectedTag]; ok {
+	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
 		return proxy.DialContext(ctx, metadata)
 	}
 
@@ -292,7 +292,7 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 
 	// Check cache first
 	if outboundTag, found := d.routeCache.get(cacheKey); found {
-		if proxy, ok := d.Proxies[outboundTag]; ok {
+		if proxy, ok := d.Proxies[outboundTag]; ok && proxy != nil {
 			return proxy.DialUDP(metadata)
 		}
 	}
@@ -315,7 +315,7 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	d.routeCache.set(cacheKey, selectedTag)
 
 	// Dial using selected proxy
-	if proxy, ok := d.Proxies[selectedTag]; ok {
+	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
 		return proxy.DialUDP(metadata)
 	}
 

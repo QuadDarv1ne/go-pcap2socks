@@ -13,9 +13,23 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 )
 
-func TestServerRoutes(t *testing.T) {
+// createTestServer создаёт тестовый сервер с установленным токеном
+func createTestServer() *Server {
 	statsStore := stats.NewStore()
 	server := NewServer(statsStore, nil, nil, nil)
+	server.SetAuthToken("test-token-123")
+	return server
+}
+
+// createAuthRequest создаёт запрос с заголовком авторизации
+func createAuthRequest(method, path string) *http.Request {
+	req := httptest.NewRequest(method, path, nil)
+	req.Header.Set("Authorization", "Bearer test-token-123")
+	return req
+}
+
+func TestServerRoutes(t *testing.T) {
+	server := createTestServer()
 
 	tests := []struct {
 		method       string
@@ -34,7 +48,7 @@ func TestServerRoutes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, nil)
+			req := createAuthRequest(tt.method, tt.path)
 			w := httptest.NewRecorder()
 
 			server.ServeHTTP(w, req)
@@ -47,14 +61,13 @@ func TestServerRoutes(t *testing.T) {
 }
 
 func TestStatusHandler(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
 	// Set running state
 	SetIsRunningFn(func() bool { return true })
 	SetStartTime(time.Now().Add(-5 * time.Minute))
 
-	req := httptest.NewRequest("GET", "/api/status", nil)
+	req := createAuthRequest("GET", "/api/status")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -84,10 +97,9 @@ func TestStatusHandler(t *testing.T) {
 }
 
 func TestTrafficHandler(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
-	req := httptest.NewRequest("GET", "/api/traffic", nil)
+	req := createAuthRequest("GET", "/api/traffic")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -121,13 +133,12 @@ func TestTrafficHandler(t *testing.T) {
 }
 
 func TestDevicesHandler(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
 	// Add a test device
-	statsStore.RecordTraffic("192.168.137.100", "aa:bb:cc:dd:ee:ff", 1024, true)
+	server.statsStore.RecordTraffic("192.168.137.100", "aa:bb:cc:dd:ee:ff", 1024, true)
 
-	req := httptest.NewRequest("GET", "/api/devices", nil)
+	req := createAuthRequest("GET", "/api/devices")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -158,8 +169,7 @@ func TestDevicesHandler(t *testing.T) {
 }
 
 func TestServiceStartHandler(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
 	startCalled := false
 	SetServiceCallbacks(
@@ -170,7 +180,7 @@ func TestServiceStartHandler(t *testing.T) {
 		func() error { return nil },
 	)
 
-	req := httptest.NewRequest("POST", "/api/start", nil)
+	req := createAuthRequest("POST", "/api/start")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -185,8 +195,7 @@ func TestServiceStartHandler(t *testing.T) {
 }
 
 func TestServiceStopHandler(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
 	stopCalled := false
 	SetServiceCallbacks(
@@ -197,7 +206,7 @@ func TestServiceStopHandler(t *testing.T) {
 		},
 	)
 
-	req := httptest.NewRequest("POST", "/api/stop", nil)
+	req := createAuthRequest("POST", "/api/stop")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -212,8 +221,6 @@ func TestServiceStopHandler(t *testing.T) {
 }
 
 func TestProfilesHandler(t *testing.T) {
-	statsStore := stats.NewStore()
-
 	// Create a profile manager for testing
 	profileMgr, err := profiles.NewManager()
 	if err != nil {
@@ -227,9 +234,10 @@ func TestProfilesHandler(t *testing.T) {
 		return
 	}
 
-	server := NewServer(statsStore, profileMgr, nil, nil)
+	server := createTestServer()
+	server.profileMgr = profileMgr
 
-	req := httptest.NewRequest("GET", "/api/profiles", nil)
+	req := createAuthRequest("GET", "/api/profiles")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -250,10 +258,9 @@ func TestProfilesHandler(t *testing.T) {
 }
 
 func TestUPnPHandler(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
-	req := httptest.NewRequest("GET", "/api/upnp", nil)
+	req := createAuthRequest("GET", "/api/upnp")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -277,11 +284,11 @@ func TestSetStartTime(t *testing.T) {
 	testTime := time.Now().Add(-10 * time.Minute)
 	SetStartTime(testTime)
 
-	req := httptest.NewRequest("GET", "/api/status", nil)
+	server := createTestServer()
+	
+	req := createAuthRequest("GET", "/api/status")
 	w := httptest.NewRecorder()
 
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
 	server.ServeHTTP(w, req)
 
 	var response APIResponse
@@ -315,11 +322,11 @@ func TestSetStartTime(t *testing.T) {
 func TestSetIsRunningFn(t *testing.T) {
 	SetIsRunningFn(func() bool { return false })
 
-	req := httptest.NewRequest("GET", "/api/status", nil)
+	server := createTestServer()
+	
+	req := createAuthRequest("GET", "/api/status")
 	w := httptest.NewRecorder()
 
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
 	server.ServeHTTP(w, req)
 
 	var response APIResponse
@@ -389,11 +396,10 @@ func TestAPIResponse(t *testing.T) {
 }
 
 func TestHandleHotkey_Success(t *testing.T) {
-	statsStore := stats.NewStore()
 	// Test with nil hotkey manager - should return enabled=false
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/hotkey", nil)
+	req := createAuthRequest(http.MethodGet, "/api/hotkey")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -431,10 +437,9 @@ func TestHandleHotkey_Success(t *testing.T) {
 }
 
 func TestHandleHotkey_NoHotkeys(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/hotkey", nil)
+	req := createAuthRequest(http.MethodGet, "/api/hotkey")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -461,10 +466,9 @@ func TestHandleHotkey_NoHotkeys(t *testing.T) {
 }
 
 func TestHandleHotkey_MethodNotAllowed(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/hotkey", nil)
+	req := createAuthRequest(http.MethodPost, "/api/hotkey")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -475,12 +479,12 @@ func TestHandleHotkey_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleHotkeyToggle_Success(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
 	body := `{"action": "toggle", "hotkey": "toggle_proxy"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/hotkey/toggle", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer test-token-123")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -514,10 +518,9 @@ func TestHandleHotkeyToggle_Success(t *testing.T) {
 }
 
 func TestHandleHotkeyToggle_InvalidMethod(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/hotkey/toggle", nil)
+	req := createAuthRequest(http.MethodGet, "/api/hotkey/toggle")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -528,11 +531,11 @@ func TestHandleHotkeyToggle_InvalidMethod(t *testing.T) {
 }
 
 func TestHandleHotkeyToggle_InvalidBody(t *testing.T) {
-	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := createTestServer()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/hotkey/toggle", strings.NewReader("invalid json"))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer test-token-123")
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
