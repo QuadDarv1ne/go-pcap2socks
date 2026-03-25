@@ -2,14 +2,13 @@ package tunnel
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 )
 
 var (
-	_tcpQueue   = make(chan adapter.TCPConn, 64) // Buffered channel to prevent blocking
+	_tcpQueue   = make(chan adapter.TCPConn, 64)
 	_stopChan   = make(chan struct{})
 	_startOnce  sync.Once
 )
@@ -25,15 +24,12 @@ func TCPIn() chan<- adapter.TCPConn {
 
 // Start initializes the tunnel processor (called automatically via init)
 func Start() {
-	_startOnce.Do(func() {
-		slog.Debug("Tunnel processor started")
-	})
+	_startOnce.Do(func() {})
 }
 
 // Stop gracefully stops the tunnel processor
 func Stop() {
 	close(_stopChan)
-	slog.Debug("Tunnel processor stopped")
 }
 
 func process() {
