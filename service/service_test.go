@@ -7,8 +7,19 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc/mgr"
 )
+
+// mockLogger implements debug.Log interface for testing
+type mockLogger struct{}
+
+func (m *mockLogger) Info(eid uint32, msg string) error    { return nil }
+func (m *mockLogger) Warning(eid uint32, msg string) error { return nil }
+func (m *mockLogger) Error(eid uint32, msg string) error   { return nil }
+func (m *mockLogger) Close() error                         { return nil }
+
+var _ debug.Log = (*mockLogger)(nil)
 
 func TestServiceName(t *testing.T) {
 	if serviceName != "go-pcap2socks" {
@@ -110,24 +121,24 @@ func TestRun_AsService(t *testing.T) {
 
 func TestWindowsService_Execute(t *testing.T) {
 	// Test the windowsService struct
-	ws := &windowsService{}
-	
-	// Create channels for testing
-	cmdChan := make(chan svc.ChangeRequest)
-	statusChan := make(chan svc.Status)
-	
+	ws := &windowsService{elog: &mockLogger{}}
+
+	// Create buffered channels for testing to prevent blocking
+	cmdChan := make(chan svc.ChangeRequest, 1)
+	statusChan := make(chan svc.Status, 10)
+
 	// Start Execute in goroutine
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		ws.Execute([]string{}, cmdChan, statusChan)
 	}()
-	
+
 	// Send stop command
 	cmdChan <- svc.ChangeRequest{
 		Cmd: svc.Stop,
 	}
-	
+
 	// Wait for completion or timeout
 	select {
 	case <-done:
@@ -138,22 +149,23 @@ func TestWindowsService_Execute(t *testing.T) {
 }
 
 func TestWindowsService_Execute_Interrogate(t *testing.T) {
-	ws := &windowsService{}
-	
-	cmdChan := make(chan svc.ChangeRequest)
-	statusChan := make(chan svc.Status)
-	
+	ws := &windowsService{elog: &mockLogger{}}
+
+	// Create buffered channels for testing to prevent blocking
+	cmdChan := make(chan svc.ChangeRequest, 1)
+	statusChan := make(chan svc.Status, 10)
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		ws.Execute([]string{}, cmdChan, statusChan)
 	}()
-	
+
 	// Send interrogate command
 	cmdChan <- svc.ChangeRequest{
 		Cmd: svc.Interrogate,
 	}
-	
+
 	// Wait for status response or timeout
 	select {
 	case status := <-statusChan:
@@ -161,40 +173,41 @@ func TestWindowsService_Execute_Interrogate(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Error("Execute() timed out on interrogate")
 	}
-	
+
 	// Stop the service
 	cmdChan <- svc.ChangeRequest{
 		Cmd: svc.Stop,
 	}
-	
+
 	<-done
 }
 
 func TestWindowsService_Execute_InvalidCommand(t *testing.T) {
-	ws := &windowsService{}
-	
-	cmdChan := make(chan svc.ChangeRequest)
-	statusChan := make(chan svc.Status)
-	
+	ws := &windowsService{elog: &mockLogger{}}
+
+	// Create buffered channels for testing to prevent blocking
+	cmdChan := make(chan svc.ChangeRequest, 1)
+	statusChan := make(chan svc.Status, 10)
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		ws.Execute([]string{}, cmdChan, statusChan)
 	}()
-	
+
 	// Send invalid command
 	cmdChan <- svc.ChangeRequest{
 		Cmd: svc.Cmd(999), // Invalid command
 	}
-	
+
 	// Give it time to process
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Stop the service
 	cmdChan <- svc.ChangeRequest{
 		Cmd: svc.Stop,
 	}
-	
+
 	<-done
 }
 
@@ -240,25 +253,26 @@ func TestServiceRecovery(t *testing.T) {
 
 func TestServiceGracefulShutdown(t *testing.T) {
 	// Test that service handles shutdown gracefully
-	ws := &windowsService{}
-	
-	cmdChan := make(chan svc.ChangeRequest)
-	statusChan := make(chan svc.Status)
-	
+	ws := &windowsService{elog: &mockLogger{}}
+
+	// Create buffered channels for testing to prevent blocking
+	cmdChan := make(chan svc.ChangeRequest, 1)
+	statusChan := make(chan svc.Status, 10)
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		ws.Execute([]string{}, cmdChan, statusChan)
 	}()
-	
+
 	// Wait for service to start
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Send shutdown command
 	cmdChan <- svc.ChangeRequest{
 		Cmd: svc.Shutdown,
 	}
-	
+
 	// Wait for completion or timeout
 	select {
 	case <-done:
