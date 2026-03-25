@@ -1,10 +1,12 @@
 package windivert
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
 	"github.com/threatwinds/godivert"
@@ -28,14 +30,16 @@ func bytesEqual(a, b []byte) bool {
 
 // DHCPServer represents a DHCP server using WinDivert
 type DHCPServer struct {
-	mu       sync.RWMutex
-	config   *dhcp.ServerConfig
-	server   *dhcp.Server
-	handle   *Handle
-	stopChan chan struct{}
-	wg       sync.WaitGroup
-	localMAC net.HardwareAddr
-	localIP  net.IP
+	mu            sync.RWMutex
+	config        *dhcp.ServerConfig
+	server        *dhcp.Server
+	handle        *Handle
+	stopChan      chan struct{}
+	wg            sync.WaitGroup
+	localMAC      net.HardwareAddr
+	localIP       net.IP
+	lastRequest   map[string]time.Time // Rate limiting per MAC
+	requestMu     sync.Mutex           // Protect lastRequest map
 }
 
 // NewDHCPServer creates a new DHCP server using WinDivert
@@ -50,12 +54,13 @@ func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr) (*DHCPS
 	}
 
 	s := &DHCPServer{
-		config:   config,
-		server:   dhcpServer,
-		handle:   handle,
-		stopChan: make(chan struct{}),
-		localMAC: localMAC,
-		localIP:  config.ServerIP,
+		config:      config,
+		server:      dhcpServer,
+		handle:      handle,
+		stopChan:    make(chan struct{}),
+		localMAC:    localMAC,
+		localIP:     config.ServerIP,
+		lastRequest: make(map[string]time.Time),
 	}
 
 	slog.Info("WinDivert DHCP server created",
@@ -143,14 +148,62 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		clientMAC = packet.SrcMAC // Fallback to packet MAC
 	}
 
-	slog.Debug("DHCP packet captured via WinDivert",
+	// Rate limiting: prevent DHCP flood (max 1 request per 500ms per MAC)
+	macStr := clientMAC.String()
+	now := time.Now()
+	s.requestMu.Lock()
+	if lastTime, exists := s.lastRequest[macStr]; exists {
+		if now.Sub(lastTime) < 500*time.Millisecond {
+			s.requestMu.Unlock()
+			slog.Debug("DHCP rate limit", "mac", macStr)
+			s.handle.Send(packet) // Reinject packet
+			return
+		}
+	}
+	s.lastRequest[macStr] = now
+	s.requestMu.Unlock()
+
+	// Extract DHCP message type for logging
+	msgType := "unknown"
+	if len(dhcpData) > 240 && dhcpData[0] == 99 && dhcpData[1] == 134 && dhcpData[2] == 101 {
+		// DHCP magic cookie: 99.134.101.63
+		for i := 244; i < len(dhcpData)-2; {
+			if dhcpData[i] == 0 {
+				break // End of options
+			}
+			if dhcpData[i] == 255 {
+				break // End of options
+			}
+			optionCode := dhcpData[i]
+			optionLen := int(dhcpData[i+1])
+			if optionCode == 53 && optionLen >= 1 { // DHCP Message Type
+				switch dhcpData[i+2] {
+				case 1:
+					msgType = "DISCOVER"
+				case 2:
+					msgType = "OFFER"
+				case 3:
+					msgType = "REQUEST"
+				case 4:
+					msgType = "DECLINE"
+				case 5:
+					msgType = "ACK"
+				case 6:
+					msgType = "NAK"
+				case 7:
+					msgType = "RELEASE"
+				}
+				break
+			}
+			i += 2 + optionLen
+		}
+	}
+
+	slog.Debug("DHCP packet captured",
+		"type", msgType,
 		"src_ip", packet.SrcIP.String(),
 		"dst_ip", packet.DstIP.String(),
-		"src_port", packet.SrcPort,
-		"dst_port", packet.DstPort,
-		"inbound", packet.IsInbound,
-		"src_mac", clientMAC.String(),
-		"packet_mac", packet.SrcMAC.String())
+		"src_mac", clientMAC.String())
 
 	// Check broadcast flag in DHCP Discover (flags field at offset 10-11 in DHCP header)
 	// If high bit is set (0x8000), client wants broadcast response
@@ -158,7 +211,9 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	if len(dhcpData) >= 12 {
 		flags := uint16(dhcpData[10])<<8 | uint16(dhcpData[11])
 		broadcastFlag = (flags & 0x8000) != 0
-		slog.Debug("DHCP flags", "flags", fmt.Sprintf("0x%04X", flags), "broadcast", broadcastFlag)
+		if msgType == "DISCOVER" {
+			slog.Debug("DHCP flags", "flags", fmt.Sprintf("0x%04X", flags), "broadcast", broadcastFlag)
+		}
 	}
 
 	// Handle DHCP request
@@ -170,12 +225,16 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	}
 
 	if responseData == nil {
-		slog.Debug("DHCP server returned no response")
+		slog.Debug("DHCP server returned no response", "type", msgType)
 		s.handle.Send(packet)
 		return
 	}
 
-	slog.Info("DHCP response generated", "mac", clientMAC.String(), "response_len", len(responseData), "broadcast", broadcastFlag)
+	slog.Info("DHCP response generated",
+		"type", msgType,
+		"mac", clientMAC.String(),
+		"response_len", len(responseData),
+		"broadcast", broadcastFlag)
 
 	// Build and send DHCP response packet with client MAC for proper delivery
 	err = s.sendDHCPResponseWithMAC(clientMAC, packet, responseData, broadcastFlag)
