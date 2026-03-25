@@ -37,6 +37,12 @@ func NewLeaseDB(dbPath string) *LeaseDB {
 		saveChan: make(chan struct{}, 1), // Buffered to prevent blocking
 	}
 
+	// Ensure directory exists
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		slog.Warn("Failed to create lease database directory", "dir", dir, "err", err)
+	}
+
 	// Start background saver
 	go db.saveLoop()
 
