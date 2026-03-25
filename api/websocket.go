@@ -18,9 +18,20 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// wsConn defines the interface for WebSocket connections (for testability)
+// websocket.Conn implements all methods except SetDeadline which we handle separately
+type wsConn interface {
+	Close() error
+	WriteMessage(messageType int, data []byte) error
+	WriteControl(messageType int, data []byte, deadline time.Time) error
+	ReadMessage() (messageType int, p []byte, err error)
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+}
+
 // WebSocketClient represents a connected WebSocket client
 type WebSocketClient struct {
-	conn     *websocket.Conn
+	conn     wsConn
 	send     chan []byte
 	lastPing time.Time
 }
@@ -33,6 +44,7 @@ type WebSocketHub struct {
 	register   chan *WebSocketClient
 	unregister chan *WebSocketClient
 	stopChan   chan struct{}
+	stopOnce   sync.Once
 }
 
 // NewWebSocketHub creates a new WebSocket hub
@@ -92,7 +104,9 @@ func (h *WebSocketHub) Run() {
 
 // Stop stops the hub
 func (h *WebSocketHub) Stop() {
-	close(h.stopChan)
+	h.stopOnce.Do(func() {
+		close(h.stopChan)
+	})
 }
 
 // Broadcast sends a message to all connected clients
