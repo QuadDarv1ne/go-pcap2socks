@@ -212,7 +212,6 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 			s.sendError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		slog.Info("Service started via API")
 		s.sendSuccess(w, "Service started")
 		return
 	}
@@ -222,7 +221,6 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	s.enabled = true
 	s.mu.Unlock()
 
-	slog.Info("Service started via API (flag only)")
 	s.sendSuccess(w, "Service started")
 }
 
@@ -239,7 +237,6 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 			s.sendError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		slog.Info("Service stopped via API")
 		s.sendSuccess(w, "Service stopped")
 		return
 	}
@@ -249,7 +246,6 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	s.enabled = false
 	s.mu.Unlock()
 
-	slog.Info("Service stopped via API (flag only)")
 	s.sendSuccess(w, "Service stopped")
 }
 
@@ -334,8 +330,6 @@ func (s *Server) handleConfigReload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("Config reload requested via API")
-
 	// Send success response
 	s.sendSuccess(w, map[string]interface{}{
 		"message": "Config reload requested. Restart service to apply changes.",
@@ -393,7 +387,6 @@ func (s *Server) handleConfigUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("Config updated via API")
 	s.sendSuccess(w, "Config updated")
 }
 
@@ -465,7 +458,6 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		slog.Info("Profile switched via API", "profile", req.Profile)
 		s.sendSuccess(w, map[string]interface{}{
 			"message": "Profile switched: " + req.Profile,
 			"profile": req.Profile,
@@ -497,7 +489,6 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("Profile switched via API", "profile", req.Profile)
 	s.sendSuccess(w, map[string]interface{}{
 		"message": "Profile switched: " + req.Profile,
 		"profile": req.Profile,
@@ -768,8 +759,6 @@ func (s *Server) handleHotkeyToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("Hotkey action requested", "action", req.Action, "hotkey", req.Hotkey)
-
 	// For now, just acknowledge the request
 	// Full implementation would require callback integration
 	s.sendSuccess(w, map[string]interface{}{
@@ -994,7 +983,6 @@ func (s *Server) handleMACFilterUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("MAC filter updated", "mode", req.Mode, "entries", len(req.List))
 	s.sendSuccess(w, "MAC filter updated")
 }
 
@@ -1036,7 +1024,6 @@ func (s *Server) handleDeviceNamesUpdate(w http.ResponseWriter, r *http.Request)
 	}
 
 	s.statsStore.SetCustomName(req.MAC, req.Name)
-	slog.Info("Device name updated", "mac", req.MAC, "name", req.Name)
 	s.sendSuccess(w, "Device name updated")
 }
 
@@ -1064,7 +1051,6 @@ func (s *Server) handleDeviceRateLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.statsStore.SetRateLimit(req.MAC, req.Upload, req.Download)
-	slog.Info("Rate limit updated", "mac", req.MAC, "upload", req.Upload, "download", req.Download)
 	s.sendSuccess(w, "Rate limit updated")
 }
 
@@ -1105,7 +1091,6 @@ func (s *Server) handleAutoConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("Auto-config completed successfully")
 	s.sendSuccess(w, map[string]string{
 		"message": "Auto-config completed successfully",
 		"output":  string(output),
@@ -1193,7 +1178,6 @@ func (s *Server) handleDHCPUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("DHCP configuration updated", "enabled", req.Enabled)
 	s.sendSuccess(w, "DHCP configuration updated")
 }
 
