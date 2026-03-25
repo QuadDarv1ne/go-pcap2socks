@@ -18,6 +18,7 @@ type quicDatagramConn struct {
 	localAddr  net.Addr
 	remoteAddr net.Addr
 	closed     atomic.Bool
+	once       sync.Once     // Для однократного закрытия каналов
 	mu         sync.RWMutex
 	readChan   chan []byte
 	errChan    chan error
@@ -63,7 +64,10 @@ func (c *quicDatagramConn) receiveDatagrams() {
 				if c.closed.Swap(true) {
 					return // Already closed
 				}
-				close(c.errChan)
+				// Закрыть каналы безопасно с помощью sync.Once
+				c.once.Do(func() {
+					close(c.errChan)
+				})
 				return
 			}
 
@@ -209,8 +213,11 @@ func (c *quicDatagramConn) Close() error {
 		return nil // Already closed
 	}
 
-	close(c.readChan)
-	close(c.errChan)
+	// Закрыть каналы безопасно с помощью sync.Once
+	c.once.Do(func() {
+		close(c.readChan)
+		close(c.errChan)
+	})
 
 	// Close the underlying QUIC connection
 	c.conn.CloseWithError(0, "datagram connection closed")

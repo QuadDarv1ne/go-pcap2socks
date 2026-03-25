@@ -18,6 +18,7 @@ type LeaseDB struct {
 	dbPath   string
 	dirty    bool
 	saveChan chan struct{}
+	stopChan chan struct{}
 }
 
 // serializedLease is used for JSON serialization
@@ -35,6 +36,7 @@ func NewLeaseDB(dbPath string) *LeaseDB {
 		leases:   make(map[string]*DHCPLease),
 		dbPath:   dbPath,
 		saveChan: make(chan struct{}, 1), // Buffered to prevent blocking
+		stopChan: make(chan struct{}),
 	}
 
 	// Ensure directory exists
@@ -154,6 +156,9 @@ func (db *LeaseDB) saveLoop() {
 			db.trySave()
 		case <-ticker.C:
 			db.trySave()
+		case <-db.stopChan:
+			slog.Debug("LeaseDB saveLoop stopped")
+			return
 		}
 	}
 }
@@ -263,6 +268,9 @@ func (db *LeaseDB) CleanupExpired() int {
 
 // Close saves and closes the database
 func (db *LeaseDB) Close() error {
+	// Stop saveLoop
+	close(db.stopChan)
+
 	// Final save
 	db.mu.Lock()
 	db.dirty = true // Force save

@@ -1,7 +1,9 @@
 package tunnel
 
 import (
+	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -60,13 +62,22 @@ func unidirectionalStream(dst, src net.Conn, dir string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	buf := buffer.Get(tcpRelayBufferSize)
 	defer buffer.Put(buf)
-	_, _ = io.CopyBuffer(dst, src, buf)
+	
+	n, err := io.CopyBuffer(dst, src, buf)
+	if err != nil && !errors.Is(err, io.EOF) {
+		slog.Debug("TCP stream copy error", "direction", dir, "bytes", n, "err", err)
+	}
+	
 	// Do the upload/download side TCP half-close.
 	if cr, ok := src.(interface{ CloseRead() error }); ok {
-		cr.CloseRead()
+		if err := cr.CloseRead(); err != nil && !errors.Is(err, io.EOF) {
+			slog.Debug("CloseRead error", "direction", dir, "err", err)
+		}
 	}
 	if cw, ok := dst.(interface{ CloseWrite() error }); ok {
-		cw.CloseWrite()
+		if err := cw.CloseWrite(); err != nil {
+			slog.Debug("CloseWrite error", "direction", dir, "err", err)
+		}
 	}
 	// Set TCP half-close timeout.
 	dst.SetReadDeadline(time.Now().Add(TCPWaitTimeout))

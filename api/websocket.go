@@ -77,16 +77,29 @@ func (h *WebSocketHub) Run() {
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
+			// Сначала собираем клиенты которые не могут получить сообщение
+			clientsToClose := make([]*WebSocketClient, 0, len(h.clients))
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					// Client buffer full, disconnect
-					close(client.send)
-					delete(h.clients, client)
+					// Client buffer full, mark for disconnect
+					clientsToClose = append(clientsToClose, client)
 				}
 			}
 			h.mu.RUnlock()
+
+			// Закрыть клиенты вне блокировки для предотвращения deadlock
+			if len(clientsToClose) > 0 {
+				h.mu.Lock()
+				for _, client := range clientsToClose {
+					if _, ok := h.clients[client]; ok {
+						delete(h.clients, client)
+						close(client.send)
+					}
+				}
+				h.mu.Unlock()
+			}
 
 		case <-h.stopChan:
 			h.mu.Lock()
