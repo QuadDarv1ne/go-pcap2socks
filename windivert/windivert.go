@@ -151,6 +151,35 @@ func (h *Handle) parsePacket(packet *godivert.Packet) *Packet {
 	return parsed
 }
 
+// GetClientMAC extracts client MAC from DHCP packet payload
+// DHCP client hardware address is at offset 28-33 in DHCP message (after 4-byte opcode header)
+func GetClientMAC(dhcpData []byte) net.HardwareAddr {
+	if len(dhcpData) < 34 {
+		return nil
+	}
+	// DHCP message format:
+	// [0] - op code
+	// [1] - hardware type (1 = Ethernet)
+	// [2] - hardware address length (6 for Ethernet)
+	// [3] - hops
+	// [4-7] - transaction ID
+	// [8-9] - seconds elapsed
+	// [10-11] - flags
+	// [12-15] - client IP (ciaddr)
+	// [16-19] - your IP (yiaddr)
+	// [20-23] - server IP (siaddr)
+	// [24-27] - gateway IP (giaddr)
+	// [28-33] - client hardware address (16 bytes, first 6 are MAC)
+	hwType := dhcpData[1]
+	hwLen := dhcpData[2]
+	if hwType != 1 || hwLen != 6 {
+		return nil
+	}
+	mac := make(net.HardwareAddr, 6)
+	copy(mac, dhcpData[28:34])
+	return mac
+}
+
 // Helper function to convert godivert.Direction to string
 func directionToString(d godivert.Direction) string {
 	if d {

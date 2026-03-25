@@ -123,14 +123,6 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		return
 	}
 
-	slog.Debug("DHCP packet captured via WinDivert",
-		"src_ip", packet.SrcIP.String(),
-		"dst_ip", packet.DstIP.String(),
-		"src_port", packet.SrcPort,
-		"dst_port", packet.DstPort,
-		"inbound", packet.IsInbound,
-		"src_mac", packet.SrcMAC.String())
-
 	// Extract DHCP payload (skip IP and UDP headers)
 	// IP header length is in first byte (lower 4 bits)
 	ipHeaderLen := int((packet.Raw[0] & 0x0F) * 4)
@@ -144,6 +136,21 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	}
 
 	dhcpData := packet.Raw[dhcpStart:]
+
+	// Extract client MAC from DHCP payload (more reliable than WinDivert in network layer mode)
+	clientMAC := GetClientMAC(dhcpData)
+	if clientMAC == nil {
+		clientMAC = packet.SrcMAC // Fallback to packet MAC
+	}
+
+	slog.Debug("DHCP packet captured via WinDivert",
+		"src_ip", packet.SrcIP.String(),
+		"dst_ip", packet.DstIP.String(),
+		"src_port", packet.SrcPort,
+		"dst_port", packet.DstPort,
+		"inbound", packet.IsInbound,
+		"src_mac", clientMAC.String(),
+		"packet_mac", packet.SrcMAC.String())
 
 	// Check broadcast flag in DHCP Discover (flags field at offset 10-11 in DHCP header)
 	// If high bit is set (0x8000), client wants broadcast response
@@ -168,10 +175,10 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		return
 	}
 
-	slog.Info("DHCP response generated", "mac", packet.SrcMAC.String(), "response_len", len(responseData), "broadcast", broadcastFlag)
+	slog.Info("DHCP response generated", "mac", clientMAC.String(), "response_len", len(responseData), "broadcast", broadcastFlag)
 
-	// Build and send DHCP response packet
-	err = s.sendDHCPResponse(packet, responseData, broadcastFlag)
+	// Build and send DHCP response packet with client MAC for proper delivery
+	err = s.sendDHCPResponseWithMAC(clientMAC, packet, responseData, broadcastFlag)
 	if err != nil {
 		slog.Error("DHCP send response error", "err", err)
 	}
@@ -180,8 +187,8 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	// This prevents the packet from reaching other DHCP servers
 }
 
-// sendDHCPResponse builds and sends a DHCP response packet
-func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte, broadcastFlag bool) error {
+// sendDHCPResponseWithMAC builds and sends a DHCP response packet with explicit client MAC
+func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request *Packet, dhcpData []byte, broadcastFlag bool) error {
 	// Determine destination IP based on broadcast flag and client state
 	// If client set broadcast flag, we MUST use broadcast address
 	dstIP := net.IPv4(255, 255, 255, 255) // Default broadcast
@@ -198,7 +205,7 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte, broadcas
 		// If client already has an IP (ciaddr != 0), use unicast
 		if !clientIP.Equal(net.IPv4zero) {
 			dstIP = clientIP
-			dstMAC = request.SrcMAC // Use client's MAC for unicast
+			dstMAC = clientMAC // Use client's MAC from DHCP payload
 			slog.Debug("DHCP unicast response (client has IP)", "dst_ip", dstIP.String(), "dst_mac", dstMAC.String())
 		} else if broadcastFlag {
 			// Client explicitly requested broadcast response
@@ -209,7 +216,7 @@ func (s *DHCPServer) sendDHCPResponse(request *Packet, dhcpData []byte, broadcas
 			// For OFFER/ACK to clients without IP and no broadcast flag
 			// Use unicast to client MAC - critical for PS4 and other devices
 			dstIP = yourIP
-			dstMAC = request.SrcMAC // Use client's MAC from request
+			dstMAC = clientMAC // Use client's MAC from DHCP payload
 			slog.Debug("DHCP unicast response (no flag)", "dst_ip", dstIP.String(), "dst_mac", dstMAC.String(), "your_ip", yourIP.String())
 		}
 	}
