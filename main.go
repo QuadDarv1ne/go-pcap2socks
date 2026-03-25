@@ -456,6 +456,54 @@ func main() {
 			return leases
 		})
 
+		// Set DHCP metrics getter for API
+		api.SetGetDHCPMetricsFn(func() map[string]interface{} {
+			if _dhcpServer == nil {
+				return map[string]interface{}{
+					"available": false,
+					"message":   "DHCP server not running",
+				}
+			}
+
+			// Try to get metrics from DHCP server
+			var metrics map[string]interface{}
+
+			// Check if it's standard DHCP server with metrics
+			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+				metricsCollector := stdDHCP.GetMetrics()
+				if metricsCollector != nil {
+					snapshot := metricsCollector.GetMetrics()
+					metrics = map[string]interface{}{
+						"available":       true,
+						"uptime_seconds":  snapshot.UptimeSeconds,
+						"active_leases":   snapshot.ActiveLeases,
+						"total_allocations": snapshot.TotalAllocations,
+						"total_renewals":  snapshot.TotalRenewals,
+						"discover_count":  snapshot.DiscoverCount,
+						"offer_count":     snapshot.OfferCount,
+						"request_count":   snapshot.RequestCount,
+						"ack_count":       snapshot.AckCount,
+						"nak_count":       snapshot.NakCount,
+						"release_count":   snapshot.ReleaseCount,
+						"decline_count":   snapshot.DeclineCount,
+						"error_count":     snapshot.ErrorCount,
+						"last_request_mac": snapshot.LastRequestMAC,
+						"last_request_ip": snapshot.LastRequestIP,
+						"start_time":      snapshot.StartTime.Format(time.RFC3339),
+					}
+				}
+			}
+
+			if metrics == nil {
+				metrics = map[string]interface{}{
+					"available": false,
+					"message":   "DHCP metrics not available",
+				}
+			}
+
+			return metrics
+		})
+
 		// Set service control callbacks for API
 		api.SetServiceCallbacks(
 			func() error {
