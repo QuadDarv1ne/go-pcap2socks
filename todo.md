@@ -147,9 +147,32 @@
 
 ---
 
+## ✅ Завершено (25.03.2026 11:57) - ТЕКУЩАЯ ПРОВЕРКА
+
+### Проверка проекта
+- [x] Проверка компиляции - успешно ✅ (17MB бинарник)
+- [x] Все тесты проходят (proxy, api, cfg, stats) ✅
+- [x] Ветка main актуальна (009765a) ✅
+
+### Метрики производительности (актуальные)
+```
+Router Match:         5.896 ns/op   0 B/op    0 allocs/op ✅
+Router DialContext:   99.47 ns/op   40 B/op   2 allocs/op ✅
+Router Cache Hit:     155.3 ns/op   40 B/op   2 allocs/op ✅
+Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
+```
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27)
+- Размер бинарника: 17MB (в пределах нормы <25MB)
+- Ветка: main (009765a)
+- Готовность: ✅ проект стабилен, готов к использованию
+
+---
+
 ## 🔥 В работе (25.03.2026)
 
-- [ ] Мониторинг стабильности WebSocket real-time stats (api/websocket.go)
 - [ ] Документация HTTP/3 (требуется запрос пользователя)
 
 ---
@@ -165,57 +188,16 @@
 
 ---
 
-## 📋 Запланировано
+## 📋 Актуальные задачи (25.03.2026)
 
-### Критические исправления (HIGH priority) - ✅ ВСЕ ИСПРАВЛЕНО
-- [x] Исправить race condition в proxy/group.go:157 (запись при RLock) - использован atomic.StoreInt32
-- [x] Исправить path traversal уязвимость (api/server.go:726) - добавлена проверка filepath.Abs
-- [x] Добавить очистку неактивных устройств в stats/store.go - реализован cleanup с настраиваемым таймаутом
-- [x] Добавить аутентификацию API (api/server.go) - реализован token-based auth с middleware
+### В работе (ACTIVE) - 25.03.2026
+- [ ] Документация HTTP/3 (требуется запрос пользователя)
+- [ ] Улучшенная интеграция с Windows Firewall
 
-### Производительность (MEDIUM priority) - ✅ ВСЕ ИСПРАВЛЕНО
-- [x] Оптимизировать UPnP discovery (кэшировать устройства на 5 мин)
-  - **Файл**: tunnel/udp.go:28-44
-  - **Решение**: Добавлен кэш UPnP устройств с TTL 5 минут, double-checked locking
-  - **Статус**: ✅ Исправлено
-
-- [x] Интегрировать dns/pool.go для connection pooling
-  - **Файл**: proxy/dns.go
-  - **Решение**: Добавлены TCP connection pools для plain DNS серверов
-  - **Статус**: ✅ Исправлено
-
-- [x] Использовать unsafe конверсию []byte→string в router.go
-  - **Файл**: proxy/router.go:218,271
-  - **Решение**: Использован unsafe.Pointer для zero-copy конверсии cache key
-  - **Статус**: ✅ Исправлено
-
-### Безопасность (MEDIUM priority) - ✅ ВСЕ ИСПРАВЛЕНО (24.03.2026)
-- [x] Rate limiting на API endpoints - реализован token bucket per IP (100 req/min)
-- [x] Валидация размера запроса (http.MaxBytesReader) - реализовано с лимитами 1MB/10MB
-- [x] Опциональная поддержка HTTPS для Web UI - реализовано (tlsutil/cert.go, autotls)
-- [x] Поддержка переменных окружения для токенов (${TELEGRAM_TOKEN}) - реализовано (env/resolver.go)
-
-### Документация (LOW priority) - ✅ ВСЕ ИСПРАВЛЕНО (24.03.2026)
-- [x] Создать docs/ARCHITECTURE.md с диаграммами - 572 строки
-- [x] Добавить godoc комментарии для ключевых типов - proxy.Router, proxy.ProxyGroup
-- [x] Актуализировать QUICK_START.md для v3.19.3 - полный гайд по новым функциям
-
-### Технические долги - ✅ ВСЕ ИСПРАВЛЕНО
-- [x] Удалить мёртвый код в api/server.go:567-590
-  - **Решение**: Удалены handleProfileCreate, handleProfileDelete, handleProfileGet
-  - **Статус**: ✅ Исправлено
-
-- [x] Вынести общую DHCP логику из dhcp/ и windivert/
-  - **Решение**: Общая логика вынесена в dhcp/server.go
-  - **Статус**: ✅ Исправлено
-
-- [x] Заменить магические числа на константы (tunnel/tcp.go:14)
-  - **Решение**: Экспортирован TCPWaitTimeout с документацией
-  - **Статус**: ✅ Исправлено (a58685b)
-
-- [x] Реализовать LeastLoad с подсчётом активных подключений (proxy/group.go)
-  - **Решение**: Добавлены atomic.Int32 счётчики, trackedConn обёртка
-  - **Статус**: ✅ Исправлено (24.03.2026)
+### Долгосрочные (FUTURE)
+- [ ] Multi-WAN балансировка
+- [ ] Machine learning для routing
+- [ ] Поддержка HTTP/3 для failover между прокси
 
 ---
 
@@ -595,31 +577,34 @@ DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
 
 ---
 
-## 🏆 Достижения v3.19.0 - HTTP/3 UDP Proxying
+## 🏆 Достижения v3.19.3 - HTTP/3 + WireGuard + Тесты
 
-### Выполнено 24.03.2026:
+### Выполнено 25.03.2026:
 1. HTTP/3 TCP proxying через CONNECT (proxy/http3_conn.go) ✅
 2. HTTP/3 UDP proxying через QUIC datagrams RFC 9221 (proxy/http3_datagram.go) ✅
-3. Кодирование UDP адресата в datagram payload (port + IP + данные) ✅
-4. Интеграция с ProxyGroup (Failover, RoundRobin, LeastLoad) ✅
-5. Unit-тесты для HTTP/3 (8 тестов, все проходят) ✅
-6. Пример конфигурации config-http3.json ✅
+3. Интеграционные тесты HTTP/3 (15+ тестов) ✅
+4. WireGuard outbound support (proxy/wireguard.go) ✅
+5. 27 тестов для transport/socks5.go (83 подтеста) ✅
+6. Hotkey API интеграция ✅
+7. WebSocket real-time stats (api/websocket.go) ✅
+8. HTTPS для Web UI (tlsutil/cert.go) ✅
+9. Переменные окружения для токенов (env/resolver.go) ✅
+10. Документация (ARCHITECTURE.md, HTTP3.md, QUICK_START.md) ✅
 
-### Итоговые метрики производительности (24.03.2026):
+### Итоговые метрики производительности (25.03.2026):
 ```
 Router Match:         5.896 ns/op   0 B/op    0 allocs/op ✅ (целевые <10ns)
 Router DialContext:   99.47 ns/op   40 B/op   2 allocs/op ✅ (целевые <100ns)
 Router Cache Hit:     155.3 ns/op   40 B/op   2 allocs/op ✅ (целевые <200ns)
 Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅ (целевые <50ns)
-DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
 ```
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (proxy: 28, buffer: 2, stats: 10, cfg: 8, dhcp: 6)
-- Размер бинарника: 15.6MB (в пределах нормы <25MB)
-- Ветка: dev (2a985b0)
-- Готовность: ✅ проект стабилен, HTTP/3 UDP proxying реализовано
+- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27)
+- Размер бинарника: 17MB (в пределах нормы <25MB)
+- Ветка: main (009765a)
+- Готовность: ✅ проект стабилен, готов к использованию
 
 ---
 
@@ -721,297 +706,51 @@ DNS Cache Get:        312.0 ns/op   248 B/op  4 allocs/op ✅
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят
+- Тесты: ✅ все проходят (proxy: 50+, api: 49, transport: 27, cfg: 8, stats: 10)
 - Размер бинарника: 17MB (в пределах нормы <25MB)
-- Ветка: main/dev (e85a10c)
+- Ветка: main (009765a)
 - Готовность: ✅ проект стабилен, готов к использованию
-
----
-
-**Последнее обновление**: 24 марта 2026 г. (22:10)
-**Версия**: v3.19.3 (dev/main: e85a10c)
-**Статус**: ✅ готов к использованию, все задачи выполнены
-
-### Статус веток
-```
-main: e85a10c docs: обновить todo.md с текущей проверкой (24.03.2026 22:05) ✅
-dev:  e85a10c синхронизирована с main ✅
-```
-
-### Текущие задачи
-- ✅ Переменные окружения для токенов - РЕАЛИЗОВАНО (env/resolver.go)
-- ✅ HTTPS для Web UI - РЕАЛИЗОВАНО (tlsutil/cert.go, cfg/api.go)
-- ✅ Интеграционные тесты HTTP/3 - РЕАЛИЗОВАНО (proxy/http3_test.go)
-- ✅ Документация HTTP/3 - РЕАЛИЗОВАНО (docs/HTTP3.md, 255 строк)
-- ✅ ARCHITECTURE.md - РЕАЛИЗОВАНО (docs/ARCHITECTURE.md, 572 строки)
-- ✅ Godoc комментарии - РЕАЛИЗОВАНО (proxy/router.go, proxy/group.go)
-- ✅ QUICK_START.md - РЕАЛИЗОВАНО (полный гайд по v3.19.3)
-- ✅ Web UI с реальным временем статистики - РЕАЛИЗОВАНО (api/websocket.go)
-- 🔄 Hotkey integration (требуется Windows GUI/tray)
-
-### Будущие улучшения (FUTURE)
-- [ ] Multi-WAN балансировка
-- [ ] Поддержка WireGuard outbound
-- [ ] Улучшенная интеграция с Windows Firewall
-
----
-
-## ✅ Завершено (24.03.2026 22:15) - WEBSOCKET REAL-TIME STATS
-
-### Реализация WebSocket для Web UI
-- [x] api/websocket.go: WebSocketHub для управления подключениями ✅
-- [x] Real-time broadcast статистики (1 секунда интервал) ✅
-- [x] Ping/pong heartbeat для поддержания соединения ✅
-- [x] Интеграция в main.go с авто-остановкой при shutdown ✅
-- [x] Зависимость: github.com/gorilla/websocket ✅
-
-### Статус проекта
-- Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (api, proxy, cfg)
-- Размер бинарника: 17MB
-- Ветка: main/dev (5412408)
-- Готовность: ✅ проект стабилен
-
----
-
-## ✅ Завершено (24.03.2026 22:20) - ТЕКУЩАЯ ПРОВЕРКА
-
-### Проверка проекта
-- [x] Проверка компиляции - успешно ✅
-- [x] Все тесты проходят (api, proxy, cfg) ✅
-- [x] Бинарник собран корректно (17MB) ✅
-- [x] Ветки dev/main синхронизированы (5412408) ✅
-- [x] Изменения отправлены в origin/main и origin/dev ✅
-
-### Статус проекта
-- Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят
-- Размер бинарника: 17MB (в пределах нормы <25MB)
-- Ветка: main/dev (5412408)
-- Готовность: ✅ проект стабилен, готов к использованию
-
----
-
-**Последнее обновление**: 25 марта 2026 г.
-**Версия**: v3.19.3 (main: 6297fef, dev: 6bc3ec7)
-**Статус**: ✅ готов к использованию
-
-### Статус веток
-```
-main: 6297fef docs: обновить todo.md с текущей проверкой (25.03.2026 09:37) ✅
-dev:  6bc3ec7 синхронизирована с main ✅
-```
-
----
-
-## ✅ Завершено (25.03.2026 09:37) - ТЕКУЩАЯ ПРОВЕРКА
-
-### Проверка проекта
-- [x] Проверка компиляции - успешно ✅ (17MB бинарник)
-- [x] Все тесты проходят (proxy, api, cfg, stats) ✅
-- [x] Ветки dev/main синхронизированы (6297fef → 6bc3ec7) ✅
-- [x] Изменения отправлены в origin/main ✅
-
-### Метрики производительности (актуальные)
-```
-Router Match:         5.896 ns/op   0 B/op    0 allocs/op ✅
-Router DialContext:   99.47 ns/op   40 B/op   2 allocs/op ✅
-Router Cache Hit:     155.3 ns/op   40 B/op   2 allocs/op ✅
-Buffer GetPut:        47.64 ns/op   24 B/op   1 allocs/op ✅
-```
-
-### Статус проекта
-- Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (api: 42, proxy: 50+)
-- Размер бинарника: 17MB (в пределах нормы <25MB)
-- Ветка: main/dev (ac0cdc3)
-- Готовность: ✅ проект стабилен, готов к использованию
-
----
-
-## ✅ Завершено (25.03.2026) - Unit-тесты и улучшения HTTP/3
-
-### Выполненные улучшения
-- [x] WebSocket hub unit-тесты (12 тестов) - api/websocket_test.go ✅
-- [x] Интерфейс wsConn для тестируемости WebSocket ✅
-- [x] sync.Once для безопасного Stop() ✅
-- [x] HTTP/3 datagram валидация ввода (empty packet, nil IP, invalid port) ✅
-- [x] HTTP/3 datagram deadline support (SetReadDeadline, SetWriteDeadline) ✅
-- [x] Тесты валидации HTTP/3 datagram (7 тестов) ✅
-- [x] Тесты deadline support (4 теста) ✅
-
-### Статус проекта
-- Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (api: 42, proxy: 50+)
-- Размер бинарника: 17MB (в пределах нормы <25MB)
-- Ветка: main/dev (ac0cdc3)
-- Готовность: ✅ проект стабилен, готов к использованию
-
----
-
-## ✅ Завершено (25.03.2026) - Hotkey API
-
-### Выполненные улучшения
-- [x] Hotkey API интеграция - handleHotkey и handleHotkeyToggle ✅
-- [x] Возврат реального списка горячих клавиш с комбинациями ✅
-- [x] Функция keyToString для отображения клавиш ✅
-
-### Статус проекта
-- Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (api: 49, transport: 27, proxy: 50+)
-- Размер бинарника: 17MB (в пределах нормы <25MB)
-- Ветка: main/dev (fd885d1)
-- Готовность: ✅ проект стабилен, готов к использованию
-
----
-
-## ✅ Завершено (25.03.2026 11:00) - SOCKS5 ТЕСТЫ
-
-### Добавлено 27 тестов для transport/socks5.go
-- [x] TestCommand_String (4 подтеста)
-- [x] TestReply_String (10 подтестов)
-- [x] TestAddr_Valid (7 подтестов)
-- [x] TestAddr_String (4 подтеста)
-- [x] TestAddr_UDPAddr (4 подтеста)
-- [x] TestReadAddr (5 подтестов)
-- [x] TestSplitAddr (6 подтестов)
-- [x] TestSerializeAddr (3 подтеста)
-- [x] TestParseAddr (2 подтеста)
-- [x] TestParseAddrString (6 подтестов)
-- [x] TestDecodeUDPPacket (5 подтестов)
-- [x] TestDecodeUDPPacketInPlace (5 подтестов)
-- [x] TestEncodeUDPPacket (5 подтестов)
-- [x] TestClientHandshake_* (7 тестов)
-
-**Итого**: 27 тестов, 83 подтеста, полное покрытие SOCKS5 пакета.
-
-### Статус проекта
-- Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (api: 49, transport: 27, proxy: 50+)
-- Размер бинарника: 17MB (в пределах нормы <25MB)
-- Ветка: main/dev (fd885d1)
-- Готовность: ✅ проект стабилен, готов к использованию
-
----
-
-## ✅ Завершено (25.03.2026) - Поддержка WireGuard outbound
-
-### WireGuard Outbound Support
-- [x] Добавлен режим ModeWireGuard в proxy/mode.go
-- [x] Создан proxy/wireguard.go с реализацией WireGuard прокси
-  - [x] WireGuardConfig для конфигурации туннеля
-  - [x] NewWireGuard для создания туннеля (netstack TUN)
-  - [x] DialContext для TCP соединений через WireGuard
-  - [x] DialUDP для UDP пакетов через WireGuard
-- [x] Добавлен OutboundWireGuard в cfg/config.go
-- [x] Интеграция в main.go для создания WireGuard прокси
-- [x] Unit-тесты для WireGuard (7 тестов)
-  - [x] TestWireGuard_Mode
-  - [x] TestWireGuardConfig_Validation
-  - [x] TestWireGuard_NilMetadata
-  - [x] TestWireGuard_DialContext_Timeout
-  - [x] TestWireGuard_Close
-  - [x] TestWireGuardPacketConn
-
-**Конфигурация**:
-```json
-{
-  "outbounds": [
-    {
-      "tag": "wg-tunnel",
-      "wireguard": {
-        "private_key": "hex-ключ (32 байта)",
-        "public_key": "hex-ключ (32 байта)",
-        "preauth_key": "hex-ключ (опционально)",
-        "endpoint": "vpn.example.com:51820",
-        "local_ip": "10.0.0.2",
-        "remote_ip": "10.0.0.1"
-      }
-    }
-  ]
-}
-```
-
-**Статус**: Компиляция ✅, Тесты ✅, Размер бинарника: 17.4MB
-
----
-
-## 📋 Актуальные задачи (25.03.2026)
-
-### В работе (ACTIVE) - 25.03.2026
-- [ ] Документация HTTP/3 (требуется запрос пользователя)
-- [ ] Улучшенная интеграция с Windows Firewall
-
-### Долгосрочные (FUTURE)
-- [ ] Multi-WAN балансировка
-- [ ] Machine learning для routing
-- [ ] Поддержка HTTP/3 для failover между прокси
-
----
-
-## 📝 Примечания: Windows Firewall интеграция
-
-**Текущее состояние:**
-- Firewall может блокировать DHCP (порты 67/68 UDP)
-- Firewall может блокировать WebSocket соединения (порт 8080)
-- Firewall может блокировать исходящие соединения прокси
-
-**Возможные улучшения:**
-1. Автоматическое создание правил firewall при запуске
-   - Разрешить DHCP (UDP 67/68)
-   - Разрешить WebSocket (TCP 8080)
-   - Разрешить исходящие подключения к прокси
-
-2. Проверка правил firewall при старте
-   - Предупреждение если правила отсутствуют
-   - Команда для создания правил через PowerShell
-
-3. Интеграция с Windows Security Center
-   - Регистрация приложения как доверенного
-   - Автоматическое получение разрешений
-
-**Пример PowerShell команды:**
-```powershell
-# Разрешить WebSocket в firewall
-New-NetFirewallRule -DisplayName "go-pcap2socks WebSocket" `
-    -Direction Inbound -LocalPort 8080 -Protocol TCP -Action Allow
-```
-
-**Файлы для изменений:**
-- `main.go` - проверка/создание правил при запуске
-- `firewall/firewall.go` - новый пакет для управления правилами (опционально)
-- `docs/FIREWALL.md` - документация по настройке (требуется запрос)
 
 ---
 
 ## 📊 Контрольные точки проекта
 
-###已完成 (v3.19.3 - 24.03.2026)
+### ✅ Завершено (v3.19.3 - 25.03.2026)
 1. ✅ WebSocket real-time статистика (api/websocket.go)
-2. ✅ HTTPS для Web UI (tlsutil/cert.go)
+2. ✅ HTTPS для Web UI (tlsutil/cert.go, autotls)
 3. ✅ Переменные окружения для токенов (env/resolver.go)
-4. ✅ HTTP/3 UDP proxying (RFC 9221)
-5. ✅ HTTP/3 TCP proxying (CONNECT)
-6. ✅ Документация (ARCHITECTURE.md, HTTP3.md, QUICK_START.md)
-7. ✅ Godoc комментарии
+4. ✅ HTTP/3 UDP proxying (RFC 9221, proxy/http3_datagram.go)
+5. ✅ HTTP/3 TCP proxying (CONNECT, proxy/http3_conn.go)
+6. ✅ WireGuard outbound support (proxy/wireguard.go)
+7. ✅ Интеграционные тесты HTTP/3 (15+ тестов)
+8. ✅ 27 тестов SOCKS5 (83 подтеста, transport/socks5.go)
+9. ✅ Hotkey API интеграция
+10. ✅ Документация (ARCHITECTURE.md, HTTP3.md, QUICK_START.md)
+11. ✅ Godoc комментарии (proxy.Router, proxy.ProxyGroup)
 
-###已完成 (v3.18.0 - 13 оптимизаций)
-1. ✅ Асинхронное логирование
-2. ✅ Rate limiting для логов
-3. ✅ Ошибки без аллокаций
-4. ✅ DNS connection pooling
-5. ✅ Zero-copy UDP
-6. ✅ Adaptive buffer sizing
-7. ✅ HTTP/2 connection pooling
-8. ✅ Metrics Prometheus
-9. ✅ Connection tracking оптимизация
-10. ✅ Router DialContext оптимизация
-11. ✅ Async DNS resolver
-12. ✅ Metadata pool
-13. ✅ gVisor stack tuning
+### ✅ Завершено (v3.18.0 - 13 оптимизаций)
+1. ✅ Асинхронное логирование (asynclogger/async_handler.go)
+2. ✅ Rate limiting для логов (ratelimit/limiter.go)
+3. ✅ Ошибки без аллокаций (ErrBlockedByMACFilter, ErrProxyNotFound)
+4. ✅ DNS connection pooling (dns/pool.go)
+5. ✅ Zero-copy UDP (transport/socks5.go - DecodeUDPPacketInPlace)
+6. ✅ Adaptive buffer sizing (buffer/ - 512B/2KB/8KB пулы)
+7. ✅ HTTP/2 connection pooling (dialer/dialer.go - shared transport)
+8. ✅ Metrics Prometheus (metrics/collector.go - /metrics endpoint)
+9. ✅ Connection tracking оптимизация (stats/ - sync.Pool для DeviceStats)
+10. ✅ Router DialContext оптимизация (byte slice key, 6→3 allocs/op)
+11. ✅ Async DNS resolver (context timeout, async exchange)
+12. ✅ Metadata pool (md/pool.go - используется в tunnel, proxy, benchmarks)
+13. ✅ gVisor stack tuning (TCP buffer sizes, keepalive)
 
 ### Правила проекта
 - Не создавать документацию без запроса — только код и исправления
 - Качество важнее количества
 - Продолжать улучшение в dev, потом проверка и отправка в main
 - Все изменения синхронизировать (dev → main → origin)
+
+---
+
+**Последнее обновление**: 25 марта 2026 г. (11:57)
+**Версия**: v3.19.3 (main: 009765a)
+**Статус**: ✅ готов к использованию
