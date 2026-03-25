@@ -1,18 +1,16 @@
 package tunnel
 
 import (
-	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
-	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
-	"github.com/QuadDarv1ne/go-pcap2socks/ratelimit"
-	"gvisor.dev/gvisor/pkg/log"
 	"io"
-	"log/slog"
 	"net"
 	"sync"
 	"time"
 
-	M "github.com/QuadDarv1ne/go-pcap2socks/md"
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
+
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
 const (
@@ -21,13 +19,7 @@ const (
 	TCPWaitTimeout = 60 * time.Second
 
 	// tcpRelayBufferSize is optimized buffer size for TCP relay
-	// Using adaptive buffer sizing for better memory efficiency
 	tcpRelayBufferSize = buffer.MediumBufferSize
-)
-
-// Rate limiters for frequent log messages
-var (
-	tcpDialErrorLimiter = ratelimit.NewLimiter(1, 5) // 1/sec, burst 5
 )
 
 func handleTCPConn(originConn adapter.TCPConn) {
@@ -45,9 +37,6 @@ func handleTCPConn(originConn adapter.TCPConn) {
 
 	remoteConn, err := proxy.Dial(metadata)
 	if err != nil {
-		if tcpDialErrorLimiter.Allow() {
-			slog.Debug("[TCP] Dial error", "dest", metadata.DestinationAddress(), "error", err)
-		}
 		return
 	}
 	metadata.MidIP, metadata.MidPort = parseAddr(remoteConn.LocalAddr())
@@ -71,9 +60,7 @@ func unidirectionalStream(dst, src net.Conn, dir string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	buf := buffer.Get(tcpRelayBufferSize)
 	defer buffer.Put(buf)
-	if _, err := io.CopyBuffer(dst, src, buf); err != nil {
-		log.Debugf("[TCP] copy data for %s: %v", dir, err)
-	}
+	_, _ = io.CopyBuffer(dst, src, buf)
 	// Do the upload/download side TCP half-close.
 	if cr, ok := src.(interface{ CloseRead() error }); ok {
 		cr.CloseRead()
