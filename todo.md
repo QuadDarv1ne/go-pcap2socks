@@ -1,12 +1,14 @@
 # go-pcap2socks TODO
 
-## ✅ Завершено (25.03.2026 21:00) - ТЕКУЩАЯ ПРОВЕРКА
+## ✅ Завершено (25.03.2026 21:30) - ТЕКУЩАЯ ПРОВЕРКА
 
 ### Проверка проекта
 - [x] Проверка компиляции - успешно ✅ (17.4 MB бинарник)
 - [x] Все тесты проходят (proxy: ✅, stats: ✅, cfg: ✅, dhcp: ✅, upnp: ✅, api: ✅) ✅
 - [x] Race detector тесты без ошибок ✅
 - [x] Ветки dev/main синхронизированы и отправлены ✅
+- [x] go vet - без ошибок ✅
+- [x] Cross-platform build-теги - проверены ✅
 
 ### Метрики производительности (актуальные):
 ```
@@ -21,7 +23,7 @@ Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
 - Тесты: ✅ все проходят (proxy: 50+, stats: 10, cfg: 8, dhcp: 10, upnp: 7, api: 49)
 - Race detector: ✅ все тесты проходят
 - Размер бинарника: 17.4 MB (в пределах нормы <25MB)
-- Ветка: main/dev (10b5b2f)
+- Ветка: main/dev (49e3969)
 - Отправлено: ✅ origin/main, origin/dev
 - Готовность: ✅ проект стабилен, готов к использованию
 
@@ -31,6 +33,12 @@ Buffer GetPut:        ~50 ns/op   24 B/op   1 allocs/op ✅
 - ✅ Тесты для UPnP manager (7 тестов)
 - ✅ GetGamePresetPorts() функция
 - ✅ GetConfig() метод в Manager
+
+### Cross-platform статус
+- ✅ build-теги для Windows/Unix
+- ✅ hotkey_stub.go для !windows
+- ✅ tray_stub.go для !windows
+- ✅ main_unix.go / main_windows.go
 
 ---
 
@@ -887,18 +895,32 @@ dev:  b9da6b7 fix(dhcp): исправлен тест TestMetricsSnapshot ✅
 
 ---
 
-## 🔧 В работе (25.03.2026 21:00)
+## 🔧 В работе (25.03.2026 21:30)
+
+### Аудит кросс-платформенности ✅
+- [x] Проверка build-тегов - все файлы корректно разделены ✅
+- [x] hotkey_stub.go - заглушка для !windows ✅
+- [x] tray_stub.go - заглушка для !windows ✅
+- [x] main_unix.go / main_windows.go - раздельная реализация ✅
+- [x] go vet проходит без ошибок ✅
 
 ### Текущие задачи
 - [x] UPnP API endpoint для игровых пресетов ✅
 - [x] UPnP тесты (7 тестов) ✅
+- [ ] Cross-platform тестирование (Linux/macOS сборка)
 - [ ] DHCP WinDivert интеграция (тестирование на реальных устройствах)
 - [ ] UPnP port forwarding (тестирование на реальном роутере)
-- [ ] Cross-platform сборка (Windows/Linux/macOS)
-- [ ] Tray Icon (Windows) - getlantern/systray
-- [ ] Hotkey integration (Windows GUI/tray)
+- [ ] Tray Icon (Windows) - готов, требует интеграции
+- [ ] Hotkey integration (Windows) - готов, требует интеграции
+
+### Статус компонентов
+- **UPnP**: ✅ Готов (API + тесты)
+- **Cross-platform**: ✅ Build-теги готовы, требуется тестирование сборки
+- **Tray Icon**: ✅ Windows реализация готова
+- **Hotkey**: ✅ Windows реализация готова
+- **DHCP WinDivert**: ⏳ Ожидает тестирования на PS4
 
 ### Приоритеты
-1. **HIGH**: DHCP WinDivert - стабилизация работы с реальными клиентами
-2. **MEDIUM**: UPnP port forwarding - тестирование на реальном роутере
-3. **LOW**: Cross-platform - поддержка Linux/macOS
+1. **HIGH**: DHCP WinDivert - тестирование на PS4 (когда включен)
+2. **MEDIUM**: Cross-platform сборка - проверить компиляцию под Linux/macOS
+3. **LOW**: Tray/Hotkey - проверка интеграции в main.go
