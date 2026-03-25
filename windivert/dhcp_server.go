@@ -62,10 +62,6 @@ func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr) (*DHCPS
 		lastRequest: make(map[string]time.Time),
 	}
 
-	slog.Info("WinDivert DHCP server created",
-		"pool", fmt.Sprintf("%s-%s", config.FirstIP, config.LastIP),
-		"server_ip", config.ServerIP.String())
-
 	return s, nil
 }
 
@@ -74,7 +70,6 @@ func (s *DHCPServer) Start() error {
 	s.wg.Add(1)
 	go s.packetLoop()
 
-	slog.Info("WinDivert DHCP server started")
 	return nil
 }
 
@@ -86,8 +81,6 @@ func (s *DHCPServer) Stop() {
 	if s.handle != nil {
 		s.handle.Close()
 	}
-
-	slog.Info("WinDivert DHCP server stopped")
 }
 
 // HandleRequest implements dhcp.DHCPServer interface
@@ -299,19 +292,6 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	if err != nil {
 		return fmt.Errorf("send DHCP response: %w", err)
 	}
-
-	packetType := "unicast"
-	if bytesEqual(dstMAC, broadcastMAC) {
-		packetType = "broadcast"
-	}
-
-	slog.Info("DHCP response sent via WinDivert",
-		"dst_ip", dstIP.String(),
-		"dst_mac", dstMAC.String(),
-		"packet_len", len(responsePacket),
-		"packet_type", packetType,
-		"ifidx", request.Addr.IfIdx,
-		"broadcast", broadcastFlag)
 
 	return nil
 }

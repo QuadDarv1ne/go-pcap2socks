@@ -69,7 +69,6 @@ func (db *LeaseDB) Load() error {
 	// Parse JSON
 	var serialized []serializedLease
 	if err := json.Unmarshal(data, &serialized); err != nil {
-		slog.Warn("Failed to parse lease database", "err", err)
 		return nil // Start fresh instead of failing
 	}
 
@@ -78,13 +77,11 @@ func (db *LeaseDB) Load() error {
 	for _, sl := range serialized {
 		mac, err := net.ParseMAC(sl.MAC)
 		if err != nil {
-			slog.Debug("Invalid MAC in lease db", "mac", sl.MAC, "err", err)
 			continue
 		}
 
 		ip := net.ParseIP(sl.IP)
 		if ip == nil {
-			slog.Debug("Invalid IP in lease db", "ip", sl.IP)
 			continue
 		}
 
@@ -97,11 +94,9 @@ func (db *LeaseDB) Load() error {
 				ExpiresAt:   sl.ExpiresAt,
 				Transaction: sl.Transaction,
 			}
-			slog.Debug("Loaded lease from database", "mac", mac, "ip", ip, "expires", sl.ExpiresAt)
 		}
 	}
 
-	slog.Info("DHCP lease database loaded", "count", len(db.leases))
 	return nil
 }
 
@@ -145,7 +140,6 @@ func (db *LeaseDB) Save() error {
 		return fmt.Errorf("rename lease db: %w", err)
 	}
 
-	slog.Info("DHCP lease database saved", "count", len(db.leases))
 	return nil
 }
 
@@ -258,7 +252,6 @@ func (db *LeaseDB) CleanupExpired() int {
 		if now.After(lease.ExpiresAt) {
 			delete(db.leases, mac)
 			deleted++
-			slog.Debug("DHCP lease expired", "mac", mac, "ip", lease.IP.String())
 		}
 	}
 
