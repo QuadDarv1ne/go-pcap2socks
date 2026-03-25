@@ -52,8 +52,8 @@ func NewWebSocketHub() *WebSocketHub {
 	return &WebSocketHub{
 		clients:    make(map[*WebSocketClient]bool),
 		broadcast:  make(chan []byte, 256),
-		register:   make(chan *WebSocketClient),
-		unregister: make(chan *WebSocketClient),
+		register:   make(chan *WebSocketClient, 16),   // Buffered to prevent blocking
+		unregister: make(chan *WebSocketClient, 16),  // Buffered to prevent blocking
 		stopChan:   make(chan struct{}),
 	}
 }

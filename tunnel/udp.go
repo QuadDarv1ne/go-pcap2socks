@@ -32,7 +32,6 @@ const (
 // Rate limiters for frequent UDP log messages
 var (
 	udpDialErrorLimiter = ratelimit.NewLimiter(1, 5)   // 1/sec, burst 5
-	udpConnLimiter      = ratelimit.NewLimiter(10, 20) // 10/sec, burst 20
 	udpReadErrorLimiter = ratelimit.NewLimiter(1, 3)   // 1/sec, burst 3
 )
 
@@ -197,10 +196,6 @@ func HandleUDPConn(uc adapter.UDPConn) {
 		session.cleanup()
 	}()
 
-	if udpConnLimiter.Allow() {
-		slog.Debug("[UDP] Connection", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
-	}
-
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 
@@ -209,9 +204,6 @@ func HandleUDPConn(uc adapter.UDPConn) {
 	wg.Wait()
 
 	uc.Close()
-	if udpConnLimiter.Allow() {
-		slog.Debug("[UDP] Connection closed", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
-	}
 }
 
 func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
@@ -225,7 +217,6 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 		n, dest, err := from.ReadFrom(buf)
 		if err != nil {
 			if errors.Is(err, io.ErrClosedPipe) {
-				slog.Debug("[UDP] pipe closed", "source", from.LocalAddr(), "dest", to.LocalAddr(), "error", err)
 				return
 			}
 			if !errors.Is(err, os.ErrDeadlineExceeded) {
@@ -233,7 +224,6 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 					slog.Debug("[UDP] read error", "source", from.LocalAddr(), "dest", to.LocalAddr(), "error", err)
 				}
 			}
-
 			return
 		}
 
