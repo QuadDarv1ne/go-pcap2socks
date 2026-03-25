@@ -99,6 +99,9 @@ func (s *DHCPServer) HandleRequest(data []byte) ([]byte, error) {
 func (s *DHCPServer) packetLoop() {
 	defer s.wg.Done()
 
+	errorCount := 0
+	const maxErrors = 10
+
 	for {
 		select {
 		case <-s.stopChan:
@@ -107,8 +110,30 @@ func (s *DHCPServer) packetLoop() {
 			packet, err := s.handle.Recv()
 			if err != nil {
 				slog.Debug("WinDivert recv error", "err", err)
-				continue
+				errorCount++
+
+				// Check for fatal errors
+				if errorCount >= maxErrors {
+					slog.Error("WinDivert: too many consecutive errors, stopping", "count", errorCount)
+					return
+				}
+
+				// Exponential backoff with max 2 seconds
+				backoff := time.Duration(100*(1<<errorCount)) * time.Millisecond
+				if backoff > 2*time.Second {
+					backoff = 2 * time.Second
+				}
+
+				select {
+				case <-time.After(backoff):
+					continue
+				case <-s.stopChan:
+					return
+				}
 			}
+
+			// Reset error count on success
+			errorCount = 0
 
 			// Process DHCP packets
 			s.processPacket(packet)
@@ -154,7 +179,6 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	if lastTime, exists := s.lastRequest[macStr]; exists {
 		if now.Sub(lastTime) < 500*time.Millisecond {
 			s.requestMu.Unlock()
-			slog.Debug("DHCP rate limit", "mac", macStr)
 			s.handle.Send(packet) // Reinject packet
 			return
 		}
@@ -162,57 +186,12 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	s.lastRequest[macStr] = now
 	s.requestMu.Unlock()
 
-	// Extract DHCP message type for logging
-	msgType := "unknown"
-	if len(dhcpData) > 240 && dhcpData[0] == 99 && dhcpData[1] == 134 && dhcpData[2] == 101 {
-		// DHCP magic cookie: 99.134.101.63
-		for i := 244; i < len(dhcpData)-2; {
-			if dhcpData[i] == 0 {
-				break // End of options
-			}
-			if dhcpData[i] == 255 {
-				break // End of options
-			}
-			optionCode := dhcpData[i]
-			optionLen := int(dhcpData[i+1])
-			if optionCode == 53 && optionLen >= 1 { // DHCP Message Type
-				switch dhcpData[i+2] {
-				case 1:
-					msgType = "DISCOVER"
-				case 2:
-					msgType = "OFFER"
-				case 3:
-					msgType = "REQUEST"
-				case 4:
-					msgType = "DECLINE"
-				case 5:
-					msgType = "ACK"
-				case 6:
-					msgType = "NAK"
-				case 7:
-					msgType = "RELEASE"
-				}
-				break
-			}
-			i += 2 + optionLen
-		}
-	}
-
-	slog.Debug("DHCP packet captured",
-		"type", msgType,
-		"src_ip", packet.SrcIP.String(),
-		"dst_ip", packet.DstIP.String(),
-		"src_mac", clientMAC.String())
-
 	// Check broadcast flag in DHCP Discover (flags field at offset 10-11 in DHCP header)
 	// If high bit is set (0x8000), client wants broadcast response
 	broadcastFlag := false
 	if len(dhcpData) >= 12 {
 		flags := uint16(dhcpData[10])<<8 | uint16(dhcpData[11])
 		broadcastFlag = (flags & 0x8000) != 0
-		if msgType == "DISCOVER" {
-			slog.Debug("DHCP flags", "flags", fmt.Sprintf("0x%04X", flags), "broadcast", broadcastFlag)
-		}
 	}
 
 	// Handle DHCP request
@@ -224,16 +203,9 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	}
 
 	if responseData == nil {
-		slog.Debug("DHCP server returned no response", "type", msgType)
 		s.handle.Send(packet)
 		return
 	}
-
-	slog.Info("DHCP response generated",
-		"type", msgType,
-		"mac", clientMAC.String(),
-		"response_len", len(responseData),
-		"broadcast", broadcastFlag)
 
 	// Build and send DHCP response packet with client MAC for proper delivery
 	err = s.sendDHCPResponseWithMAC(clientMAC, packet, responseData, broadcastFlag)
@@ -264,18 +236,15 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 		if !clientIP.Equal(net.IPv4zero) {
 			dstIP = clientIP
 			dstMAC = clientMAC // Use client's MAC from DHCP payload
-			slog.Debug("DHCP unicast response (client has IP)", "dst_ip", dstIP.String(), "dst_mac", dstMAC.String())
 		} else if broadcastFlag {
 			// Client explicitly requested broadcast response
 			dstIP = net.IPv4(255, 255, 255, 255)
 			dstMAC = broadcastMAC
-			slog.Debug("DHCP broadcast response (flag set)", "dst_ip", dstIP.String(), "your_ip", yourIP.String())
 		} else if !yourIP.Equal(net.IPv4zero) {
 			// For OFFER/ACK to clients without IP and no broadcast flag
 			// Use unicast to client MAC - critical for PS4 and other devices
 			dstIP = yourIP
 			dstMAC = clientMAC // Use client's MAC from DHCP payload
-			slog.Debug("DHCP unicast response (no flag)", "dst_ip", dstIP.String(), "dst_mac", dstMAC.String(), "your_ip", yourIP.String())
 		}
 	}
 

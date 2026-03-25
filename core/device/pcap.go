@@ -193,31 +193,17 @@ func (t *PCAP) Read() []byte {
 			srcPort := udpHeader.SourcePort()
 			dstPort := udpHeader.DestinationPort()
 
-			// Log all UDP packets for debugging
-			slog.Info("UDP packet captured", "src_port", srcPort, "dst_port", dstPort, "src_mac", net.HardwareAddr(ethProtocol.SourceAddress()).String())
-			
 			// DHCP uses ports 67 (server) and 68 (client)
 			if (srcPort == 68 || dstPort == 67) && t.dhcpServer != nil {
 				// This is a DHCP request from a client
-				srcMAC := net.HardwareAddr(ethProtocol.SourceAddress())
-				dstMAC := net.HardwareAddr(ethProtocol.DestinationAddress())
-				slog.Info("DHCP packet captured", 
-					"src_port", srcPort, 
-					"dst_port", dstPort,
-					"src_mac", srcMAC.String(),
-					"dst_mac", dstMAC.String())
-				
 				// Parse the packet and handle DHCP request
 				response, err := t.handleDHCP(data)
 				if err != nil {
 					slog.Error("DHCP handle error", "err", err)
 				} else if response != nil {
-					slog.Info("DHCP response generated", "response_len", len(response))
 					// Send DHCP response
 					if err := t.handle.WritePacketData(response); err != nil {
 						slog.Error("DHCP write error", "err", err)
-					} else {
-						slog.Info("DHCP response sent successfully")
 					}
 				}
 				return nil // Don't pass DHCP packets to the stack
@@ -261,7 +247,6 @@ func (t *PCAP) handleDHCP(data []byte) ([]byte, error) {
 
 	// Parse Ethernet header to get MAC addresses
 	eth := header.Ethernet(data)
-	srcMAC := net.HardwareAddr(eth.SourceAddress())
 	dstMAC := net.HardwareAddr(eth.DestinationAddress())
 
 	// Skip Ethernet header (14 bytes)
@@ -281,22 +266,6 @@ func (t *PCAP) handleDHCP(data []byte) ([]byte, error) {
 	if len(data) <= udpStart+8 {
 		return nil, fmt.Errorf("packet too short for UDP header")
 	}
-
-	// Parse UDP header
-	udp := header.UDP(data[udpStart:])
-	srcPort := udp.SourcePort()
-	dstPort := udp.DestinationPort()
-
-	srcAddr := ip.SourceAddress()
-	dstAddr := ip.DestinationAddress()
-	
-	slog.Debug("DHCP packet details", 
-		"src_mac", srcMAC.String(),
-		"dst_mac", dstMAC.String(),
-		"src_ip", net.IP(srcAddr.AsSlice()).String(),
-		"dst_ip", net.IP(dstAddr.AsSlice()).String(),
-		"src_port", srcPort,
-		"dst_port", dstPort)
 
 	// DHCP payload starts after UDP header (8 bytes)
 	dhcpStart := udpStart + 8
@@ -337,10 +306,6 @@ func (t *PCAP) handleDHCP(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("build DHCP response: %w", err)
 	}
 
-	slog.Info("DHCP response sent", 
-		"client_mac", dstMAC.String(),
-		"dst_ip", dstIP.String())
-
 	return responsePacket, nil
 }
 
@@ -351,10 +316,10 @@ func (t *PCAP) Write(p []byte) (n int, err error) {
 		if isAdapterDisconnected(err) {
 			// Don't log every packet, just log once
 			slog.Warn("Network adapter disconnected, waiting for reconnection...")
-			return 0, nil // Silently drop packets, don't error
+			return 0, err // Return error to caller for proper handling
 		}
-		slog.Debug("write packet error: %w", slog.Any("err", err))
-		return 0, nil
+		slog.Debug("write packet error", "err", err)
+		return 0, err // Return error to caller
 	}
 
 	return len(p), nil

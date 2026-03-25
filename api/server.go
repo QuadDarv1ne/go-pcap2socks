@@ -35,6 +35,7 @@ type Server struct {
 	hotkeyManager *hotkey.Manager
 	mu            sync.RWMutex
 	enabled       bool
+	stopChan      chan struct{} // For stopping background goroutines
 }
 
 type APIResponse struct {
@@ -98,6 +99,7 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 		wsHub:         wsHub,
 		hotkeyManager: hotkeyMgr,
 		enabled:       true,
+		stopChan:      make(chan struct{}),
 	}
 
 	s.setupRoutes()
@@ -1262,14 +1264,21 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *Server) StartRealTimeUpdates(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
-		for range ticker.C {
-			s.broadcastStats()
+		for {
+			select {
+			case <-ticker.C:
+				s.broadcastStats()
+			case <-s.stopChan:
+				ticker.Stop()
+				return
+			}
 		}
 	}()
 }
 
 // StopRealTimeUpdates stops the real-time updates
 func (s *Server) StopRealTimeUpdates() {
+	close(s.stopChan)
 	if s.wsHub != nil {
 		s.wsHub.Stop()
 	}

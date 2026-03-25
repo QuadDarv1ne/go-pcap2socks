@@ -150,7 +150,7 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate Telegram config (optional)
-	if c.Telegram != nil {
+	if c.Telegram != nil && c.Telegram.Enabled {
 		if c.Telegram.Token != "" && c.Telegram.ChatID == "" {
 			return fmt.Errorf("telegram.token set but telegram.chat_id is empty")
 		}
@@ -282,8 +282,9 @@ type Capture struct {
 
 // Telegram holds Telegram bot configuration
 type Telegram struct {
-	Token  string `json:"token"`
-	ChatID string `json:"chat_id"`
+	Enabled bool   `json:"enabled,omitempty"`
+	Token   string `json:"token,omitempty"`
+	ChatID  string `json:"chat_id,omitempty"`
 }
 
 // Discord holds Discord webhook configuration

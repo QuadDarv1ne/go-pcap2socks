@@ -27,8 +27,7 @@ const (
 
 // Rate limiters for frequent log messages
 var (
-	tcpDialErrorLimiter   = ratelimit.NewLimiter(1, 5)   // 1/sec, burst 5
-	tcpConnLimiter        = ratelimit.NewLimiter(10, 20) // 10/sec, burst 20
+	tcpDialErrorLimiter = ratelimit.NewLimiter(1, 5) // 1/sec, burst 5
 )
 
 func handleTCPConn(originConn adapter.TCPConn) {
@@ -54,10 +53,6 @@ func handleTCPConn(originConn adapter.TCPConn) {
 	metadata.MidIP, metadata.MidPort = parseAddr(remoteConn.LocalAddr())
 
 	defer remoteConn.Close()
-
-	if tcpConnLimiter.Allow() {
-		slog.Debug("[TCP] Connection", "source", metadata.SourceAddress(), "dest", metadata.DestinationAddress())
-	}
 	pipe(originConn, remoteConn)
 }
 

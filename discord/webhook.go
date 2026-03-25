@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -15,6 +16,11 @@ type WebhookClient struct {
 	enabled    bool
 	// Status handler for external requests
 	statusHandler func() string
+	
+	// Rate limiting for device notifications
+	deviceNotifyMu sync.Mutex
+	lastDeviceNotify map[string]time.Time // MAC -> last notify time
+	minNotifyInterval time.Duration
 }
 
 // Embed represents a Discord embed
@@ -53,6 +59,8 @@ func NewWebhookClient(webhookURL string) *WebhookClient {
 		webhookURL: webhookURL,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		enabled:    webhookURL != "",
+		lastDeviceNotify: make(map[string]time.Time),
+		minNotifyInterval: 30 * time.Second, // Min 30s between notifications per device
 	}
 }
 
@@ -145,11 +153,21 @@ func (w *WebhookClient) SendStatus(running bool, devices int, traffic string) er
 	return w.SendEmbed(embed)
 }
 
-// SendDeviceNotification sends a device connection notification
+// SendDeviceNotification sends a device connection notification with rate limiting
 func (w *WebhookClient) SendDeviceNotification(event, ip, mac string) error {
+	// Rate limiting: skip if same device notified recently
+	w.deviceNotifyMu.Lock()
+	lastTime, exists := w.lastDeviceNotify[mac]
+	if exists && time.Since(lastTime) < w.minNotifyInterval {
+		w.deviceNotifyMu.Unlock()
+		return nil // Skip notification (rate limited)
+	}
+	w.lastDeviceNotify[mac] = time.Now()
+	w.deviceNotifyMu.Unlock()
+
 	emoji := "❌"
 	color := 15548997 // Red
-	
+
 	if event == "connected" {
 		emoji = "✅"
 		color = 5763719 // Green

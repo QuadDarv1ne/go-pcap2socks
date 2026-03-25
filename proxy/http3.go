@@ -43,6 +43,7 @@ func NewHTTP3(addr string, skipVerify bool) (*HTTP3, error) {
 		EnableDatagrams:       true, // RFC 9221 datagram support
 		MaxIncomingStreams:    100,
 		MaxIncomingUniStreams: 10,
+		HandshakeIdleTimeout:  10 * time.Second, // Prevent hanging during handshake
 	}
 
 	transport := &http3.Transport{

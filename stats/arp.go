@@ -21,6 +21,7 @@ type ARPMonitor struct {
 	stopChan  chan struct{}
 	interval  time.Duration
 	callbacks []func(DeviceChange)
+	cbLimit   chan struct{} // Semaphore to limit callback goroutines
 }
 
 // DeviceChange represents a device connection change
@@ -38,7 +39,8 @@ func NewARPMonitor(network *net.IPNet, localIP net.IP) *ARPMonitor {
 		localIP:  localIP,
 		devices:  make(map[string]*DeviceStats),
 		stopChan: make(chan struct{}),
-		interval: 5 * time.Second,
+		interval: 10 * time.Second, // Increased from 5s to 10s for better performance
+		cbLimit:  make(chan struct{}, 10), // Limit to 10 concurrent callbacks
 	}
 }
 
@@ -107,7 +109,6 @@ func (m *ARPMonitor) scan(store *Store) {
 			m.devices[entry.IP.String()] = device
 			store.UpdateHeartbeat(entry.IP.String(), entry.MAC.String())
 
-			slog.Info("New device discovered", "ip", entry.IP, "mac", entry.MAC, "hostname", device.Hostname)
 			m.notifyChange(DeviceChange{
 				Type:   "connected",
 				IP:     entry.IP.String(),
@@ -135,7 +136,6 @@ func (m *ARPMonitor) scan(store *Store) {
 			device.mu.Lock()
 			if device.Connected {
 				device.Connected = false
-				slog.Info("Device disconnected", "ip", ip, "mac", device.MAC)
 				m.notifyChange(DeviceChange{
 					Type:   "disconnected",
 					IP:     ip,
@@ -253,7 +253,17 @@ func (m *ARPMonitor) OnChange(callback func(DeviceChange)) {
 
 func (m *ARPMonitor) notifyChange(change DeviceChange) {
 	for _, cb := range m.callbacks {
-		go cb(change)
+		// Try to acquire semaphore slot
+		select {
+		case m.cbLimit <- struct{}{}:
+			// Slot acquired, run callback
+			go func(callback func(DeviceChange)) {
+				defer func() { <-m.cbLimit }() // Release slot
+				callback(change)
+			}(cb)
+		default:
+			// Too many concurrent callbacks, skip this one
+		}
 	}
 }
 

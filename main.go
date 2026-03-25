@@ -37,8 +37,9 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
-	"github.com/QuadDarv1ne/go-pcap2socks/telegram"
+	// "github.com/QuadDarv1ne/go-pcap2socks/telegram" // отключено
 	"github.com/QuadDarv1ne/go-pcap2socks/tlsutil"
+	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
@@ -195,93 +196,93 @@ func main() {
 					wh.SendDeviceNotification(change.Type, change.IP, change.MAC)
 				}
 			}
-			if _telegramBot != nil && _telegramBot.IsEnabled() {
-				emoji := "❌"
-				if change.Type == "connected" {
-					emoji = "✅"
-				}
-				_telegramBot.SendNotification(
-					fmt.Sprintf("%s Устройство %s", emoji, change.Type),
-					fmt.Sprintf("IP: %s\nMAC: %s", change.IP, change.MAC),
-				)
-			}
+			// if _telegramBot != nil && _telegramBot.IsEnabled() {
+			// 	emoji := "❌"
+			// 	if change.Type == "connected" {
+			// 		emoji = "✅"
+			// 	}
+			// 	_telegramBot.SendNotification(
+			// 		fmt.Sprintf("%s Устройство %s", emoji, change.Type),
+			// 		fmt.Sprintf("IP: %s\nMAC: %s", change.IP, change.MAC),
+			// 	)
+			// }
 		})
 	}
 
 	// Initialize Telegram bot if configured
-	if config.Telegram != nil && config.Telegram.Token != "" {
-		_telegramBot = telegram.NewBot(config.Telegram.Token, config.Telegram.ChatID)
+	// if config.Telegram != nil && config.Telegram.Enabled && config.Telegram.Token != "" {
+	// 	_telegramBot = telegram.NewBot(config.Telegram.Token, config.Telegram.ChatID)
 
-		// Set up handlers with real data
-		_telegramBot.SetStatusHandler(func() string {
-			status := "🟢 Запущен"
-			mode := _defaultProxy.Mode().String()
-			if mode == "" || mode == "Direct" {
-				status = "🔴 Остановлен"
-			}
-			total, upload, download, _ := _statsStore.GetTotalTraffic()
-			return fmt.Sprintf("📊 *Статус go-pcap2socks*\n\n"+
-				"Статус: %s\n"+
-				"Режим: %s\n"+
-				"Трафик: ↑ %s ↓ %s\n"+
-				"Всего: %s\n"+
-				"Устройств: %d",
-				status,
-				mode,
-				formatBytes(upload),
-				formatBytes(download),
-				formatBytes(total),
-				_statsStore.GetActiveDeviceCount())
-		})
+	// 	// Set up handlers with real data
+	// 	_telegramBot.SetStatusHandler(func() string {
+	// 		status := "🟢 Запущен"
+	// 		mode := _defaultProxy.Mode().String()
+	// 		if mode == "" || mode == "Direct" {
+	// 			status = "🔴 Остановлен"
+	// 		}
+	// 		total, upload, download, _ := _statsStore.GetTotalTraffic()
+	// 		return fmt.Sprintf("📊 *Статус go-pcap2socks*\n\n"+
+	// 			"Статус: %s\n"+
+	// 			"Режим: %s\n"+
+	// 			"Трафик: ↑ %s ↓ %s\n"+
+	// 			"Всего: %s\n"+
+	// 			"Устройств: %d",
+	// 			status,
+	// 			mode,
+	// 			formatBytes(upload),
+	// 			formatBytes(download),
+	// 			formatBytes(total),
+	// 			_statsStore.GetActiveDeviceCount())
+	// 	})
 
-		_telegramBot.SetTrafficHandler(func() string {
-			total, upload, download, packets := _statsStore.GetTotalTraffic()
-			return fmt.Sprintf("📈 *Трафик*\n\n"+
-				"Upload: %s\n"+
-				"Download: %s\n"+
-				"Total: %s\n"+
-				"Packets: %d",
-				formatBytes(upload),
-				formatBytes(download),
-				formatBytes(total),
-				packets)
-		})
+	// 	_telegramBot.SetTrafficHandler(func() string {
+	// 		total, upload, download, packets := _statsStore.GetTotalTraffic()
+	// 		return fmt.Sprintf("📈 *Трафик*\n\n"+
+	// 			"Upload: %s\n"+
+	// 			"Download: %s\n"+
+	// 			"Total: %s\n"+
+	// 			"Packets: %d",
+	// 			formatBytes(upload),
+	// 			formatBytes(download),
+	// 			formatBytes(total),
+	// 			packets)
+	// 	})
 
-		_telegramBot.SetDevicesHandler(func() string {
-			devices := _statsStore.GetAllDevices()
-			if len(devices) == 0 {
-				return "📱 *Устройства*\n\nНет подключенных устройств"
-			}
+	// 	_telegramBot.SetDevicesHandler(func() string {
+	// 		devices := _statsStore.GetAllDevices()
+	// 		if len(devices) == 0 {
+	// 			return "📱 *Устройства*\n\nНет подключенных устройств"
+	// 		}
 
-			msg := "📱 *Устройства*\n\n"
-			for _, d := range devices {
-				d.RLock()
-				status := "🟢"
-				if !d.Connected {
-					status = "🔴"
-				}
-				msg += fmt.Sprintf("%s %s (%s)\n", status, d.IP, d.MAC)
-				d.RUnlock()
-			}
-			return msg
-		})
+	// 		msg := "📱 *Устройства*\n\n"
+	// 		for _, d := range devices {
+	// 			d.RLock()
+	// 			status := "🟢"
+	// 			if !d.Connected {
+	// 				status = "🔴"
+	// 			}
+	// 			msg += fmt.Sprintf("%s %s (%s)\n", status, d.IP, d.MAC)
+	// 			d.RUnlock()
+	// 		}
+	// 		return msg
+	// 	})
 
-		_telegramBot.SetServiceHandlers(
-			func() string {
-				return "✅ Сервис запущен"
-			},
-			func() string {
-				return "⏹ Сервис остановлен"
-			},
-		)
+	// 	_telegramBot.SetServiceHandlers(
+	// 		func() string {
+	// 			return "✅ Сервис запущен"
+	// 		},
+	// 		func() string {
+	// 			return "⏹ Сервис остановлен"
+	// 		},
+	// 	)
 
-		_telegramBot.Start()
-		slog.Info("Telegram bot initialized")
+	// 	_telegramBot.Start()
+	// 	slog.Info("Telegram bot initialized")
 
-		// Start periodic reports (every 24 hours)
-		_telegramBot.StartPeriodicReports(24 * time.Hour)
-		slog.Info("Periodic Telegram reports scheduled (24h interval)")
-	}
+	// 	// Start periodic reports (every 24 hours)
+	// 	_telegramBot.StartPeriodicReports(24 * time.Hour)
+	// 	slog.Info("Periodic Telegram reports scheduled (24h interval)")
+	// }
 
 	// Initialize Discord webhook if configured
 	if config.Discord != nil && config.Discord.WebhookURL != "" {
@@ -847,7 +848,7 @@ var (
 	_arpMonitor *stats.ARPMonitor
 
 	// _telegramBot holds the Telegram bot
-	_telegramBot *telegram.Bot
+	// _telegramBot *telegram.Bot // отключено
 
 	// _discordWebhook holds the Discord webhook client
 	_discordWebhook interface{} // *discord.WebhookClient
@@ -934,10 +935,10 @@ func Stop() {
 	}
 
 	// Stop Telegram bot
-	if _telegramBot != nil {
-		_telegramBot.Stop()
-		slog.Info("Telegram bot stopped")
-	}
+	// if _telegramBot != nil {
+	// 	_telegramBot.Stop()
+	// 	slog.Info("Telegram bot stopped")
+	// }
 
 	// Stop stack (close device)
 	if _defaultStack != nil {
@@ -956,6 +957,10 @@ func Stop() {
 		_upnpManager.Stop()
 		slog.Info("UPnP manager stopped")
 	}
+
+	// Stop tunnel processor
+	tunnel.Stop()
+	slog.Info("Tunnel processor stopped")
 
 	// Stop DHCP server
 	if _dhcpServer != nil {
