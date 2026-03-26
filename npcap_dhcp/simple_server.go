@@ -358,7 +358,7 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 
 	// Build DHCP payload (simplified)
 	// DHCP OFFER: OP=2, HTYPE=1, HLEN=6, HOPS=0, XID, SECS, FLAGS, CIADDR, YIADDR, SIADDR, GIADDR, CHADDR
-	dhcpPayload := make([]byte, 320)
+	dhcpPayload := make([]byte, 340)
 	dhcpPayload[0] = 2                          // BOOTREPLY
 	dhcpPayload[1] = 1                          // Ethernet
 	dhcpPayload[2] = 6                          // Hardware length
@@ -422,6 +422,19 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	copy(dhcpPayload[offset:offset+6], vendorID)
 	offset += 6
 
+	// Option 121: Classless Static Routes (RFC 3442)
+	// Format: [dest_prefix_len][dest_prefix_ip][router_ip]...
+	// Example: Default route via gateway
+	dhcpPayload[offset] = 121
+	offset++
+	dhcpPayload[offset] = 8  // Length (4 bytes for default route)
+	offset++
+	dhcpPayload[offset] = 0  // Destination prefix length 0 (default route 0.0.0.0/0)
+	offset++
+	// Router IP (gateway)
+	copy(dhcpPayload[offset:offset+4], s.localIP.To4())
+	offset += 4
+
 	// Option 255: End
 	dhcpPayload[offset] = 255
 
@@ -470,7 +483,7 @@ func (s *SimpleServer) sendDHCPNak(clientMAC net.HardwareAddr, xid []byte, flags
 		DstPort: 68,
 	}
 
-	dhcpPayload := make([]byte, 320)
+	dhcpPayload := make([]byte, 340)
 	dhcpPayload[0] = 2                          // BOOTREPLY
 	dhcpPayload[1] = 1                          // Ethernet
 	dhcpPayload[2] = 6                          // Hardware length
