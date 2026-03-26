@@ -1622,16 +1622,16 @@ Buffer GetPut:             ~50 ns/op     24 B/op    1 allocs/op  ✅ (целев
 
 ### Статус веток
 ```
-main: 3b5739c Merge v3.19.12+ todo.md update ✅
-dev:  ce77a5c docs: обновить todo.md - оптимизация зависимостей ✅
+main: 83d314d Merge v3.19.12+ MAC filtering note ✅
+dev:  d1f9f6d docs: MAC filtering уже реализован ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev (ce77a5c)
-- ✅ origin/main (3b5739c)
+- ✅ origin/dev (d1f9f6d)
+- ✅ origin/main (83d314d)
 
 ### Актуальные компоненты v3.19.12+
-- ✅ DHCP Server с чтением всех опций (12, 53, 55, 60, 61)
+- ✅ DHCP Server с чтением всех опций (12, 43, 53, 55, 60, 61, 121)
 - ✅ DHCP Release/NAK поддержка
 - ✅ DHCP Option 43 (Vendor Specific)
 - ✅ DHCP Option 121 (Classless Static Routes)
@@ -1641,15 +1641,7 @@ dev:  ce77a5c docs: обновить todo.md - оптимизация завис
 - ✅ Авто-восстановление DHCP при ошибках
 - ✅ Улучшенные скрипты запуска (run.bat, build-clean.bat)
 - ✅ Интеграционные тесты DHCP (8 тестов)
-
-### Исправления v3.19.12+
-- ✅ notify/notify.go - исправлены PowerShell XML errors
-- ✅ main.go - улучшена обработка ошибок, graceful shutdown
-- ✅ npcap_dhcp/simple_server.go - улучшена обработка ошибок packetLoop
-- ✅ npcap_dhcp/simple_server.go - чтение всех DHCP опций
-- ✅ npcap_dhcp/simple_server.go - DHCP Release/NAK поддержка
-- ✅ npcap_dhcp/simple_server.go - DHCP Option 43/121 поддержка
-- ✅ stats/store.go - метод SetHostname для имён хостов
+- ✅ MAC filtering whitelist/blacklist (реализовано в cfg/config.go)
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок (17.4 MB)
@@ -1661,7 +1653,16 @@ dev:  ce77a5c docs: обновить todo.md - оптимизация завис
 
 ---
 
-## 🔧 В работе (26.03.2026 21:10) - СЛЕДУЮЩИЕ УЛУЧШЕНИЯ
+## 🔧 В работе (26.03.2026 21:30) - СЛЕДУЮЩИЕ УЛУЧШЕНИЯ
+
+### Выполненные приоритетные задачи
+- [x] Оптимизация размера бинарника (24.6 MB → 17.4 MB) ✅
+- [x] Улучшение DHCP server (все опции + тесты) ✅
+- [x] MAC filtering whitelist/blacklist ✅
+
+### Следующие приоритеты
+- [ ] Удаление неиспользуемого кода
+- [ ] Benchmark для DHCP server
 
 ### Выполненные приоритетные задачи
 - [x] Оптимизация размера бинарника (24.6 MB → 17.4 MB) ✅
