@@ -7,6 +7,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
 	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
+	"github.com/QuadDarv1ne/go-pcap2socks/auto"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
@@ -1201,6 +1203,17 @@ func autoConfigure() {
 
 	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC)
 
+	// Detect device type by MAC address
+	deviceProfile := auto.DetectByMAC(interfaceConfig.MAC)
+	if deviceProfile.Type != auto.DeviceUnknown {
+		slog.Info("Device detected",
+			"type", deviceProfile.Type,
+			"manufacturer", deviceProfile.Manufacturer,
+			"is_gaming", deviceProfile.IsGamingDevice())
+	} else {
+		slog.Debug("Device type unknown, using default profile")
+	}
+
 	// Get system DNS servers
 	dnsServers := getSystemDNSServers(interfaceConfig.Name)
 	if len(dnsServers) == 0 {
@@ -1239,61 +1252,73 @@ func autoConfigure() {
 	poolStart := calculatePoolStart(network, gatewayIP)
 	poolEnd := calculatePoolEnd(network, gatewayIP)
 
-	// Create clean JSON config manually - Auto-detected network
-	configJSON := fmt.Sprintf(`{
-  "pcap": {
-    "interfaceGateway": "%s",
-    "network": "%s",
-    "localIP": "%s",
-    "localMAC": "%s",
-    "mtu": %d
-  },
-  "dhcp": {
-    "enabled": true,
-    "poolStart": "%s",
-    "poolEnd": "%s",
-    "leaseDuration": 86400
-  },
-  "dns": {
-    "servers": %s
-  },
-  "routing": {
-    "rules": [
-      {"dstPort": "53", "outboundTag": "dns-out"}
-    ]
-  },
-  "outbounds": [
-    {"tag": "", "direct": {}},
-    {"tag": "dns-out", "dns": {}}
-  ],
-  "telegram": {
-    "token": "",
-    "chat_id": ""
-  },
-  "discord": {
-    "webhook_url": ""
-  },
-  "hotkey": {
-    "enabled": true,
-    "toggle": "Ctrl+Alt+P"
-  },
-  "windivert": {
-    "enabled": true,
-    "filter": "outbound and (udp.DstPort == 68 or udp.SrcPort == 67)"
-  },
-  "upnp": {
-    "enabled": true,
-    "autoForward": true,
-    "leaseDuration": 3600,
-    "gamePresets": {
-      "ps4": [3478, 3479, 3480],
-      "ps5": [3478, 3479, 3480],
-      "xbox": [3074, 3075, 3478, 3479, 3480],
-      "switch": [12400, 12401, 12402, 6657, 6667]
-    }
-  },
-  "language": "ru"
-}`, interfaceConfig.IP, interfaceConfig.Network, interfaceConfig.IP, interfaceConfig.MAC, interfaceConfig.RecommendedMTU, poolStart, poolEnd, dnsJSON)
+	// Create config struct
+	config := &cfg.Config{
+		PCAP: cfg.PCAP{
+			InterfaceGateway: interfaceConfig.IP,
+			Network:          interfaceConfig.Network,
+			LocalIP:          interfaceConfig.IP,
+			LocalMAC:         interfaceConfig.MAC,
+			MTU:              interfaceConfig.RecommendedMTU,
+		},
+		DHCP: &cfg.DHCP{
+			Enabled:     true,
+			PoolStart:   poolStart,
+			PoolEnd:     poolEnd,
+			LeaseDuration: 86400,
+		},
+		DNS: cfg.DNS{
+			Servers: make([]cfg.DNSServer, 0, len(dnsServers)),
+		},
+		Routing: struct {
+			Rules []cfg.Rule `json:"rules"`
+		}{
+			Rules: []cfg.Rule{
+				{DstPort: "53", OutboundTag: "dns-out"},
+			},
+		},
+		Outbounds: []cfg.Outbound{
+			{Tag: "", Direct: &cfg.OutboundDirect{}},
+			{Tag: "dns-out", DNS: &cfg.OutboundDNS{}},
+		},
+		Hotkey: &cfg.Hotkey{
+			Enabled: true,
+			Toggle:  "Ctrl+Alt+P",
+		},
+		WinDivert: &cfg.WinDivert{
+			Enabled: true,
+		},
+		UPnP: &cfg.UPnP{
+			Enabled:     true,
+			AutoForward: true,
+			LeaseDuration: 3600,
+			GamePresets: map[string][]int{
+				"ps4":    {3478, 3479, 3480},
+				"ps5":    {3478, 3479, 3480},
+				"xbox":   {3074, 3075, 3478, 3479, 3480},
+				"switch": {12400, 12401, 12402, 6657, 6667},
+			},
+		},
+		Language: "ru",
+	}
+
+	// Add DNS servers
+	for _, dns := range dnsServers {
+		config.DNS.Servers = append(config.DNS.Servers, cfg.DNSServer{Address: dns + ":53"})
+	}
+
+	// Apply device-specific optimizations
+	if deviceProfile.Type != auto.DeviceUnknown {
+		auto.AutoApplyProfile(deviceProfile, config)
+	}
+
+	// Marshal config to JSON
+	configData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		slog.Error("marshal config error", slog.Any("err", err))
+		return
+	}
+	configJSON := string(configData)
 
 	// Write config file
 	err = os.WriteFile(cfgFile, []byte(configJSON), 0666)
