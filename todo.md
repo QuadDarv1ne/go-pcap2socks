@@ -1670,7 +1670,7 @@ dev:  30c8179 feat: DHCP Release/NAK поддержка + оптимизация
   - [x] Поддержка DHCP Release (Type 7) ✅
   - [x] Поддержка DHCP NAK (Type 6) ✅
   - [x] Поддержка DHCP Option 43 (Vendor Specific) ✅
-  - [ ] Поддержка DHCP Option 121 (Classless Static Routes)
+  - [x] Поддержка DHCP Option 121 (Classless Static Routes) ✅
 
 - [ ] Мониторинг и алерты
   - [ ] Discord webhook rate limiting (уже есть)
