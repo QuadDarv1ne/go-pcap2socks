@@ -17,6 +17,7 @@ require (
 	go.uber.org/atomic v1.11.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/time v0.14.0
+	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	gvisor.dev/gvisor v0.0.0-20251007062105-0520b1c18dd1
 )
 
@@ -43,6 +44,5 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -19,7 +19,8 @@
   },
   "routing": {
     "rules": [
-      {"dstPort": "53", "outboundTag": "dns-out"}
+      {"dstPort": "53", "outboundTag": "dns-out"},
+      {"dstPort": "80,443,3478,3479,3480", "outboundTag": ""}
     ]
   },
   "outbounds": [
@@ -37,11 +38,10 @@
     "toggle": "Ctrl+Alt+P"
   },
   "windivert": {
-    "enabled": true,
-    "filter": "(udp.DstPort == 67 or udp.SrcPort == 68) and !loopback and !impostor"
+    "enabled": false
   },
   "upnp": {
-    "enabled": false,
+    "enabled": true,
     "autoForward": true,
     "leaseDuration": 3600,
     "gamePresets": {
@@ -62,6 +62,12 @@
       "key_file": "server.key",
       "force_https": false
     }
+  },
+  "logging": {
+    "level": "debug",
+    "file": "app.log",
+    "max_size_mb": 10,
+    "max_backups": 3
   },
   "language": "ru"
 }

@@ -1,5 +1,83 @@
 ﻿# go-pcap2socks TODO
 
+## ✅ Завершено (26.03.2026 19:54) - v3.19.12+ УЛУЧШЕНИЯ СТАБИЛЬНОСТИ И DHCP
+
+### Критические исправления
+- [x] **notify/notify.go** - Исправлены Toast уведомления (PowerShell XML errors) ✅
+  - **escapeXML**: Экранирование специальных символов (&, <, >, ", ')
+  - **try-catch**: Обработка ошибок PowerShell
+  - **Убраны уведомления** от команд службы (install/uninstall/start/stop)
+
+- [x] **main.go** - Улучшена обработка ошибок инициализации ✅
+  - **Deferred recovery**: Защита от panic в критических секциях
+  - **Graceful shutdown**: cleanup() при ошибках
+  - **Улучшено логирование**: version, pid при запуске
+  - **Удалены неиспользуемые импорты**: tunnel
+
+- [x] **main.go** - Graceful shutdown с cleanup ✅
+  - **Stop DHCP server**: Корректная остановка
+  - **Stop UPnP manager**: Остановка UPnP
+  - **Stop ARP monitor**: Остановка мониторинга
+  - **Flush async logger**: Сброс логов перед выходом
+  - **Close HTTP server**: Shutdown с context
+
+### Улучшения DHCP сервера
+- [x] **npcap_dhcp/simple_server.go** - Улучшена обработка ошибок ✅
+  - **packetLoop с recovery**: Авто-восстановление при panic
+  - **errorCount tracking**: Подсчёт ошибок пакета
+  - **maxErrors limit**: Перезапуск при 10+ ошибках
+  - **Channel closed handling**: Пересоздание packetSource
+  - **nil handle check**: Проверка перед использованием
+
+- [x] **npcap_dhcp/simple_server.go** - Чтение всех DHCP опций ✅
+  - **Option 12 (Host Name)**: Имя хоста клиента
+  - **Option 53 (Message Type)**: Discover/Request/ACK
+  - **Option 55 (Parameter Request List)**: Запрашиваемые параметры
+  - **Option 60 (Vendor Class Identifier)**: Производитель (MSFT 5.0, PSPC)
+  - **Option 61 (Client Identifier)**: Уникальный ID клиента
+
+- [x] **npcap_dhcp/simple_server.go** - Lease структура расширена ✅
+  - **Hostname**: Имя хоста из Option 12
+  - **ClientID**: Из Option 61
+  - **VendorClass**: Из Option 60
+  - **ParameterList**: Из Option 55
+  - **Логирование**: С выводом всех параметров
+
+### Интеграция имён хостов
+- [x] **stats/store.go** - Метод SetHostname ✅
+  - **Поиск по MAC**: Обновление имени устройства
+  - **Thread-safe**: RWMutex для безопасности
+  - **Пустая проверка**: Игнорирование пустых имён
+
+- [x] **main.go** - Интеграция с API ✅
+  - **GetDHCPLeasesFn**: Возврат имён хостов в API
+  - **SimpleServer поддержка**: Чтение leases из npcap_dhcp
+  - **Автоматическое обновление**: SetHostname при получении leases
+
+### Инфраструктурные улучшения
+- [x] **run.bat** - Улучшенный скрипт запуска ✅
+  - **Admin check**: Проверка прав администратора
+  - **Npcap check**: Проверка установки Npcap
+  - **Exe check**: Проверка наличия go-pcap2socks.exe
+  - **Инструкции**: Сообщения об ошибках
+
+- [x] **build-clean.bat** - Скрипт чистой сборки ✅
+  - **go clean**: Очистка кэша
+  - **del old exe**: Удаление старой версии
+  - **go build**: Сборка с -ldflags="-s -w"
+  - **Size check**: Вывод размера файла
+  - **Version check**: Проверка версии
+
+### Итоговый эффект
+- **Стабильность**: Авто-восстановление DHCP при ошибках
+- **Надёжность**: Graceful shutdown без утечек ресурсов
+- **Информативность**: Имена хостов в Web UI и API
+- **Диагностика**: Полное логирование DHCP запросов
+- **Удобство**: Улучшенные скрипты запуска и сборки
+- **Без ошибок**: Toast уведомления работают корректно
+
+---
+
 ## ✅ Завершено (26.03.2026 17:00) - v3.19.17 SMART DHCP — СТАТИЧЕСКИЕ IP
 
 ### Smart DHCP Manager
