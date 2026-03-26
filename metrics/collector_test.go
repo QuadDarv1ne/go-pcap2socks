@@ -11,74 +11,74 @@ func TestCollector_RecordConnection(t *testing.T) {
 	
 	c.RecordConnection()
 	c.RecordConnection()
-	
-	if c.connectionsTotal != 2 {
-		t.Errorf("expected connectionsTotal=2, got %d", c.connectionsTotal)
+
+	if c.connectionsTotal.Load() != 2 {
+		t.Errorf("expected connectionsTotal=2, got %d", c.connectionsTotal.Load())
 	}
-	if c.connectionsActive != 2 {
-		t.Errorf("expected connectionsActive=2, got %d", c.connectionsActive)
+	if c.connectionsActive.Load() != 2 {
+		t.Errorf("expected connectionsActive=2, got %d", c.connectionsActive.Load())
 	}
-	
+
 	c.RecordConnectionClose()
-	if c.connectionsActive != 1 {
-		t.Errorf("expected connectionsActive=1, got %d", c.connectionsActive)
+	if c.connectionsActive.Load() != 1 {
+		t.Errorf("expected connectionsActive=1, got %d", c.connectionsActive.Load())
 	}
 }
 
 func TestCollector_RecordTraffic(t *testing.T) {
 	c := NewCollector(nil)
-	
+
 	c.RecordTraffic(100, 200)
 	c.RecordTraffic(50, 150)
-	
-	if c.bytesUpload != 150 {
-		t.Errorf("expected bytesUpload=150, got %d", c.bytesUpload)
+
+	if c.bytesUpload.Load() != 150 {
+		t.Errorf("expected bytesUpload=150, got %d", c.bytesUpload.Load())
 	}
-	if c.bytesDownload != 350 {
-		t.Errorf("expected bytesDownload=350, got %d", c.bytesDownload)
+	if c.bytesDownload.Load() != 350 {
+		t.Errorf("expected bytesDownload=350, got %d", c.bytesDownload.Load())
 	}
-	if c.bytesTotal != 500 {
-		t.Errorf("expected bytesTotal=500, got %d", c.bytesTotal)
+	if c.bytesTotal.Load() != 500 {
+		t.Errorf("expected bytesTotal=500, got %d", c.bytesTotal.Load())
 	}
 }
 
 func TestCollector_RecordPacket(t *testing.T) {
 	c := NewCollector(nil)
-	
+
 	c.RecordPacket()
 	c.RecordPacket()
 	c.RecordPacket()
-	
-	if c.packetsTotal != 3 {
-		t.Errorf("expected packetsTotal=3, got %d", c.packetsTotal)
+
+	if c.packetsTotal.Load() != 3 {
+		t.Errorf("expected packetsTotal=3, got %d", c.packetsTotal.Load())
 	}
 }
 
 func TestCollector_RecordError(t *testing.T) {
 	c := NewCollector(nil)
-	
+
 	c.RecordError()
 	c.RecordError()
-	
-	if c.errorsTotal != 2 {
-		t.Errorf("expected errorsTotal=2, got %d", c.errorsTotal)
+
+	if c.errorsTotal.Load() != 2 {
+		t.Errorf("expected errorsTotal=2, got %d", c.errorsTotal.Load())
 	}
 }
 
 func TestCollector_RecordCache(t *testing.T) {
 	c := NewCollector(nil)
-	
+
 	c.RecordCacheHit()
 	c.RecordCacheHit()
 	c.RecordCacheHit()
 	c.RecordCacheMiss()
 	c.RecordCacheMiss()
-	
-	if c.cacheHits != 3 {
-		t.Errorf("expected cacheHits=3, got %d", c.cacheHits)
+
+	if c.cacheHits.Load() != 3 {
+		t.Errorf("expected cacheHits=3, got %d", c.cacheHits.Load())
 	}
-	if c.cacheMisses != 2 {
-		t.Errorf("expected cacheMisses=2, got %d", c.cacheMisses)
+	if c.cacheMisses.Load() != 2 {
+		t.Errorf("expected cacheMisses=2, got %d", c.cacheMisses.Load())
 	}
 }
 

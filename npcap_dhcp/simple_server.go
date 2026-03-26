@@ -65,7 +65,7 @@ func (s *SimpleServer) Start(handle *pcap.Handle) error {
 
 	slog.Info("SIMPLE DHCP SERVER STARTED (Npcap only - STABLE)",
 		"pool", fmt.Sprintf("%s-%s", s.config.FirstIP, s.config.LastIP),
-		"lease", fmt.Sprintf("%ds", s.config.LeaseDuration.Seconds()),
+		"lease", fmt.Sprintf("%ds", int(s.config.LeaseDuration.Seconds())),
 		"COMPATIBILITY", "ALL DEVICES")
 
 	go s.packetLoop()
