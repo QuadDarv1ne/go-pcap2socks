@@ -1661,8 +1661,8 @@ dev:  d1f9f6d docs: MAC filtering уже реализован ✅
 - [x] MAC filtering whitelist/blacklist ✅
 
 ### Следующие приоритеты
+- [x] Benchmark для DHCP server ✅ (11 бенчмарков)
 - [ ] Удаление неиспользуемого кода
-- [ ] Benchmark для DHCP server
 
 ### Выполненные приоритетные задачи
 - [x] Оптимизация размера бинарника (24.6 MB → 17.4 MB) ✅
