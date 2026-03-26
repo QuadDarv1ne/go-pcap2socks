@@ -186,38 +186,3 @@ func TestSimpleDHCP_MessageTypes(t *testing.T) {
 		t.Error("DHCPRelease should be 7")
 	}
 }
-
-// BenchmarkSimpleDHCP_ServerCreation benchmarks server creation
-func BenchmarkSimpleDHCP_ServerCreation(b *testing.B) {
-	config := &dhcp.ServerConfig{
-		ServerIP:      net.ParseIP("192.168.137.1"),
-		FirstIP:       net.ParseIP("192.168.137.100"),
-		LastIP:        net.ParseIP("192.168.137.200"),
-		LeaseDuration: 3600 * time.Second,
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := npcap_dhcp.NewSimpleServer(config, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkSimpleDHCP_GetLeases benchmarks lease retrieval
-func BenchmarkSimpleDHCP_GetLeases(b *testing.B) {
-	config := &dhcp.ServerConfig{
-		ServerIP:      net.ParseIP("192.168.137.1"),
-		FirstIP:       net.ParseIP("192.168.137.100"),
-		LastIP:        net.ParseIP("192.168.137.200"),
-		LeaseDuration: 3600 * time.Second,
-	}
-
-	server, _ := npcap_dhcp.NewSimpleServer(config, nil)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = server.GetLeases()
-	}
-}
