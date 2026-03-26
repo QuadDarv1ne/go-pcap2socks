@@ -1622,22 +1622,25 @@ Buffer GetPut:             ~50 ns/op     24 B/op    1 allocs/op  ✅ (целев
 
 ### Статус веток
 ```
-main: bd1377e Merge v3.19.12+ DHCP Release/NAK + оптимизация ✅
-dev:  30c8179 feat: DHCP Release/NAK поддержка + оптимизация размера ✅
+main: 3b5739c Merge v3.19.12+ todo.md update ✅
+dev:  ce77a5c docs: обновить todo.md - оптимизация зависимостей ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev (30c8179)
-- ✅ origin/main (bd1377e)
+- ✅ origin/dev (ce77a5c)
+- ✅ origin/main (3b5739c)
 
 ### Актуальные компоненты v3.19.12+
 - ✅ DHCP Server с чтением всех опций (12, 53, 55, 60, 61)
 - ✅ DHCP Release/NAK поддержка
+- ✅ DHCP Option 43 (Vendor Specific)
+- ✅ DHCP Option 121 (Classless Static Routes)
 - ✅ Graceful shutdown с cleanup
 - ✅ Toast уведомления (исправлены)
 - ✅ Имена хостов в API и Web UI
 - ✅ Авто-восстановление DHCP при ошибках
 - ✅ Улучшенные скрипты запуска (run.bat, build-clean.bat)
+- ✅ Интеграционные тесты DHCP (8 тестов)
 
 ### Исправления v3.19.12+
 - ✅ notify/notify.go - исправлены PowerShell XML errors
@@ -1645,49 +1648,29 @@ dev:  30c8179 feat: DHCP Release/NAK поддержка + оптимизация
 - ✅ npcap_dhcp/simple_server.go - улучшена обработка ошибок packetLoop
 - ✅ npcap_dhcp/simple_server.go - чтение всех DHCP опций
 - ✅ npcap_dhcp/simple_server.go - DHCP Release/NAK поддержка
+- ✅ npcap_dhcp/simple_server.go - DHCP Option 43/121 поддержка
 - ✅ stats/store.go - метод SetHostname для имён хостов
 
 ### Статус проекта
 - Компиляция: ✅ без ошибок (17.4 MB)
-- Тесты: ✅ все проходят
+- Тесты: ✅ все проходят (8 DHCP тестов)
 - Race detector: ✅ без ошибок
-- Размер бинарника: 17.4 MB (в пределах нормы <20MB) ✅
+- Размер бинарника: 17.4 MB (оптимально)
 - Ветка: main/dev синхронизированы
 - Готовность: ✅ проект стабилен, готов к использованию
 
 ---
 
-## 🔧 В работе (26.03.2026 20:15) - СЛЕДУЮЩИЕ УЛУЧШЕНИЯ
+## 🔧 В работе (26.03.2026 21:10) - СЛЕДУЮЩИЕ УЛУЧШЕНИЯ
 
-### Приоритетные задачи
+### Выполненные приоритетные задачи
 - [x] Оптимизация размера бинарника (24.6 MB → 17.4 MB) ✅
-  - [x] Добавлены флаги -ldflags="-s -w" ✅
-  - [x] Анализ через go tool nm (недоступен в Windows) ✅
-  - [x] go mod tidy выполнен ✅
-  - [x] Оптимизация зависимостей ✅
+- [x] Улучшение DHCP server (все опции + тесты) ✅
 
-- [x] Улучшение DHCP server
-  - [x] Поддержка DHCP Release (Type 7) ✅
-  - [x] Поддержка DHCP NAK (Type 6) ✅
-  - [x] Поддержка DHCP Option 43 (Vendor Specific) ✅
-  - [x] Поддержка DHCP Option 121 (Classless Static Routes) ✅
-  - [x] Интеграционные тесты DHCP (8 тестов) ✅
-
-- [ ] Мониторинг и алерты
-  - [ ] Discord webhook rate limiting (уже есть)
-  - [ ] Telegram уведомления (восстановить, когда Kaspersky не будет детектить)
-  - [ ] Email уведомления при критических ошибках
-
-- [ ] Тестирование
-  - [ ] Интеграционные тесты DHCP server
-  - [ ] End-to-end тесты с реальными устройствами (PS4, Xbox, Switch)
-  - [ ] Нагрузочное тестирование (100+ устройств)
-
-### Долгосрочные цели
-- [ ] Поддержка IPv6 (DHCPv6, NDP)
-- [ ] Web UI улучшения (real-time графики трафика)
-- [ ] Plugin система для внешних обработчиков пакетов
-- [ ] Поддержка WireGuard как основного транспорта
+### Следующие приоритеты
+- [ ] Удаление неиспользуемого кода
+- [ ] Benchmark для DHCP server
+- [ ] MAC filtering whitelist/blacklist
 
 ---
 
