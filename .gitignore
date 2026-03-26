@@ -48,3 +48,4 @@ CLAUDE.md
 
 # But keep Go source files in windivert/
 !/windivert/*.goWinDivert64.sys  
+WinDivert64.sys  
