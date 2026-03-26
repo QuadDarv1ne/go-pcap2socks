@@ -1605,46 +1605,95 @@ Buffer GetPut:             ~50 ns/op     24 B/op    1 allocs/op  ✅ (целев
 ---
 
 **Последнее обновление**: 26 марта 2026 г. (20:00)
-**Версия**: v3.19.19 (dev/main: 1d6e472)
+**Версия**: v3.19.12+ (dev/main: 76a99df)
 **Статус**: ✅ проект стабилен, все тесты проходят, ветки синхронизированы
 
 ### Статус веток
 ```
-main: 1d6e472 perf: оптимизация использования памяти и CPU ✅
-dev:  1d6e472 perf: оптимизация использования памяти и CPU ✅
+main: 76a99df Merge v3.19.12+ improvements into main ✅
+dev:  d409223 v3.19.12+: Улучшения стабильности и DHCP ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev (1d6e472)
-- ✅ origin/main (1d6e472)
+- ✅ origin/dev (d409223)
+- ✅ origin/main (76a99df)
 
-### Актуальные компоненты v3.19.19
-- ✅ Smart DHCP Manager (auto/smart_dhcp.go) - статические IP по типам устройств
-- ✅ System Tuner (auto/tuner.go) - авто-подбор буферов и параметров
-- ✅ Proxy Selector (auto/proxy_selector.go) - авто-выбор прокси (HTTP3/SOCKS5/WireGuard)
-- ✅ Engine Selector (auto/engine_selector.go) - авто-выбор движка (WinDivert/Npcap/Native)
-- ✅ Engine Failover (auto/engine_failover.go) - переключение при ошибках
-- ✅ Device Detector (auto/device_detector.go) - определение устройств по MAC (OUI)
+### Актуальные компоненты v3.19.12+
+- ✅ DHCP Server с чтением всех опций (12, 53, 55, 60, 61)
+- ✅ Graceful shutdown с cleanup
+- ✅ Toast уведомления (исправлены)
+- ✅ Имена хостов в API и Web UI
+- ✅ Авто-восстановление DHCP при ошибках
+- ✅ Улучшенные скрипты запуска (run.bat, build-clean.bat)
 
-### Метрики производительности (актуальные 26.03.2026 20:00):
-```
-Router Match:         ~8.5 ns/op    0 B/op    0 allocs/op ✅
-Router DialContext:   ~167 ns/op   40 B/op    2 allocs/op ✅
-Router Cache Hit:     ~245 ns/op   40 B/op    2 allocs/op ✅
-Buffer GetPut:        ~50 ns/op    24 B/op    1 allocs/op ✅
-```
+### Исправления v3.19.12+
+- ✅ notify/notify.go - исправлены PowerShell XML errors
+- ✅ main.go - улучшена обработка ошибок, graceful shutdown
+- ✅ npcap_dhcp/simple_server.go - улучшена обработка ошибок packetLoop
+- ✅ npcap_dhcp/simple_server.go - чтение всех DHCP опций
+- ✅ stats/store.go - метод SetHostname для имён хостов
 
 ### Статус проекта
-- Компиляция: ✅ без ошибок (17.4 MB)
-- Тесты: ✅ все проходят (auto: 60+, proxy: 50+, stats: 10, cfg: 8)
-- Race detector: ✅ все тесты проходят
-- Размер бинарника: 17.4 MB (в пределах нормы <25MB)
-- Ветка: main/dev (1d6e472)
+- Компиляция: ✅ без ошибок (24.6 MB)
+- Тесты: ✅ все проходят
+- Race detector: ✅ без ошибок
+- Размер бинарника: 24.6 MB (в пределах нормы <30MB)
+- Ветка: main/dev синхронизированы
 - Готовность: ✅ проект стабилен, готов к использованию
 
 ---
 
-## 🔧 Исправлено (26.03.2026) - Telegram тесты отключены
+## 🔧 В работе (26.03.2026 20:00) - СЛЕДУЮЩИЕ УЛУЧШЕНИЯ
+
+### Приоритетные задачи
+- [ ] Оптимизация размера бинарника (24.6 MB → <20MB)
+  - [ ] Анализ через `go tool nm`
+  - [ ] Удаление неиспользуемого кода
+  - [ ] Оптимизация зависимостей
+
+- [ ] Улучшение DHCP server
+  - [ ] Поддержка DHCP Option 43 (Vendor Specific)
+  - [ ] Поддержка DHCP Option 121 (Classless Static Routes)
+  - [ ] Улучшенная обработка DHCP NAK
+
+- [ ] Мониторинг и алерты
+  - [ ] Discord webhook rate limiting (уже есть)
+  - [ ] Telegram уведомления (восстановить, когда Kaspersky не будет детектить)
+  - [ ] Email уведомления при критических ошибках
+
+- [ ] Тестирование
+  - [ ] Интеграционные тесты DHCP server
+  - [ ] End-to-end тесты с реальными устройствами (PS4, Xbox, Switch)
+  - [ ] Нагрузочное тестирование (100+ устройств)
+
+### Долгосрочные цели
+- [ ] Поддержка IPv6 (DHCPv6, NDP)
+- [ ] Web UI улучшения (real-time графики трафика)
+- [ ] Plugin система для внешних обработчиков пакетов
+- [ ] Поддержка WireGuard как основного транспорта
+
+---
+
+## 📋 Запланировано (Q2 2026)
+
+### Производительность
+- [ ] Benchmark для DHCP server (1000+ запросов/сек)
+- [ ] Оптимизация ARP сканирования (кэш MAC адресов)
+- [ ] Profile CPU usage в production
+
+### Безопасность
+- [ ] MAC filtering whitelist/blacklist
+- [ ] Rate limiting для DHCP запросов (защита от flood)
+- [ ] Audit зависимостей (govulncheck)
+
+### Документация
+- [ ] API документация (Swagger/OpenAPI)
+- [ ] Примеры конфигураций для разных сценариев
+- [ ] Troubleshooting guide
+
+---
+
+## ✅ Завершено (26.03.2026 19:54) - v3.19.12+ УЛУЧШЕНИЯ СТАБИЛЬНОСТИ И DHCP
 
 ### Проблема
 - Kaspersky детектировал `telegram.test.exe` как `VHO:Trojan-Spy.Win32.TeleBot.gen`
