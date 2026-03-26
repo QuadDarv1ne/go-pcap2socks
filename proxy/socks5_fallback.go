@@ -2,9 +2,9 @@ package proxy
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -82,10 +82,14 @@ func (sf *Socks5WithFallback) DialUDP(metadata *M.Metadata) (net.PacketConn, err
 func (sf *Socks5WithFallback) dialDirect(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
 	atomic.AddInt64(&sf.fallbackCounter, 1)
 
-	network := "tcp"
-	address := fmt.Sprintf("%s:%d", metadata.DstIP.String(), metadata.DstPort)
+	// Use netip for zero-copy address construction
+	addr, ok := netip.AddrFromSlice(metadata.DstIP)
+	if !ok {
+		addr, _ = netip.AddrFromSlice(metadata.DstIP.To16())
+	}
+	addrPort := netip.AddrPortFrom(addr, metadata.DstPort)
 
-	conn, err := dialer.DialContext(ctx, network, address)
+	conn, err := dialer.DialContext(ctx, "tcp", addrPort.String())
 	if err != nil {
 		return nil, err
 	}
@@ -97,8 +101,14 @@ func (sf *Socks5WithFallback) dialDirect(ctx context.Context, metadata *M.Metada
 func (sf *Socks5WithFallback) dialUDPDirect(metadata *M.Metadata) (net.PacketConn, error) {
 	atomic.AddInt64(&sf.fallbackCounter, 1)
 
-	address := net.JoinHostPort(metadata.DstIP.String(), fmt.Sprintf("%d", metadata.DstPort))
-	conn, err := net.Dial("udp", address)
+	// Use netip for zero-copy address construction
+	addr, ok := netip.AddrFromSlice(metadata.DstIP)
+	if !ok {
+		addr, _ = netip.AddrFromSlice(metadata.DstIP.To16())
+	}
+	addrPort := netip.AddrPortFrom(addr, metadata.DstPort)
+
+	conn, err := net.Dial("udp", addrPort.String())
 	if err != nil {
 		return nil, err
 	}

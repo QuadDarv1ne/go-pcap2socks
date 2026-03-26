@@ -20,7 +20,7 @@ const (
 
 // AsyncHandler wraps slog.Handler and processes records asynchronously
 type AsyncHandler struct {
-	queue     chan *slog.Record
+	queue     chan slog.Record
 	wg        *sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -40,7 +40,7 @@ func NewAsyncHandlerWithSize(handler slog.Handler, queueSize int, flushInterval 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	h := &AsyncHandler{
-		queue:     make(chan *slog.Record, queueSize),
+		queue:     make(chan slog.Record, queueSize),
 		wg:        &sync.WaitGroup{},
 		ctx:       ctx,
 		cancel:    cancel,
@@ -66,12 +66,10 @@ func (h *AsyncHandler) Handle(ctx context.Context, rec slog.Record) error {
 	if h.stopped.Load() {
 		return nil
 	}
-	
-	// Clone record to avoid race conditions
-	recCopy := rec.Clone()
-	
+
+	// Clone record to avoid race conditions - only if queue is not full
 	select {
-	case h.queue <- &recCopy:
+	case h.queue <- rec.Clone():
 		// Successfully queued
 		return nil
 	default:
@@ -111,35 +109,35 @@ func (h *AsyncHandler) WithGroup(name string) slog.Handler {
 	return newHandler
 }
 
-// processLoop processes log records in background
+// processLoop processes log records in background with batching
 func (h *AsyncHandler) processLoop(flushInterval time.Duration) {
 	defer h.wg.Done()
-	
+
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
-	
-	var buffer []*slog.Record
+
+	var buffer []slog.Record
 	bufferSize := 64
-	buffer = make([]*slog.Record, 0, bufferSize)
-	
+	buffer = make([]slog.Record, 0, bufferSize)
+
 	for {
 		select {
 		case rec := <-h.queue:
 			buffer = append(buffer, rec)
-			
+
 			// Flush if buffer is full
 			if len(buffer) >= bufferSize {
 				h.flush(buffer)
 				buffer = buffer[:0]
 			}
-			
+
 		case <-ticker.C:
 			// Periodic flush
 			if len(buffer) > 0 {
 				h.flush(buffer)
 				buffer = buffer[:0]
 			}
-			
+
 		case flushDone := <-h.flushCh:
 			// Explicit flush request
 			for len(h.queue) > 0 {
@@ -151,7 +149,7 @@ func (h *AsyncHandler) processLoop(flushInterval time.Duration) {
 				buffer = buffer[:0]
 			}
 			close(flushDone)
-			
+
 		case <-h.ctx.Done():
 			// Drain remaining records
 			for len(h.queue) > 0 {
@@ -167,9 +165,9 @@ func (h *AsyncHandler) processLoop(flushInterval time.Duration) {
 }
 
 // flush writes records to the underlying handler
-func (h *AsyncHandler) flush(records []*slog.Record) {
-	for _, rec := range records {
-		_ = h.handler.Handle(context.Background(), *rec)
+func (h *AsyncHandler) flush(records []slog.Record) {
+	for i := range records {
+		_ = h.handler.Handle(context.Background(), records[i])
 	}
 }
 

@@ -30,6 +30,9 @@ type ConnPool struct {
 	idleTimeout time.Duration
 	dialTimeout time.Duration
 	closed      bool
+
+	// Pool for pooledConn structs to reduce allocations
+	connPool sync.Pool
 }
 
 type pooledConn struct {
@@ -49,7 +52,7 @@ func NewConnPool(addr, network string, maxSize int, idleTimeout, dialTimeout tim
 		dialTimeout = DefaultConnectTimeout
 	}
 
-	return &ConnPool{
+	p := &ConnPool{
 		conns:       make([]*pooledConn, 0, maxSize),
 		addr:        addr,
 		network:     network,
@@ -57,6 +60,10 @@ func NewConnPool(addr, network string, maxSize int, idleTimeout, dialTimeout tim
 		idleTimeout: idleTimeout,
 		dialTimeout: dialTimeout,
 	}
+	p.connPool.New = func() any {
+		return &pooledConn{}
+	}
+	return p
 }
 
 // Exchange sends a DNS query and returns the response
@@ -99,11 +106,13 @@ func (p *ConnPool) Exchange(msg *dns.Msg) (*dns.Msg, error) {
 func (p *ConnPool) getConn(ctx context.Context) (*pooledConn, error) {
 	p.mu.Lock()
 
-	// Try to find an idle connection
-	for i, pc := range p.conns {
+	// Try to find an idle connection - use swap-remove to avoid allocation
+	for i := len(p.conns) - 1; i >= 0; i-- {
+		pc := p.conns[i]
 		if time.Since(pc.lastUsed) < p.idleTimeout {
-			// Remove from pool and return
-			p.conns = append(p.conns[:i], p.conns[i+1:]...)
+			// Swap with last element and remove (O(1) instead of O(n))
+			p.conns[i] = p.conns[len(p.conns)-1]
+			p.conns = p.conns[:len(p.conns)-1]
 			p.mu.Unlock()
 			return pc, nil
 		}
@@ -117,10 +126,10 @@ func (p *ConnPool) getConn(ctx context.Context) (*pooledConn, error) {
 		return nil, err
 	}
 
-	return &pooledConn{
-		conn:     conn,
-		lastUsed: time.Now(),
-	}, nil
+	pc := p.connPool.Get().(*pooledConn)
+	pc.conn = conn
+	pc.lastUsed = time.Now()
+	return pc, nil
 }
 
 // putConn returns a connection to pool
@@ -130,11 +139,13 @@ func (p *ConnPool) putConn(pc *pooledConn, reuse bool) {
 
 	if !reuse || p.closed {
 		pc.conn.Close()
+		p.connPool.Put(pc)
 		return
 	}
 
 	// Check if connection is still valid
 	if pc.conn.Conn == nil {
+		p.connPool.Put(pc)
 		return
 	}
 
@@ -144,6 +155,7 @@ func (p *ConnPool) putConn(pc *pooledConn, reuse bool) {
 		p.conns = append(p.conns, pc)
 	} else {
 		pc.conn.Close()
+		p.connPool.Put(pc)
 	}
 }
 
@@ -172,6 +184,7 @@ func (p *ConnPool) Close() error {
 
 	for _, pc := range p.conns {
 		pc.conn.Close()
+		p.connPool.Put(pc)
 	}
 	p.conns = nil
 

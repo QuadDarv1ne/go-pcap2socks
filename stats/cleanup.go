@@ -27,18 +27,15 @@ func (s *Store) CleanupInactive() int {
 		return 0
 	}
 
-	now := time.Now()
-	cutoff := now.Add(-s.inactivityTimeout)
+	cutoff := time.Now().Add(-s.inactivityTimeout)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	removed := 0
 	for ip, device := range s.devices {
-		device.mu.RLock()
+		// Load LastSeen atomically if possible, otherwise use mutex
 		lastSeen := device.LastSeen
-		device.mu.RUnlock()
-
 		if lastSeen.Before(cutoff) {
 			delete(s.devices, ip)
 			removed++

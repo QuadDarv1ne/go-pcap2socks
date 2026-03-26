@@ -12,12 +12,3 @@ const (
 	RelayBufferSize = 20 << 10
 )
 
-// Get gets a []byte from default allocator with most appropriate cap.
-func Get(size int) []byte {
-	return _allocator.Get(size)
-}
-
-// Put returns a []byte to default allocator for future use.
-func Put(buf []byte) error {
-	return _allocator.Put(buf)
-}

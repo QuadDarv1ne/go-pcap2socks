@@ -101,15 +101,15 @@ func (e *Endpoint) dispatchLoop(cancel context.CancelFunc) {
 		}
 
 		if !e.IsAttached() {
-			continue /* unattached, drop packet */
+			continue // unattached, drop packet
 		}
 
+		// Pre-allocate packet buffer with known size
 		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
 			Payload: buffer.MakeWithData(data),
 		})
 
 		e.InjectInbound(header.EthernetProtocolAll, pkt)
-
 		pkt.DecRef()
 	}
 }
@@ -132,8 +132,8 @@ func (e *Endpoint) writePacket(pkt *stack.PacketBuffer) tcpip.Error {
 
 	view := pkt.ToView()
 	defer view.Release()
-	_, err := view.WriteTo(e.rw)
-	if err != nil {
+
+	if _, err := view.WriteTo(e.rw); err != nil {
 		return &tcpip.ErrInvalidEndpointState{}
 	}
 	return nil

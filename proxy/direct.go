@@ -44,10 +44,12 @@ type directPacketConn struct {
 }
 
 func (pc *directPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	// Fast path: already UDPAddr
 	if udpAddr, ok := addr.(*net.UDPAddr); ok {
 		return pc.PacketConn.WriteTo(b, udpAddr)
 	}
 
+	// Slow path: resolve address
 	udpAddr, err := net.ResolveUDPAddr("udp", addr.String())
 	if err != nil {
 		return 0, err

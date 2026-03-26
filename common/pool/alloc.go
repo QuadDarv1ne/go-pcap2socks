@@ -14,6 +14,12 @@ type Allocator struct {
 	buffers []sync.Pool
 }
 
+// Buffer size limits for fast path check
+const (
+	minBufferSize = 1
+	maxBufferSize = 65536
+)
+
 // NewAllocator initiates a []byte allocator for frames less than
 // 65536 bytes, the waste(memory fragmentation) of space allocation
 // is guaranteed to be no more than 50%.
@@ -30,8 +36,10 @@ func NewAllocator() *Allocator {
 }
 
 // Get gets a []byte from pool with most appropriate cap.
+//go:noinline
 func (alloc *Allocator) Get(size int) []byte {
-	if size <= 0 || size > 65536 {
+	// Fast path: inline bounds check
+	if size < minBufferSize || size > maxBufferSize {
 		return nil
 	}
 
@@ -45,9 +53,10 @@ func (alloc *Allocator) Get(size int) []byte {
 
 // Put returns a []byte to pool for future use,
 // which the cap must be exactly 2^n.
+//go:noinline
 func (alloc *Allocator) Put(buf []byte) error {
 	b := msb(cap(buf))
-	if cap(buf) == 0 || cap(buf) > 65536 || cap(buf) != 1<<b {
+	if cap(buf) == 0 || cap(buf) > maxBufferSize || cap(buf) != 1<<b {
 		return errors.New("allocator Put() incorrect buffer size")
 	}
 
@@ -58,6 +67,19 @@ func (alloc *Allocator) Put(buf []byte) error {
 }
 
 // msb returns the pos of most significant bit.
+//go:inline
 func msb(size int) uint16 {
 	return uint16(bits.Len32(uint32(size)) - 1)
+}
+
+// Get is a convenience function that uses the global allocator.
+// It gets a []byte from pool with most appropriate cap.
+func Get(size int) []byte {
+	return _allocator.Get(size)
+}
+
+// Put is a convenience function that uses the global allocator.
+// It returns a []byte to pool for future use.
+func Put(buf []byte) error {
+	return _allocator.Put(buf)
 }

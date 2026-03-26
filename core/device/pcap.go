@@ -284,12 +284,14 @@ func (t *PCAP) handleDHCP(data []byte) ([]byte, error) {
 	// Build response packet
 	srcIP := t.localIP
 	dstIP := net.IPv4(255, 255, 255, 255) // Broadcast for DHCPOFFER/DHCPACK
-	
+
 	// If client requested a specific IP or already has one, use unicast
-	if len(dhcpData) > 16 {
-		clientIP := net.IP(dhcpData[12:16]).To4()
-		if !clientIP.Equal(net.IPv4zero) {
-			dstIP = clientIP
+	// Use direct byte comparison to avoid allocation
+	if len(dhcpData) >= 16 {
+		clientIP := dhcpData[12:16]
+		// Check if clientIP is not 0.0.0.0
+		if clientIP[0] != 0 || clientIP[1] != 0 || clientIP[2] != 0 || clientIP[3] != 0 {
+			dstIP = net.IPv4(clientIP[0], clientIP[1], clientIP[2], clientIP[3])
 		}
 	}
 
@@ -342,25 +344,11 @@ func isAdapterDisconnected(err error) bool {
 	}
 
 	for _, disconnectErr := range disconnectErrors {
-		if contains(errStr, disconnectErr) {
+		if strings.Contains(errStr, disconnectErr) {
 			return true
 		}
 	}
 
-	return false
-}
-
-// contains is a helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
 	return false
 }
 

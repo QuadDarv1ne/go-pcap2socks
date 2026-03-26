@@ -43,12 +43,11 @@ func NewHostnameResolver() *HostnameResolver {
 // Resolve resolves hostname for IP address
 // Priority: cache > mDNS > NetBIOS > OUI
 func (r *HostnameResolver) Resolve(ip, mac string) string {
+	// Fast path: check cache with read lock
 	r.mu.RLock()
-	if entry, ok := r.cache[ip]; ok {
-		if time.Since(entry.timestamp) < 10*time.Minute {
-			r.mu.RUnlock()
-			return entry.hostname
-		}
+	if entry, ok := r.cache[ip]; ok && time.Since(entry.timestamp) < 10*time.Minute {
+		r.mu.RUnlock()
+		return entry.hostname
 	}
 	r.mu.RUnlock()
 

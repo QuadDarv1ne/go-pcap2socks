@@ -78,7 +78,11 @@ func NewDHCPMessage() *DHCPMessage {
 	}
 }
 
+// dhcpBufPool is a pool for DHCP message buffers to reduce allocations
+var dhcpBufPool = pool.NewAllocator()
+
 // Marshal serializes the DHCP message to bytes
+// Returns a newly allocated slice that caller owns
 func (m *DHCPMessage) Marshal() []byte {
 	// Estimate total size: 240 (header) + options
 	estimatedSize := 240
@@ -233,7 +237,7 @@ func (m *DHCPMessage) Marshal() []byte {
 	// End option
 	buf[optionPos] = OptionEnd
 
-	// Return actual size slice
+	// Return actual size slice - caller owns this memory
 	result := make([]byte, optionPos+1)
 	copy(result, buf[:optionPos+1])
 
