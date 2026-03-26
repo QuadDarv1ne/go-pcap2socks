@@ -1,0 +1,32 @@
+[Unit]
+Description=go-pcap2socks - Transparent Network Proxy
+Documentation=https://github.com/QuadDarv1ne/go-pcap2socks
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/go-pcap2socks
+WorkingDirectory=/etc/go-pcap2socks
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StartLimitInterval=60s
+
+# Права и безопасность
+User=root
+Group=root
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=true
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=go-pcap2socks
+
+# Переменные окружения (опционально)
+# Environment="SLOG_LEVEL=info"
+# Environment="API_TOKEN=your-token-here"
+
+[Install]
+WantedBy=multi-user.target
