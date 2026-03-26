@@ -268,6 +268,13 @@ func (s *SimpleServer) processPacket(packet gopacket.Packet) {
 	} else if messageType == 3 { // DHCP Request
 		msgType = 5 // DHCPACK
 		slog.Info("DHCP ACK", "mac", macStr, "ip", clientIP.String())
+	} else if messageType == 7 { // DHCP Release
+		slog.Info("DHCP RELEASE", "mac", macStr)
+		// Remove lease on release
+		s.leaseMu.Lock()
+		delete(s.leases, macStr)
+		s.leaseMu.Unlock()
+		return
 	} else {
 		slog.Debug("Unknown DHCP message type", "type", messageType, "mac", macStr)
 		return
@@ -276,6 +283,11 @@ func (s *SimpleServer) processPacket(packet gopacket.Packet) {
 	err = s.sendDHCPOffer(clientMAC, clientIP, msgType, xid, flags)
 	if err != nil {
 		slog.Error("DHCP send error", "err", err, "mac", macStr)
+		// Send NAK on error
+		if messageType == 3 {
+			_ = s.sendDHCPNak(clientMAC, xid, flags)
+			slog.Warn("DHCP NAK sent", "mac", macStr)
+		}
 	} else {
 		if msgType == 2 {
 			slog.Info("DHCP OFFER sent", "mac", macStr, "ip", clientIP.String())
@@ -418,6 +430,69 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	}
 
 	// Send via Npcap
+	return s.handle.WritePacketData(buf.Bytes())
+}
+
+// sendDHCPNak sends DHCP NAK response
+func (s *SimpleServer) sendDHCPNak(clientMAC net.HardwareAddr, xid []byte, flags []byte) error {
+	eth := &layers.Ethernet{
+		SrcMAC:       s.localMAC,
+		DstMAC:       clientMAC,
+		EthernetType: layers.EthernetTypeIPv4,
+	}
+
+	ip := &layers.IPv4{
+		Version:  4,
+		IHL:      5,
+		TTL:      64,
+		Protocol: layers.IPProtocolUDP,
+		SrcIP:    s.localIP,
+		DstIP:    net.IPv4bcast,
+	}
+
+	udp := &layers.UDP{
+		SrcPort: 67,
+		DstPort: 68,
+	}
+
+	dhcpPayload := make([]byte, 300)
+	dhcpPayload[0] = 2                          // BOOTREPLY
+	dhcpPayload[1] = 1                          // Ethernet
+	dhcpPayload[2] = 6                          // Hardware length
+	copy(dhcpPayload[4:8], xid)                // XID
+	copy(dhcpPayload[10:12], flags)            // FLAGS
+	copy(dhcpPayload[28:34], clientMAC[:6])    // CHADDR
+
+	// DHCP Options
+	offset := 236
+	dhcpPayload[offset] = 53 // Option 53: DHCP Message Type
+	offset++
+	dhcpPayload[offset] = 6  // DHCPNAK
+	offset++
+	dhcpPayload[offset] = 54 // Option 54: Server ID
+	offset++
+	copy(dhcpPayload[offset:offset+4], s.localIP.To4())
+	offset += 4
+	dhcpPayload[offset] = 255 // End
+
+	udp.SetNetworkLayerForChecksum(ip)
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+
+	err := gopacket.SerializeLayers(buf, opts,
+		eth,
+		ip,
+		udp,
+		gopacket.Payload(dhcpPayload),
+	)
+	if err != nil {
+		return fmt.Errorf("serialize NAK: %w", err)
+	}
+
 	return s.handle.WritePacketData(buf.Bytes())
 }
 
