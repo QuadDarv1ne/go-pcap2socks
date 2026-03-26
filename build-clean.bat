@@ -26,7 +26,7 @@ if %errorLevel% == 0 (
 echo.
 
 echo [3/4] Сборка новой версии...
-go build -o go-pcap2socks.exe -ldflags="-s -w" . 2>&1
+go build -ldflags="-s -w" -o go-pcap2socks.exe . 2>&1
 if %errorLevel% == 0 (
     echo [OK] Сборка успешна
     for %%A in (go-pcap2socks.exe) do echo [INFO] Размер: %%~zA байт
