@@ -1,5 +1,39 @@
 # go-pcap2socks TODO
 
+## 🔄 В работе (26.03.2026) - ОПТИМИЗАЦИЯ И ОЧИСТКА ПРОЕКТА
+
+### Очистка временных файлов
+- [x] Удалены сборочные артефакты: go-pcap2socks.exe, go-pcap2socks-linux.exe ✅
+- [x] Удалены: pcap2socks.exe, pcapservice.exe ✅
+- [x] Удалён файл $null (пустой временный файл) ✅
+- [x] Удалена директория .qwen/ (AI assistant) ✅
+- [x] Проверка на .tmp, .log, .bak, .swp файлы - чисто ✅
+
+### Изменения в коде (dev)
+- [x] proxy/router.go: улучшена документация ✅
+  - Добавлены godoc комментарии для routeCache
+  - Улучшена документация Router
+  - Атомарные счётчики hits/misses для статистики кэша
+
+- [x] proxy/dns.go: обновлена документация ✅
+  - Добавлены godoc комментарии для DNS proxy
+
+- [x] tunnel/tcp.go: оптимизация буфера ✅
+  - tcpRelayBufferSize: 2KB для типичного HTTP трафика
+
+- [x] tunnel/udp.go: UPnP кэширование ✅
+  - upnpCacheDuration: 5 минут кэш для UPnP устройств
+  - Double-checked locking для thread-safety
+
+- [ ] telegram/bot_internal_test.go: новый файл тестов (требует проверки)
+
+### Текущий статус
+- Ветка: dev (изменения не закоммичены)
+- Удалённые файлы: buffer/buffer.go, buffer/buffer_test.go, telegram/bot_test.go
+- Изменённые файлы: proxy/dns.go, proxy/router.go, tunnel/tcp.go, tunnel/udp.go
+
+---
+
 ## ✅ Завершено (25.03.2026 23:45) - v3.19.10 УЛУЧШЕНИЕ КАЧЕСТВА КОДА
 
 ### Проверка проекта

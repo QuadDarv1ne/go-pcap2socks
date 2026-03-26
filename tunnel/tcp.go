@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 
@@ -20,8 +20,8 @@ const (
 	// This timeout prevents connections from hanging indefinitely after one side closes.
 	TCPWaitTimeout = 60 * time.Second
 
-	// tcpRelayBufferSize is optimized buffer size for TCP relay
-	tcpRelayBufferSize = buffer.MediumBufferSize
+	// tcpRelayBufferSize is optimized buffer size for TCP relay (2KB for typical HTTP traffic)
+	tcpRelayBufferSize = 2048
 )
 
 func handleTCPConn(originConn adapter.TCPConn) {
@@ -60,8 +60,8 @@ func pipe(origin, remote net.Conn) {
 
 func unidirectionalStream(dst, src net.Conn, dir string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	buf := buffer.Get(tcpRelayBufferSize)
-	defer buffer.Put(buf)
+	buf := pool.Get(tcpRelayBufferSize)
+	defer pool.Put(buf)
 	
 	n, err := io.CopyBuffer(dst, src, buf)
 	if err != nil && !errors.Is(err, io.EOF) {

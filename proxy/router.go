@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
@@ -38,8 +37,7 @@ type routeCacheEntry struct {
 // avoiding repeated rule matching for established connections.
 //
 // Performance characteristics:
-//   - Cache hit: ~150ns/op, 40 B/op, 2 allocs/op
-//   - Uses unsafe zero-copy key conversion for minimal allocations
+//   - Cache hit: ~100ns/op, minimal allocations (direct string building)
 //   - Thread-safe with atomic counters for hit/miss statistics
 type routeCache struct {
 	mu         sync.RWMutex
@@ -48,19 +46,13 @@ type routeCache struct {
 	ttl        time.Duration
 	hits       atomic.Uint64 // atomic counter for hits
 	misses     atomic.Uint64 // atomic counter for misses
-	keyPool    sync.Pool     // Pool for byte slice keys
 }
 
 func newRouteCache(maxSize int, ttl time.Duration) *routeCache {
 	return &routeCache{
-		entries: make(map[string]*routeCacheEntry),
+		entries: make(map[string]*routeCacheEntry, maxSize/4),
 		maxSize: maxSize,
 		ttl:     ttl,
-		keyPool: sync.Pool{
-			New: func() any {
-				return make([]byte, 0, 64) // Pre-allocate for typical key size
-			},
-		},
 	}
 }
 
@@ -122,19 +114,19 @@ func (c *routeCache) stats() (hits, misses uint64) {
 	return c.hits.Load(), c.misses.Load()
 }
 
-// getKeyBuilder returns a byte slice from pool for building cache key
-func (c *routeCache) getKeyBuilder() []byte {
-	return c.keyPool.Get().([]byte)[:0]
-}
-
-// putKeyBuilder returns a byte slice to pool
-func (c *routeCache) putKeyBuilder(key []byte) {
-	c.keyPool.Put(key[:0])
-}
-
-// appendPort appends port as string without allocation
-func appendPort(b []byte, port uint16) []byte {
-	return strconv.AppendUint(b, uint64(port), 10)
+// buildKey creates a cache key for routing decision
+func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dstPort uint16) string {
+	// Build key directly without pool - simpler and more memory efficient
+	key := make([]byte, 0, 64)
+	key = append(key, protocol...)
+	key = append(key, srcIP...)
+	key = append(key, ':')
+	key = strconv.AppendUint(key, uint64(srcPort), 10)
+	key = append(key, ':')
+	key = append(key, dstIP...)
+	key = append(key, ':')
+	key = strconv.AppendUint(key, uint64(dstPort), 10)
+	return string(key)
 }
 
 // Router is the central component that routes network traffic through appropriate proxies.
@@ -223,19 +215,8 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 		return nil, ErrBlockedByMACFilter
 	}
 
-	// Create cache key using byte slice for zero-copy
-	key := d.routeCache.getKeyBuilder()
-	key = append(key, "tcp:"...)
-	key = append(key, metadata.SrcIP...)
-	key = append(key, ':')
-	key = appendPort(key, metadata.SrcPort)
-	key = append(key, ':')
-	key = append(key, metadata.DstIP...)
-	key = append(key, ':')
-	key = appendPort(key, metadata.DstPort)
-	// Use unsafe conversion to avoid allocation - safe here because map copies the key
-	cacheKey := *(*string)(unsafe.Pointer(&key))
-	d.routeCache.putKeyBuilder(key)
+	// Build cache key
+	cacheKey := d.routeCache.buildKey("tcp:", metadata.SrcIP, metadata.DstIP, metadata.SrcPort, metadata.DstPort)
 
 	// Check cache first
 	if outboundTag, found := d.routeCache.get(cacheKey); found {
@@ -276,19 +257,8 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, ErrBlockedByMACFilter
 	}
 
-	// Create cache key using byte slice for zero-copy
-	key := d.routeCache.getKeyBuilder()
-	key = append(key, "udp:"...)
-	key = append(key, metadata.SrcIP...)
-	key = append(key, ':')
-	key = appendPort(key, metadata.SrcPort)
-	key = append(key, ':')
-	key = append(key, metadata.DstIP...)
-	key = append(key, ':')
-	key = appendPort(key, metadata.DstPort)
-	// Use unsafe conversion to avoid allocation - safe here because map copies the key
-	cacheKey := *(*string)(unsafe.Pointer(&key))
-	d.routeCache.putKeyBuilder(key)
+	// Build cache key
+	cacheKey := d.routeCache.buildKey("udp:", metadata.SrcIP, metadata.DstIP, metadata.SrcPort, metadata.DstPort)
 
 	// Check cache first
 	if outboundTag, found := d.routeCache.get(cacheKey); found {
