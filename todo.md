@@ -1,5 +1,39 @@
 # go-pcap2socks TODO
 
+## ✅ Завершено (26.03.2026 15:00) - v3.19.15 ДИНАМИЧЕСКАЯ ОПТИМИЗАЦИЯ ПАРАМЕТРОВ
+
+### System Tuner - Авто-подбор параметров
+- [x] Создан пакет auto/tuner.go ✅
+  - **TCP буфер**: 8-64KB в зависимости от памяти
+  - **UDP буфер**: 16-64KB в зависимости от скорости сети
+  - **Packet buffer**: 256-8192 пакетов (CPU × memory)
+  - **Max connections**: CPU × 100
+  - **Connection timeout**: 60-120 сек (на основе CPU)
+  - **GC pressure**: low/medium/high (на основе памяти)
+  - **MTU**: 1486 (оптимально для Ethernet)
+
+- [x] Платформенные реализации ✅
+  - **tuner_windows.go**: GlobalMemoryStatusEx для памяти
+  - **tuner_unix.go**: sysconf(_SC_PHYS_PAGES) для Linux/macOS
+
+- [x] Тесты для tuner ✅
+  - **TestSystemTuner_AutoTune**: Проверка всех параметров
+  - **TestSystemTuner_GetResources**: Проверка обнаружения ресурсов
+  - **TestCalculatePacketBuffer**: Расчёт буфера пакетов
+  - **TestCalculateOptimalMTU**: MTU для разных платформ
+  - **TestMemoryConstants**: Проверка констант KB/MB/GB
+  - **TestSystemTuner_BufferSizes**: Степени двойки для буферов
+  - **TestSystemTuner_Timeouts**: Разумные таймауты
+  - **Benchmark**: 3 бенчмарка производительности
+
+### Итоговый эффект
+- **Память**: Адаптивные буферы (экономия 2-8x на слабых системах)
+- **CPU**: Оптимальное число подключений (масштабирование)
+- **Таймауты**: Адаптивные (быстрые на слабых, долгие на мощных)
+- **GC**: Рекомендации по давлению (low/medium/high)
+
+---
+
 ## ✅ Завершено (26.03.2026 14:00) - v3.19.14 АВТОМАТИЧЕСКИЙ ВЫБОР ДВИЖКА
 
 ### Engine Auto-Selection
@@ -1433,32 +1467,33 @@ dev:  33387e8 gitignore: добавить WinDivert64.sys и WinDivert.dll ✅
 
 ---
 
-## ✅ Завершено (26.03.2026 14:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
+## ✅ Завершено (26.03.2026 15:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
 
 ### Выполненные задачи
-- [x] Merge dev → main (v3.19.14 изменения) ✅
+- [x] Merge dev → main (v3.19.15 изменения) ✅
 - [x] Проверка компиляции после merge ✅
 - [x] Отправка origin/dev ✅
 
 ### Статус веток
 ```
-main: 157d863 feat: engine auto-selection (WinDivert/Npcap/Native) ✅
-dev:  157d863 feat: engine auto-selection (WinDivert/Npcap/Native) ✅
+main: 83c9322 feat: dynamic system tuning (buffers, timeouts, MTU) ✅
+dev:  83c9322 feat: dynamic system tuning (buffers, timeouts, MTU) ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev (157d863)
+- ✅ origin/dev (83c9322)
 - 🔄 origin/main (требуется merge)
 
-### Изменения v3.19.14
-- ✅ auto/engine_selector.go - авто-выбор движка (scoring system)
-- ✅ auto/engine_selector_test.go - 10 тестов, все проходят
-- ✅ main.go - интеграция engine selector в auto-config
+### Изменения v3.19.15
+- ✅ auto/tuner.go - динамическая оптимизация параметров
+- ✅ auto/tuner_windows.go - Windows API для памяти
+- ✅ auto/tuner_unix.go - sysconf для Linux/macOS
+- ✅ auto/tuner_test.go - 11 тестов, все проходят
 
 ---
 
-**Последнее обновление**: 26 марта 2026 г. (14:00)
-**Версия**: v3.19.14 (dev: 157d863, main: 157d863)
+**Последнее обновление**: 26 марта 2026 г. (15:00)
+**Версия**: v3.19.15 (dev: 83c9322, main: 83c9322)
 **Статус**: ✅ проект стабилен, dev отправлен, требуется merge в main
 
 ### Правила проекта
