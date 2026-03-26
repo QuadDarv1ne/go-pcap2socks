@@ -1668,9 +1668,9 @@ dev:  ce77a5c docs: обновить todo.md - оптимизация завис
 - [x] Улучшение DHCP server (все опции + тесты) ✅
 
 ### Следующие приоритеты
+- [x] MAC filtering whitelist/blacklist ✅ (уже реализовано в cfg/config.go, используется в router.go)
 - [ ] Удаление неиспользуемого кода
 - [ ] Benchmark для DHCP server
-- [ ] MAC filtering whitelist/blacklist
 
 ---
 
