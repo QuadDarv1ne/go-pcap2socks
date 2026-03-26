@@ -119,39 +119,20 @@ func validateExecuteOnStart(cmds []string) error {
 	return nil
 }
 
+// restartAsAdmin attempts to restart the current process with administrator privileges
+func restartAsAdmin() error {
+	verb := "runas"
+	exe, _ := os.Executable()
+	cwd, _ := os.Getwd()
+	args := strings.Join(os.Args[1:], " ")
+
+	cmd := exec.Command("cmd", "/C", "start", verb, exe, args)
+	cmd.Dir = cwd
+	return cmd.Run()
+}
+
 func main() {
-	// Setup logging - check SLOG_LEVEL env var
-	logLevel := slog.LevelInfo // Default to info
-	if lvl := os.Getenv("SLOG_LEVEL"); lvl != "" {
-		switch lvl {
-		case "debug", "DEBUG":
-			logLevel = slog.LevelDebug
-		case "info", "INFO":
-			logLevel = slog.LevelInfo
-		case "warn", "WARN":
-			logLevel = slog.LevelWarn
-		case "error", "ERROR":
-			logLevel = slog.LevelError
-		}
-	}
-
-	opts := &slog.HandlerOptions{
-		Level: logLevel,
-	}
-
-	// Use async handler for better performance
-	syncHandler := slog.NewTextHandler(os.Stdout, opts)
-	asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
-	slog.SetDefault(slog.New(asyncHandler))
-
-	// Flush logs on exit to ensure all logs are written
-	defer func() {
-		if asyncHandler != nil {
-			asyncHandler.Flush()
-		}
-	}()
-
-	// Check for commands
+	// Check for commands that don't require admin
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "config":
@@ -198,6 +179,54 @@ func main() {
 			return
 		}
 	}
+
+	// Check for administrator privileges (required for WinDivert/Npcap)
+	if !isRunAsAdmin() {
+		// Try to restart with admin privileges
+		slog.Info("Requesting administrator privileges...")
+		if err := restartAsAdmin(); err != nil {
+			slog.Error("Failed to restart as administrator", "err", err)
+			slog.Error("Please run this program as Administrator:")
+			slog.Error("  - Right-click on the executable and select 'Run as administrator'")
+			slog.Error("  - Or use: Start-Process powershell -Verb RunAs -ArgumentList '-Command cd M:\\GitHub\\go-pcap2socks; .\\pcap2socks.exe'")
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Log startup with admin check passed
+	slog.Info("Running with administrator privileges")
+
+	// Setup logging - check SLOG_LEVEL env var
+	logLevel := slog.LevelInfo // Default to info
+	if lvl := os.Getenv("SLOG_LEVEL"); lvl != "" {
+		switch lvl {
+		case "debug", "DEBUG":
+			logLevel = slog.LevelDebug
+		case "info", "INFO":
+			logLevel = slog.LevelInfo
+		case "warn", "WARN":
+			logLevel = slog.LevelWarn
+		case "error", "ERROR":
+			logLevel = slog.LevelError
+		}
+	}
+
+	opts := &slog.HandlerOptions{
+		Level: logLevel,
+	}
+
+	// Use async handler for better performance
+	syncHandler := slog.NewTextHandler(os.Stdout, opts)
+	asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
+	slog.SetDefault(slog.New(asyncHandler))
+
+	// Flush logs on exit to ensure all logs are written
+	defer func() {
+		if asyncHandler != nil {
+			asyncHandler.Flush()
+		}
+	}()
 
 	// get config file from first argument or use config.json
 	var cfgFile string
@@ -767,14 +796,6 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		dhcpServerImpl, err := createDHCPServer(cfg, dhcpConfig, netConfig)
 		if err != nil {
 			return err
-		}
-
-		// Start DHCP server
-		if starter, ok := dhcpServerImpl.(interface{ Start() error }); ok {
-			if err := starter.Start(); err != nil {
-				slog.Error("DHCP server start failed", "err", err)
-				return err
-			}
 		}
 
 		// Set dhcpServer for device if it implements the interface

@@ -4,7 +4,14 @@ package main
 
 import (
 	"net"
+	"os"
 )
+
+// isRunAsAdmin checks if the process is running with root privileges (Unix/macOS)
+func isRunAsAdmin() bool {
+	// On Unix-like systems, check for root (UID 0)
+	return os.Geteuid() == 0
+}
 
 // getSystemDNSServers retrieves DNS servers for a specific network interface (Unix/macOS)
 func getSystemDNSServers(interfaceName string) []string {

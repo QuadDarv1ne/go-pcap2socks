@@ -12,6 +12,38 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// isRunAsAdmin checks if the process is running with administrator privileges
+func isRunAsAdmin() bool {
+	var sid *windows.SID
+	// Look up the Administrators group SID
+	err := windows.AllocateAndInitializeSid(
+		&windows.SECURITY_NT_AUTHORITY,
+		2,
+		windows.SECURITY_BUILTIN_DOMAIN_RID,
+		windows.DOMAIN_ALIAS_RID_ADMINS,
+		0, 0, 0, 0, 0, 0,
+		&sid)
+	if err != nil {
+		slog.Debug("Failed to initialize admin SID", "err", err)
+		return false
+	}
+	defer windows.FreeSid(sid)
+
+	// Check if the current token is a member of the Administrators group
+	token := windows.Token(0)
+	member, err := token.IsMember(sid)
+	if err != nil {
+		slog.Debug("Failed to check token membership", "err", err)
+		return false
+	}
+
+	// IsElevated may fail, so we check membership first
+	elevated := token.IsElevated()
+	slog.Debug("Admin check", "member", member, "elevated", elevated)
+	
+	return member || elevated
+}
+
 // getSystemDNSServers retrieves DNS servers for a specific network interface (Windows)
 func getSystemDNSServers(interfaceName string) []string {
 	dnsServers := make([]string, 0, 2)

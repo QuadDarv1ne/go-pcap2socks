@@ -12,11 +12,20 @@ import (
 
 // UsePacketLayer enables full Ethernet frame capture/send
 // This allows proper unicast delivery to specific MAC addresses
-// Note: Currently godivert library only supports network layer mode
+// NOTE: WinDivert 2.2.x does not support packet layer with custom filters
+// We use network mode and build Ethernet frames in software for DHCP responses
 const UsePacketLayer = false
 
 // Filter for DHCP packets (UDP ports 67 and 68)
+// In network layer, this filter works correctly
 const DHCPFilter = "udp.DstPort == 67 or udp.SrcPort == 68"
+
+// WinDivert layer flags
+const (
+	// WINDIVERT_FLAG_LAYER_PACKET (0x80) captures full Ethernet frames
+	// Not supported in WinDivert 2.2.x with custom filters
+	WINDIVERT_FLAG_LAYER_PACKET = 0x80
+)
 
 // Handle wraps the WinDivert handle
 type Handle struct {
@@ -47,28 +56,18 @@ func NewHandle(filter string) (*Handle, error) {
 		filter = DHCPFilter
 	}
 
-	// Use packet layer for full Ethernet frame support if enabled
+	// Use network layer (default) - packet layer not supported with custom filters
 	var h *godivert.WinDivertHandle
 	var err error
 
-	if UsePacketLayer {
-		// Packet layer includes Ethernet headers for proper L2 framing
-		// Note: This requires godivert support which is not currently available
-		h, err = godivert.NewWinDivertHandle(filter)
-	} else {
-		// Network layer only (default)
-		h, err = godivert.NewWinDivertHandle(filter)
-	}
+	// Open WinDivert handle in network layer mode
+	h, err = godivert.NewWinDivertHandle(filter)
 
 	if err != nil {
 		return nil, fmt.Errorf("windivert open: %w", err)
 	}
 
-	mode := "network"
-	if UsePacketLayer {
-		mode = "packet"
-	}
-	slog.Info("WinDivert handle opened", "filter", filter, "mode", mode)
+	slog.Info("WinDivert handle opened", "filter", filter, "mode", "network")
 
 	return &Handle{
 		handle:   h,
@@ -117,6 +116,11 @@ func (h *Handle) Close() error {
 		return h.handle.Close()
 	}
 	return nil
+}
+
+// Handle returns the underlying godivert handle
+func (h *Handle) Handle() *godivert.WinDivertHandle {
+	return h.handle
 }
 
 // parsePacket extracts network information from raw packet data

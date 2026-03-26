@@ -91,18 +91,33 @@ func (s *DHCPServer) HandleRequest(data []byte) ([]byte, error) {
 // packetLoop captures and processes DHCP packets
 func (s *DHCPServer) packetLoop() {
 	defer s.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("WinDivert packet loop panic", "recover", r)
+			// Restart loop after panic
+			time.Sleep(1 * time.Second)
+			s.wg.Add(1)
+			go s.packetLoop()
+		}
+	}()
 
 	errorCount := 0
 	const maxErrors = 10
+	packetCount := 0
 
 	for {
 		select {
 		case <-s.stopChan:
+			slog.Info("WinDivert packet loop stopped", "total_packets", packetCount)
 			return
 		default:
 			packet, err := s.handle.Recv()
 			if err != nil {
-				slog.Debug("WinDivert recv error", "err", err)
+				// Don't log common errors
+				errStr := err.Error()
+				if errStr != "The operation was successful." {
+					slog.Debug("WinDivert recv error", "err", errStr)
+				}
 				errorCount++
 
 				// Check for fatal errors
@@ -127,6 +142,7 @@ func (s *DHCPServer) packetLoop() {
 
 			// Reset error count on success
 			errorCount = 0
+			packetCount++
 
 			// Process DHCP packets
 			s.processPacket(packet)
@@ -136,34 +152,46 @@ func (s *DHCPServer) packetLoop() {
 
 // processPacket processes a single DHCP packet
 func (s *DHCPServer) processPacket(packet *Packet) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("processPacket panic", "recover", r, "mac", getPacketMAC(packet))
+		}
+	}()
+
 	// Check if this is a DHCP request from client (srcPort=68, dstPort=67)
-	// Only process DHCP DISCOVER/REQUEST from clients
 	if packet.SrcPort != 68 || packet.DstPort != 67 {
-		// Not a client request (could be server response or other traffic)
-		// Reinject it back to the network
-		s.handle.Send(packet)
+		// Not a DHCP request from client, reinject
+		if err := s.handle.Send(packet); err != nil {
+			slog.Debug("WinDivert send error (non-DHCP)", "err", err)
+		}
 		return
 	}
 
 	// Extract DHCP payload (skip IP and UDP headers)
-	// IP header length is in first byte (lower 4 bits)
+	// In network layer, packet starts from IP header
 	ipHeaderLen := int((packet.Raw[0] & 0x0F) * 4)
 	udpHeaderLen := 8
 	dhcpStart := ipHeaderLen + udpHeaderLen
 
 	if len(packet.Raw) <= dhcpStart {
-		slog.Warn("DHCP packet too short", "len", len(packet.Raw), "dhcpStart", dhcpStart)
+		slog.Debug("DHCP packet too short", "len", len(packet.Raw))
 		s.handle.Send(packet)
 		return
 	}
 
 	dhcpData := packet.Raw[dhcpStart:]
 
-	// Extract client MAC from DHCP payload (more reliable than WinDivert in network layer mode)
+	// Extract client MAC from DHCP payload
 	clientMAC := GetClientMAC(dhcpData)
 	if clientMAC == nil {
-		clientMAC = packet.SrcMAC // Fallback to packet MAC
+		clientMAC = packet.SrcMAC // Fallback
 	}
+
+	// Log DHCP request
+	slog.Info("DHCP request received",
+		"mac", clientMAC.String(),
+		"srcIP", packet.SrcIP.String(),
+		"dstIP", packet.DstIP.String())
 
 	// Rate limiting: prevent DHCP flood (max 1 request per 500ms per MAC)
 	macStr := clientMAC.String()
@@ -172,15 +200,14 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	if lastTime, exists := s.lastRequest[macStr]; exists {
 		if now.Sub(lastTime) < 500*time.Millisecond {
 			s.requestMu.Unlock()
-			s.handle.Send(packet) // Reinject packet
+			s.handle.Send(packet)
 			return
 		}
 	}
 	s.lastRequest[macStr] = now
 	s.requestMu.Unlock()
 
-	// Check broadcast flag in DHCP Discover (flags field at offset 10-11 in DHCP header)
-	// If high bit is set (0x8000), client wants broadcast response
+	// Check broadcast flag
 	broadcastFlag := false
 	if len(dhcpData) >= 12 {
 		flags := uint16(dhcpData[10])<<8 | uint16(dhcpData[11])
@@ -190,7 +217,7 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	// Handle DHCP request
 	responseData, err := s.server.HandleRequest(dhcpData)
 	if err != nil {
-		slog.Error("DHCP handle request error", "err", err)
+		slog.Error("DHCP handle error", "err", err, "mac", clientMAC.String())
 		s.handle.Send(packet)
 		return
 	}
@@ -200,14 +227,26 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		return
 	}
 
-	// Build and send DHCP response packet with client MAC for proper delivery
+	// Build and send response with Ethernet header
 	err = s.sendDHCPResponseWithMAC(clientMAC, packet, responseData, broadcastFlag)
 	if err != nil {
-		slog.Error("DHCP send response error", "err", err)
+		slog.Error("DHCP send error", "err", err, "mac", clientMAC.String())
+	} else {
+		slog.Info("DHCP response sent",
+			"mac", clientMAC.String(),
+			"broadcast", broadcastFlag)
 	}
+}
 
-	// Don't reinject the original packet - we've responded to it
-	// This prevents the packet from reaching other DHCP servers
+// getPacketMAC safely extracts MAC from packet
+func getPacketMAC(packet *Packet) string {
+	if packet == nil {
+		return "nil"
+	}
+	if packet.SrcMAC != nil {
+		return packet.SrcMAC.String()
+	}
+	return "unknown"
 }
 
 // sendDHCPResponseWithMAC builds and sends a DHCP response packet with explicit client MAC
@@ -241,32 +280,23 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 		}
 	}
 
-	// Build packet based on WinDivert mode
-	// Packet layer includes Ethernet header for proper L2 delivery
+	// Build packet with Ethernet header for proper L2 delivery
+	// Always use Ethernet framing to ensure packets reach the client by MAC address
+	// This is critical for DHCP OFFER/ACK to work correctly
 	var responsePacket []byte
 	var err error
 
-	if UsePacketLayer {
-		// Build full Ethernet+IP+UDP+DHCP packet for packet layer mode
-		responsePacket, err = buildEthernetIPUDPPacket(
-			dstMAC,        // Destination MAC (client)
-			s.localMAC,    // Source MAC (server)
-			s.localIP,     // Source IP (server)
-			dstIP,         // Destination IP (client or broadcast)
-			67,            // Source port (DHCP server)
-			68,            // Destination port (DHCP client)
-			dhcpData,
-		)
-	} else {
-		// Build IP+UDP+DHCP packet for network layer mode (no Ethernet header)
-		responsePacket, err = buildIPUDPPacket(
-			s.localIP, // Source IP (server)
-			dstIP,     // Destination IP (client or broadcast)
-			67,        // Source port (DHCP server)
-			68,        // Destination port (DHCP client)
-			dhcpData,
-		)
-	}
+	// Always build full Ethernet+IP+UDP+DHCP packet
+	// WinDivert in network mode can still send Ethernet frames
+	responsePacket, err = buildEthernetIPUDPPacket(
+		dstMAC,        // Destination MAC (client)
+		s.localMAC,    // Source MAC (server)
+		s.localIP,     // Source IP (server)
+		dstIP,         // Destination IP (client or broadcast)
+		67,            // Source port (DHCP server)
+		68,            // Destination port (DHCP client)
+		dhcpData,
+	)
 
 	if err != nil {
 		return fmt.Errorf("build DHCP response: %w", err)
@@ -274,6 +304,7 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 
 	// Create WinDivert packet for response
 	// Use inbound direction to send back to the local network
+	// In packet layer, we need to set the correct interface indices
 	godivertPacket := &godivert.Packet{
 		Raw: responsePacket,
 		Addr: &godivert.WinDivertAddress{
@@ -292,6 +323,11 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	if err != nil {
 		return fmt.Errorf("send DHCP response: %w", err)
 	}
+
+	slog.Info("DHCP response sent",
+		"mac", clientMAC.String(),
+		"dstIP", dstIP.String(),
+		"broadcast", broadcastFlag)
 
 	return nil
 }
