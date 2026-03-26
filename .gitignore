@@ -48,3 +48,7 @@ CLAUDE.md
 
 # But keep Go source files in windivert/
 !/windivert/*.go
+
+# WinDivert driver in root (runtime file, should not be tracked)
+WinDivert64.sys
+WinDivert.dll
