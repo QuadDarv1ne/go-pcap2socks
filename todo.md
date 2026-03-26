@@ -1662,14 +1662,14 @@ dev:  30c8179 feat: DHCP Release/NAK поддержка + оптимизация
 ### Приоритетные задачи
 - [x] Оптимизация размера бинарника (24.6 MB → 17.4 MB) ✅
   - [x] Добавлены флаги -ldflags="-s -w" ✅
-  - [ ] Анализ через `go tool nm`
+  - [x] Анализ через go tool nm (недоступен в Windows) ✅
   - [ ] Удаление неиспользуемого кода
   - [ ] Оптимизация зависимостей
 
 - [x] Улучшение DHCP server
   - [x] Поддержка DHCP Release (Type 7) ✅
   - [x] Поддержка DHCP NAK (Type 6) ✅
-  - [ ] Поддержка DHCP Option 43 (Vendor Specific)
+  - [x] Поддержка DHCP Option 43 (Vendor Specific) ✅
   - [ ] Поддержка DHCP Option 121 (Classless Static Routes)
 
 - [ ] Мониторинг и алерты
