@@ -767,6 +767,20 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 
 	proxy.SetDialer(_defaultProxy)
 
+	// Initialize Engine Failover manager
+	_engineFailover = auto.NewEngineFailover()
+	slog.Info("Engine failover manager initialized",
+		"current_engine", _engineFailover.GetCurrentEngine(),
+		"min_switch_interval", "30s")
+
+	// Initialize Smart DHCP manager
+	if cfg.DHCP != nil && cfg.DHCP.Enabled {
+		_smartDHCP = auto.NewSmartDHCPManager(cfg.DHCP.PoolStart, cfg.DHCP.PoolEnd)
+		slog.Info("Smart DHCP manager initialized",
+			"pool", fmt.Sprintf("%s-%s", cfg.DHCP.PoolStart, cfg.DHCP.PoolEnd),
+			"device_ranges", "PS4/PS5:.100-.119, Xbox:.120-.139, Switch:.140-.149, PC:.150-.199")
+	}
+
 	// Initialize DHCP server if enabled
 	var dhcpServer device.DHCPServer
 	if cfg.DHCP != nil && cfg.DHCP.Enabled {
@@ -862,6 +876,12 @@ var (
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}
+
+	// _engineFailover holds the engine failover manager for automatic switching
+	_engineFailover *auto.EngineFailover
+
+	// _smartDHCP holds the Smart DHCP manager for static IP assignment
+	_smartDHCP *auto.SmartDHCPManager
 )
 
 // GetStatsStore returns the global statistics store
@@ -877,6 +897,16 @@ func GetProfileManager() *profiles.Manager {
 // GetUPnPManager returns the global UPnP manager
 func GetUPnPManager() *upnpmanager.Manager {
 	return _upnpManager
+}
+
+// GetEngineFailover returns the global engine failover manager
+func GetEngineFailover() *auto.EngineFailover {
+	return _engineFailover
+}
+
+// GetSmartDHCP returns the global Smart DHCP manager
+func GetSmartDHCP() *auto.SmartDHCPManager {
+	return _smartDHCP
 }
 
 // GetShutdownChan returns the shutdown channel
@@ -965,6 +995,12 @@ func Stop() {
 			stopper.Stop()
 		}
 		slog.Info("DHCP server stopped")
+	}
+
+	// Stop Smart DHCP manager
+	if _smartDHCP != nil {
+		slog.Info("Smart DHCP manager stopped",
+			"devices", _smartDHCP.GetDeviceCount())
 	}
 
 	// Stop async logger
