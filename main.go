@@ -1214,6 +1214,14 @@ func autoConfigure() {
 		slog.Debug("Device type unknown, using default profile")
 	}
 
+	// Auto-select best engine for current system
+	engineSelector := auto.NewEngineSelector()
+	selectedEngine := engineSelector.SelectBestEngine()
+	slog.Info("Engine auto-selected",
+		"engine", selectedEngine,
+		"description", selectedEngine.GetDescription(),
+		"recommendation", engineSelector.GetEngineRecommendation(selectedEngine))
+
 	// Get system DNS servers
 	dnsServers := getSystemDNSServers(interfaceConfig.Name)
 	if len(dnsServers) == 0 {
