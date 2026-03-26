@@ -1,5 +1,42 @@
 # go-pcap2socks TODO
 
+## ✅ Завершено (26.03.2026 14:00) - v3.19.14 АВТОМАТИЧЕСКИЙ ВЫБОР ДВИЖКА
+
+### Engine Auto-Selection
+- [x] Создан пакет auto/engine_selector.go ✅
+  - **Оценка движков**: WinDivert, Npcap, Native
+  - **Критерии**: Доступность, задержка, пропускная способность, стабильность
+  - **Платформа**: Windows (WinDivert/Npcap), другие ОС (Native)
+
+- [x] Система scoring ✅
+  - **WinDivert**: 200 баллов (admin + low latency + high throughput)
+  - **Npcap**: 140+ баллов (no admin required + good latency)
+  - **Native**: 70 баллов (fallback, cross-platform)
+
+- [x] Проверка доступности ✅
+  - **WinDivert**: Проверка драйвера (WinDivert64.sys)
+  - **Npcap**: Проверка интерфейсов через pcap.FindAllDevs()
+  - **Native**: Всегда доступен
+
+- [x] Интеграция в auto-config ✅
+  - **main.go**: Авто-выбор движка при конфигурации
+  - **Логирование**: Информация о выбранном движке
+  - **Рекомендация**: Описание преимуществ
+
+- [x] Тесты для engine_selector ✅
+  - **TestEngineSelector_SelectBestEngine**: Выбор лучшего движка
+  - **TestEngineType_GetDescription**: Описания движков
+  - **TestEngineSelector_WindowsOnly**: Платформенные тесты
+  - **Benchmark**: 4 бенчмарка производительности
+
+### Итоговый эффект
+- **Авто-выбор**: Лучший движок выбирается автоматически
+- **Производительность**: WinDivert даёт наименьшую задержку (500μs)
+- **Совместимость**: Native fallback для всех платформ
+- **Гибкость**: Приоритет настраивается через preferences
+
+---
+
 ## ✅ Завершено (26.03.2026 13:00) - v3.19.13 АВТОМАТИЗАЦИЯ ОПРЕДЕЛЕНИЯ УСТРОЙСТВ
 
 ### Device Detection по MAC-адресу
@@ -1396,34 +1433,32 @@ dev:  33387e8 gitignore: добавить WinDivert64.sys и WinDivert.dll ✅
 
 ---
 
-## ✅ Завершено (26.03.2026 13:30) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
+## ✅ Завершено (26.03.2026 14:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
 
 ### Выполненные задачи
-- [x] Merge dev → main (v3.19.13 изменения) ✅
+- [x] Merge dev → main (v3.19.14 изменения) ✅
 - [x] Проверка компиляции после merge ✅
 - [x] Отправка origin/dev ✅
 
 ### Статус веток
 ```
-main: 9ed3cc6 feat: auto package for device detection and profile application ✅
-dev:  9ed3cc6 feat: auto package for device detection and profile application ✅
+main: 157d863 feat: engine auto-selection (WinDivert/Npcap/Native) ✅
+dev:  157d863 feat: engine auto-selection (WinDivert/Npcap/Native) ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev (9ed3cc6)
+- ✅ origin/dev (157d863)
 - 🔄 origin/main (требуется merge)
 
-### Изменения v3.19.13
-- ✅ auto/device_detector.go - определение устройства по MAC (40+ OUI)
-- ✅ auto/device_profile.go - применение профилей оптимизации
-- ✅ auto/device_detector_test.go - 22 теста, все проходят
-- ✅ AUTOMATION_ROADMAP.md - дорожная карта автоматизации
-- ✅ main.go - интеграция в auto-config
+### Изменения v3.19.14
+- ✅ auto/engine_selector.go - авто-выбор движка (scoring system)
+- ✅ auto/engine_selector_test.go - 10 тестов, все проходят
+- ✅ main.go - интеграция engine selector в auto-config
 
 ---
 
-**Последнее обновление**: 26 марта 2026 г. (13:30)
-**Версия**: v3.19.13 (dev: 9ed3cc6, main: 9ed3cc6)
+**Последнее обновление**: 26 марта 2026 г. (14:00)
+**Версия**: v3.19.14 (dev: 157d863, main: 157d863)
 **Статус**: ✅ проект стабилен, dev отправлен, требуется merge в main
 
 ### Правила проекта
