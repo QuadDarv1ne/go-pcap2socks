@@ -83,8 +83,8 @@ func (s *ProxySelector) SelectBestProxy() ProxyRecommendation {
 	// Detect available proxies
 	candidates := s.detectAvailableProxies()
 
-	// Test speeds concurrently
-	s.testProxySpeedsConcurrent(candidates)
+	// Test speeds sequentially to reduce memory pressure (not concurrently)
+	s.testProxySpeedsSequential(candidates)
 
 	// Select best
 	best := s.selectBestFromCandidates(candidates)
@@ -151,36 +151,15 @@ func (s *ProxySelector) detectAvailableProxies() []ProxyCandidate {
 	return candidates
 }
 
-// testProxySpeedsConcurrent tests the speed of each proxy concurrently
-func (s *ProxySelector) testProxySpeedsConcurrent(candidates []ProxyCandidate) {
-	var wg sync.WaitGroup
-	results := make(chan struct {
-		addr  string
-		speed int64
-	}, len(candidates))
-
+// testProxySpeedsSequential tests the speed of each proxy sequentially to reduce memory pressure
+func (s *ProxySelector) testProxySpeedsSequential(candidates []ProxyCandidate) {
 	for _, candidate := range candidates {
 		if candidate.Mode == ModeDirect {
 			s.speedTestResult[candidate.Address] = 0
 			continue
 		}
-
-		wg.Add(1)
-		go func(c ProxyCandidate) {
-			defer wg.Done()
-			speed := s.testProxySpeed(c)
-			results <- struct {
-				addr  string
-				speed int64
-			}{addr: c.Address, speed: speed}
-		}(candidate)
-	}
-
-	wg.Wait()
-	close(results)
-
-	for r := range results {
-		s.speedTestResult[r.addr] = r.speed
+		speed := s.testProxySpeed(candidate)
+		s.speedTestResult[candidate.Address] = speed
 	}
 }
 

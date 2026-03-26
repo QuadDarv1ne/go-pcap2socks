@@ -156,8 +156,8 @@ func (g *ProxyGroup) healthCheckLoop() {
 	ticker := time.NewTicker(g.checkInterval)
 	defer ticker.Stop()
 
-	// Initial check with jitter to avoid thundering herd
-	time.Sleep(time.Duration(randInt(0, 1000)) * time.Millisecond)
+	// Initial check with minimal jitter (100ms max) to avoid thundering herd
+	time.Sleep(time.Duration(randInt(0, 100)) * time.Millisecond)
 	g.checkAllProxies()
 
 	for {

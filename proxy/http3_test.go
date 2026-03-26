@@ -475,8 +475,8 @@ func TestHTTP3_FailoverIntegration(t *testing.T) {
 
 	group := NewProxyGroup(cfg)
 
-	// Wait for health check to run (initial check has 0-1000ms jitter)
-	time.Sleep(1200 * time.Millisecond)
+	// Wait for health check to run (initial check has 0-100ms jitter)
+	time.Sleep(200 * time.Millisecond)
 
 	defer group.Stop()
 
