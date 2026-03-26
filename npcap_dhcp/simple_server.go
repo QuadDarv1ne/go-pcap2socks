@@ -358,7 +358,7 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 
 	// Build DHCP payload (simplified)
 	// DHCP OFFER: OP=2, HTYPE=1, HLEN=6, HOPS=0, XID, SECS, FLAGS, CIADDR, YIADDR, SIADDR, GIADDR, CHADDR
-	dhcpPayload := make([]byte, 300)
+	dhcpPayload := make([]byte, 320)
 	dhcpPayload[0] = 2                          // BOOTREPLY
 	dhcpPayload[1] = 1                          // Ethernet
 	dhcpPayload[2] = 6                          // Hardware length
@@ -406,6 +406,21 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	offset += 4
 	copy(dhcpPayload[offset:offset+4], net.IPv4(1, 1, 1, 1).To4())
 	offset += 4
+
+	// Option 43: Vendor Specific Information (for PS4/PS5/Xbox)
+	// Sub-option 1: Vendor Encapsulation
+	dhcpPayload[offset] = 43
+	offset++
+	dhcpPayload[offset] = 8  // Length
+	offset++
+	dhcpPayload[offset] = 1  // Sub-option 1: Vendor ID
+	offset++
+	dhcpPayload[offset] = 6  // Length of vendor ID
+	offset++
+	// Vendor ID "MSFT 5.0" for compatibility
+	vendorID := []byte("MSFT 5.0")
+	copy(dhcpPayload[offset:offset+6], vendorID)
+	offset += 6
 
 	// Option 255: End
 	dhcpPayload[offset] = 255
@@ -455,7 +470,7 @@ func (s *SimpleServer) sendDHCPNak(clientMAC net.HardwareAddr, xid []byte, flags
 		DstPort: 68,
 	}
 
-	dhcpPayload := make([]byte, 300)
+	dhcpPayload := make([]byte, 320)
 	dhcpPayload[0] = 2                          // BOOTREPLY
 	dhcpPayload[1] = 1                          // Ethernet
 	dhcpPayload[2] = 6                          // Hardware length
