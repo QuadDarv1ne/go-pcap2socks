@@ -765,14 +765,14 @@ gVisor Stack:         tuned        256KB buf  ✅
 
 ---
 
-**Последнее обновление**: 24 марта 2026 г.
-**Версия**: v3.19.3-logger-fix (dev: latest, main: a9ee6f1)
-**Статус**: ✅ готов к использованию, все race conditions исправлены
+**Последнее обновление**: 26 марта 2026 г.
+**Версия**: v3.19.11 (dev: c85a0df, main: 603d0dc)
+**Статус**: ✅ готов к использованию, все тесты проходят с -race detector
 
 ### Статус веток
 ```
-main: a9ee6f1 fix(proxy): исправлены race conditions в routeCache и тестах ✅
-dev:  latest синхронизирован с main + async logger flush + network adapter error handling ✅
+main: 603d0dc Merge branch 'dev' ✅
+dev:  c85a0df docs: обновить todo.md - актуализация статусов v3.19.11 ✅
 ```
 
 ### Текущие задачи (в работе)
@@ -783,6 +783,12 @@ dev:  latest синхронизирован с main + async logger flush + netwo
 - ✅ Race conditions исправлены - routeCache, proxy tests
 - ✅ Async logger flush - логи сбрасываются при завершении программы
 - ✅ Network adapter error handling - понятное сообщение при отключенном интерфейсе
+- ✅ Очистка временных файлов - сборочные артефакты, .qwen/, $null
+- ✅ Удаление buffer пакета - заменён на common/pool
+- ✅ Оптимизация routeCache.buildKey - упрощён, без unsafe
+- ✅ Memory optimization - DNS кэш уменьшен с 10k до 1k записей
+- ✅ Buffer sizing - TCP 2KB, UDP 512 байта
+- ✅ UPnP caching - 5 минут с double-checked locking
 - 🔄 Документация HTTP/3 (требуется запрос пользователя)
 - 🔄 Интеграционные тесты с реальным HTTP/3 прокси
 - 🔄 Hotkey integration (требуется Windows GUI/tray)
