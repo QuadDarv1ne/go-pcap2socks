@@ -81,9 +81,9 @@ func (c *Config) resolveEnv() {
 	if c.Telegram != nil {
 		c.Telegram.Token = env.Resolve(c.Telegram.Token)
 	}
-	if c.Discord != nil {
-		c.Discord.WebhookURL = env.Resolve(c.Discord.WebhookURL)
-	}
+	// if c.Discord != nil {
+	// 	c.Discord.WebhookURL = env.Resolve(c.Discord.WebhookURL)
+	// }
 }
 
 func (c *Config) Normalize() error {
@@ -160,11 +160,11 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate Discord config (optional)
-	if c.Discord != nil && c.Discord.WebhookURL != "" {
-		if !strings.HasPrefix(c.Discord.WebhookURL, "https://discord.com/api/webhooks/") {
-			return fmt.Errorf("invalid discord.webhook_url format")
-		}
-	}
+	// if c.Discord != nil && c.Discord.WebhookURL != "" {
+	// 	if !strings.HasPrefix(c.Discord.WebhookURL, "https://discord.com/api/webhooks/") {
+	// 		return fmt.Errorf("invalid discord.webhook_url format")
+	// 	}
+	// }
 
 	return nil
 }

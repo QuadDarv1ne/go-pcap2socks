@@ -29,7 +29,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
-	"github.com/QuadDarv1ne/go-pcap2socks/discord"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
@@ -37,7 +36,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
-	// "github.com/QuadDarv1ne/go-pcap2socks/telegram" // отключено
 	"github.com/QuadDarv1ne/go-pcap2socks/tlsutil"
 	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
@@ -247,107 +245,6 @@ func main() {
 		_arpMonitor = stats.NewARPMonitor(network, localIP)
 		_arpMonitor.Start(_statsStore)
 		slog.Info("ARP monitor started", "network", network.String())
-
-		// Register ARP change callbacks for Discord notifications
-		_arpMonitor.OnChange(func(change stats.DeviceChange) {
-			if _discordWebhook != nil {
-				if wh, ok := _discordWebhook.(*discord.WebhookClient); ok {
-					wh.SendDeviceNotification(change.Type, change.IP, change.MAC)
-				}
-			}
-			// if _telegramBot != nil && _telegramBot.IsEnabled() {
-			// 	emoji := "❌"
-			// 	if change.Type == "connected" {
-			// 		emoji = "✅"
-			// 	}
-			// 	_telegramBot.SendNotification(
-			// 		fmt.Sprintf("%s Устройство %s", emoji, change.Type),
-			// 		fmt.Sprintf("IP: %s\nMAC: %s", change.IP, change.MAC),
-			// 	)
-			// }
-		})
-	}
-
-	// Initialize Telegram bot if configured
-	// if config.Telegram != nil && config.Telegram.Enabled && config.Telegram.Token != "" {
-	// 	_telegramBot = telegram.NewBot(config.Telegram.Token, config.Telegram.ChatID)
-
-	// 	// Set up handlers with real data
-	// 	_telegramBot.SetStatusHandler(func() string {
-	// 		status := "🟢 Запущен"
-	// 		mode := _defaultProxy.Mode().String()
-	// 		if mode == "" || mode == "Direct" {
-	// 			status = "🔴 Остановлен"
-	// 		}
-	// 		total, upload, download, _ := _statsStore.GetTotalTraffic()
-	// 		return fmt.Sprintf("📊 *Статус go-pcap2socks*\n\n"+
-	// 			"Статус: %s\n"+
-	// 			"Режим: %s\n"+
-	// 			"Трафик: ↑ %s ↓ %s\n"+
-	// 			"Всего: %s\n"+
-	// 			"Устройств: %d",
-	// 			status,
-	// 			mode,
-	// 			formatBytes(upload),
-	// 			formatBytes(download),
-	// 			formatBytes(total),
-	// 			_statsStore.GetActiveDeviceCount())
-	// 	})
-
-	// 	_telegramBot.SetTrafficHandler(func() string {
-	// 		total, upload, download, packets := _statsStore.GetTotalTraffic()
-	// 		return fmt.Sprintf("📈 *Трафик*\n\n"+
-	// 			"Upload: %s\n"+
-	// 			"Download: %s\n"+
-	// 			"Total: %s\n"+
-	// 			"Packets: %d",
-	// 			formatBytes(upload),
-	// 			formatBytes(download),
-	// 			formatBytes(total),
-	// 			packets)
-	// 	})
-
-	// 	_telegramBot.SetDevicesHandler(func() string {
-	// 		devices := _statsStore.GetAllDevices()
-	// 		if len(devices) == 0 {
-	// 			return "📱 *Устройства*\n\nНет подключенных устройств"
-	// 		}
-
-	// 		msg := "📱 *Устройства*\n\n"
-	// 		for _, d := range devices {
-	// 			d.RLock()
-	// 			status := "🟢"
-	// 			if !d.Connected {
-	// 				status = "🔴"
-	// 			}
-	// 			msg += fmt.Sprintf("%s %s (%s)\n", status, d.IP, d.MAC)
-	// 			d.RUnlock()
-	// 		}
-	// 		return msg
-	// 	})
-
-	// 	_telegramBot.SetServiceHandlers(
-	// 		func() string {
-	// 			return "✅ Сервис запущен"
-	// 		},
-	// 		func() string {
-	// 			return "⏹ Сервис остановлен"
-	// 		},
-	// 	)
-
-	// 	_telegramBot.Start()
-	// 	slog.Info("Telegram bot initialized")
-
-	// 	// Start periodic reports (every 24 hours)
-	// 	_telegramBot.StartPeriodicReports(24 * time.Hour)
-	// 	slog.Info("Periodic Telegram reports scheduled (24h interval)")
-	// }
-
-	// Initialize Discord webhook if configured
-	if config.Discord != nil && config.Discord.WebhookURL != "" {
-		_discordWebhook = discord.NewWebhookClient(config.Discord.WebhookURL)
-		_discordWebhook.(*discord.WebhookClient).SendInfo("🚀 go-pcap2socks", "Бот запущен!")
-		slog.Info("Discord webhook initialized")
 	}
 
 	// Initialize hotkeys if enabled
@@ -922,12 +819,6 @@ var (
 	// _arpMonitor holds the ARP monitor for device discovery
 	_arpMonitor *stats.ARPMonitor
 
-	// _telegramBot holds the Telegram bot
-	// _telegramBot *telegram.Bot // отключено
-
-	// _discordWebhook holds the Discord webhook client
-	_discordWebhook interface{} // *discord.WebhookClient
-
 	// _hotkeyManager holds the hotkey manager
 	_hotkeyManager *hotkey.Manager
 
@@ -1017,11 +908,11 @@ func Stop() {
 		slog.Info("WebSocket real-time updates stopped")
 	}
 
-	// Stop Telegram bot
-	// if _telegramBot != nil {
-	// 	_telegramBot.Stop()
-	// 	slog.Info("Telegram bot stopped")
-	// }
+	// Stop API server
+	if _apiServer != nil {
+		_apiServer.Stop()
+		slog.Info("API server stopped")
+	}
 
 	// Stop stack (close device)
 	if _defaultStack != nil {

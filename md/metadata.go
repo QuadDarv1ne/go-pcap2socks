@@ -14,14 +14,26 @@ type Metadata struct {
 	SrcPort uint16  `json:"sourcePort"`
 	MidPort uint16  `json:"dialerPort"`
 	DstPort uint16  `json:"destinationPort"`
+
+	// Cached addresses to avoid repeated allocations
+	dstAddr string
+	srcAddr string
 }
 
+// DestinationAddress returns the destination address string
 func (m *Metadata) DestinationAddress() string {
-	return net.JoinHostPort(m.DstIP.String(), strconv.FormatUint(uint64(m.DstPort), 10))
+	if m.dstAddr == "" {
+		m.dstAddr = net.JoinHostPort(m.DstIP.String(), strconv.FormatUint(uint64(m.DstPort), 10))
+	}
+	return m.dstAddr
 }
 
+// SourceAddress returns the source address string
 func (m *Metadata) SourceAddress() string {
-	return net.JoinHostPort(m.SrcIP.String(), strconv.FormatUint(uint64(m.SrcPort), 10))
+	if m.srcAddr == "" {
+		m.srcAddr = net.JoinHostPort(m.SrcIP.String(), strconv.FormatUint(uint64(m.SrcPort), 10))
+	}
+	return m.srcAddr
 }
 
 func (m *Metadata) Addr() net.Addr {
@@ -63,4 +75,10 @@ func (a *Addr) Network() string {
 
 func (a *Addr) String() string {
 	return a.metadata.DestinationAddress()
+}
+
+// Reset clears cached addresses when IP/port fields change
+func (m *Metadata) Reset() {
+	m.dstAddr = ""
+	m.srcAddr = ""
 }

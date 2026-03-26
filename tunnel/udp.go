@@ -152,6 +152,7 @@ func HandleUDPConn(uc adapter.UDPConn) {
 	pc, err := proxy.DialUDP(metadata)
 	if err != nil {
 		session.cleanup()
+		uc.Close() // Close input connection to prevent leak
 		return
 	}
 	defer func() {
@@ -169,6 +170,7 @@ func HandleUDPConn(uc adapter.UDPConn) {
 	uc.Close()
 }
 
+//go:noinline
 func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 	defer wg.Done()
 

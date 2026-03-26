@@ -11,6 +11,7 @@ const (
 
 type Network uint8
 
+//go:inline
 func (n Network) String() string {
 	switch n {
 	case TCP:

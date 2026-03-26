@@ -336,16 +336,22 @@ func (s *Store) GetDeviceCount() int {
 func (s *Store) GetActiveDeviceCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	count := 0
 	for _, device := range s.devices {
 		device.mu.RLock()
-		if device.Connected {
-			count++
-		}
+		count += boolToInt(device.Connected)
 		device.mu.RUnlock()
 	}
 	return count
+}
+
+//go:inline
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Atomic counters for real-time tracking

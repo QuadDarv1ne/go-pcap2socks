@@ -168,6 +168,17 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/ws", s.rateLimitMiddleware(s.authMiddleware(s.handleWebSocket)))
 }
 
+// Stop gracefully stops the API server and releases resources
+func (s *Server) Stop() {
+	// Stop rate limiter cleanup goroutine
+	if s.rateLimiter != nil {
+		s.rateLimiter.stop()
+	}
+
+	// Stop WebSocket hub and real-time updates
+	s.StopRealTimeUpdates()
+}
+
 // handleMetrics exports Prometheus format metrics
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if s.metrics == nil {

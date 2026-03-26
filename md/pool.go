@@ -25,12 +25,15 @@ func GetMetadata() *Metadata {
 	m := metadataPool.Get().(*Metadata)
 	// Reset fields without allocation
 	m.Network = TCP
-	m.SrcIP = m.SrcIP[:0]
-	m.MidIP = m.MidIP[:0]
-	m.DstIP = m.DstIP[:0]
+	m.SrcIP = nil
+	m.MidIP = nil
+	m.DstIP = nil
 	m.SrcPort = 0
 	m.MidPort = 0
 	m.DstPort = 0
+	// Reset cached addresses
+	m.srcAddr = ""
+	m.dstAddr = ""
 	return m
 }
 
@@ -40,15 +43,14 @@ func PutMetadata(m *Metadata) {
 		return
 	}
 	// Clear IP slices and return to pool
-	if m.SrcIP != nil {
-		m.SrcIP = m.SrcIP[:0]
-	}
-	if m.MidIP != nil {
-		m.MidIP = m.MidIP[:0]
-	}
-	if m.DstIP != nil {
-		m.DstIP = m.DstIP[:0]
-	}
+	m.SrcIP = nil
+	m.MidIP = nil
+	m.DstIP = nil
+	m.SrcPort = 0
+	m.MidPort = 0
+	m.DstPort = 0
+	m.srcAddr = ""
+	m.dstAddr = ""
 	metadataPool.Put(m)
 }
 

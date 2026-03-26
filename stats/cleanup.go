@@ -22,6 +22,7 @@ func (s *Store) cleanupLoop() {
 }
 
 // CleanupInactive removes devices that haven't been seen for longer than inactivityTimeout
+//go:noinline
 func (s *Store) CleanupInactive() int {
 	if s.inactivityTimeout == 0 {
 		return 0
@@ -34,9 +35,7 @@ func (s *Store) CleanupInactive() int {
 
 	removed := 0
 	for ip, device := range s.devices {
-		// Load LastSeen atomically if possible, otherwise use mutex
-		lastSeen := device.LastSeen
-		if lastSeen.Before(cutoff) {
+		if device.LastSeen.Before(cutoff) {
 			delete(s.devices, ip)
 			removed++
 		}

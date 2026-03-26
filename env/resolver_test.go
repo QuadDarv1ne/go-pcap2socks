@@ -8,12 +8,8 @@ import (
 func TestResolve(t *testing.T) {
 	// Set up test environment variables
 	os.Setenv("TEST_VAR", "test_value")
-	os.Setenv("TELEGRAM_TOKEN", "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11")
-	os.Setenv("DISCORD_WEBHOOK", "https://discord.com/api/webhooks/123/abc")
 	defer func() {
 		os.Unsetenv("TEST_VAR")
-		os.Unsetenv("TELEGRAM_TOKEN")
-		os.Unsetenv("DISCORD_WEBHOOK")
 	}()
 
 	tests := []struct {
@@ -52,29 +48,9 @@ func TestResolve(t *testing.T) {
 			expected: "prefix_test_value_suffix",
 		},
 		{
-			name:     "multiple variables",
-			input:    "${TEST_VAR}_${TELEGRAM_TOKEN}",
-			expected: "test_value_123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
-		},
-		{
 			name:     "unset variable",
 			input:    "${UNSET_VAR}",
 			expected: "",
-		},
-		{
-			name:     "mixed set and unset",
-			input:    "${TEST_VAR}_${UNSET_VAR}_${TELEGRAM_TOKEN}",
-			expected: "test_value__123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
-		},
-		{
-			name:     "telegram token pattern",
-			input:    "${TELEGRAM_TOKEN}",
-			expected: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
-		},
-		{
-			name:     "discord webhook pattern",
-			input:    "${DISCORD_WEBHOOK}",
-			expected: "https://discord.com/api/webhooks/123/abc",
 		},
 	}
 

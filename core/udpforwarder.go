@@ -145,13 +145,15 @@ type UDPForwarder struct {
 	// Session tracking
 	sessionCount atomic.Int32
 	droppedCount atomic.Uint64
+	udpTimeout   int64 // UDP session timeout in seconds
 }
 
 func NewUDPForwarder(ctx context.Context, stack *stack.Stack, handler Handler, udpTimeout int64) *UDPForwarder {
 	return &UDPForwarder{
-		ctx:    ctx,
-		stack:  stack,
-		udpNat: udpnat.New[netip.AddrPort](udpTimeout, handler),
+		ctx:        ctx,
+		stack:      stack,
+		udpNat:     udpnat.New[netip.AddrPort](udpTimeout, handler),
+		udpTimeout: udpTimeout,
 	}
 }
 
@@ -198,11 +200,29 @@ func (f *UDPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.Pac
 		f.newUDPConn,
 	)
 
-	f.sessionCount.Add(1)
 	return true
 }
 
+// DecrSessionCount decrements the session counter (called when UDP session ends)
+func (f *UDPForwarder) DecrSessionCount() {
+	f.sessionCount.Add(-1)
+}
+
 func (f *UDPForwarder) newUDPConn(natConn N.PacketConn) N.PacketWriter {
+	// Increment session counter only when new connection is created
+	f.sessionCount.Add(1)
+
+	// Decrement counter after UDP session timeout when connection expires
+	// This matches the UDP session timeout used by udpnat.Service
+	go func() {
+		select {
+		case <-time.After(time.Duration(f.udpTimeout) * time.Second):
+			f.sessionCount.Add(-1)
+		case <-f.ctx.Done():
+			f.sessionCount.Add(-1)
+		}
+	}()
+
 	return &UDPBackWriter{
 		stack:         f.stack,
 		source:        f.cacheID.RemoteAddress,
@@ -217,6 +237,8 @@ type UDPBackWriter struct {
 	source        tcpip.Address
 	sourcePort    uint16
 	sourceNetwork tcpip.NetworkProtocolNumber
+	onClose       func()
+	closed        atomic.Bool
 }
 
 func (w *UDPBackWriter) WritePacket(packetBuffer *buf.Buffer, destination M.Socksaddr) error {
