@@ -5,6 +5,7 @@
 *.exe
 *.exe~
 *.dll
+*.sys
 *.so
 *.dylib
 
@@ -47,5 +48,4 @@ CLAUDE.md
 /windivert/*.zip
 
 # But keep Go source files in windivert/
-!/windivert/*.goWinDivert64.sys  
-WinDivert64.sys  
+!/windivert/*.go
