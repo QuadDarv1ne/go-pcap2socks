@@ -1572,9 +1572,83 @@ dev:  87d6e98 feat: Smart DHCP with static IP by device type ✅
 
 ---
 
-**Последнее обновление**: 26 марта 2026 г. (17:00)
-**Версия**: v3.19.17 (dev: 87d6e98, main: 87d6e98)
-**Статус**: ✅ проект стабилен, dev отправлен, требуется merge в main
+## ✅ Завершено (26.03.2026 17:45) - v3.19.18 SYSTEM TUNER И PROXY SELECTOR
+
+### System Tuner - Авто-оптимизация буферов
+- [x] auto/tuner.go - улучшена структура SystemTuner ✅
+  - **Кэширование config**: AutoTune() вызывается один раз при создании
+  - **GetConfig()**: доступ к кэшированной конфигурации
+  - **GetRecommendation()**: человекочитаемая рекомендация
+  - **MTU**: константа 1486 для всех платформ
+
+- [x] auto/tuner_test.go - исправлен тест ✅
+  - **TestCalculateOptimalMTU**: проверка через AutoTune()
+  - **Удалена функция**: calculateOptimalMTU (теперь константа)
+
+### Proxy Selector - Авто-выбор прокси
+- [x] auto/proxy_selector.go - новый пакет для авто-выбора ✅
+  - **ProxyMode**: Direct, Socks5, HTTP3, WireGuard
+  - **SelectBestProxy**: выбор по latency и speed
+  - **testProxySpeed**: тестирование скорости подключений
+  - **evaluateProxy**: оценка confidence (0.0-1.0)
+  - **ApplyRecommendation**: применение рекомендации
+
+- [x] Интеграция в main.go ✅
+  - **_systemTuner**: глобальный SystemTuner
+  - **_proxySelector**: глобальный ProxySelector
+  - **GetSystemTuner()**: доступ из других пакетов
+  - **GetProxySelector()**: доступ из других пакетов
+
+### Npcap buffer optimization
+- [x] core/device/pcap.go - поддержка env переменной ✅
+  - **PCAP_BUFFER_SIZE**: настройка буфера в MB
+  - **Default**: 4MB (оптимально для большинства)
+  - **Формат**: `set PCAP_BUFFER_SIZE=8` (8MB)
+
+### Итоговый эффект
+- **Авто-подбор буферов**: TCP/UDP на основе памяти и сети
+- **Авто-выбор прокси**: HTTP3 → SOCKS5 → WireGuard по latency/speed
+- **GC pressure**: low/medium/high на основе доступной памяти
+- **Max connections**: CPU × 100 (масштабирование)
+- **Connection timeout**: 60-120 сек (на основе CPU)
+
+### Статус проекта
+- Компиляция: ✅ без ошибок
+- Тесты: ✅ все проходят (auto: 60+ тестов с -race)
+- Ветка: dev (a4bbbb4)
+- Готовность: ✅ готов к merge в main
+
+---
+
+**Последнее обновление**: 26 марта 2026 г. (17:45)
+**Версия**: v3.19.18 (dev: a4bbbb4)
+**Статус**: ✅ проект стабилен, готов к merge в main
+
+### Статус веток
+```
+main: 87d6e98 feat: Smart DHCP with static IP by device type ✅
+dev:  a4bbbb4 fix: исправить тест calculateOptimalMTU после рефакторинга ✅
+```
+
+### Отправлено
+- 🔄 origin/dev (требуется push)
+- 🔄 origin/main (требуется merge + push)
+
+### Изменения v3.19.18
+- ✅ auto/tuner.go - улучшена структура SystemTuner с кэшированием config
+- ✅ auto/proxy_selector.go - новый пакет для авто-выбора прокси (HTTP3/SOCKS5/WireGuard)
+- ✅ main.go - интеграция SystemTuner и ProxySelector при запуске
+- ✅ core/device/pcap.go - поддержка PCAP_BUFFER_SIZE env для настройки буфера
+- ✅ auto/tuner_test.go - исправлен тест calculateOptimalMTU
+
+### Производительность v3.19.18
+- **Авто-подбор буферов**: TCP/UDP на основе памяти и сети
+- **Авто-выбор прокси**: HTTP3 → SOCKS5 → WireGuard по latency/speed
+- **GC pressure**: low/medium/high на основе доступной памяти
+- **MTU**: 1486 (оптимально для Ethernet)
+- **Max connections**: CPU × 100 (масштабирование)
+
+---
 
 ### Правила проекта
 - Не создавать документацию без запроса — только код и исправления
