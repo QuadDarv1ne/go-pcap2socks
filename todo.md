@@ -1,5 +1,39 @@
 # go-pcap2socks TODO
 
+## ✅ Завершено (26.03.2026 16:00) - v3.19.16 AUTOMATIC ENGINE FAILOVER
+
+### Engine Failover - Авто-переключение при ошибках
+- [x] Создан пакет auto/engine_failover.go ✅
+  - **Health monitoring**: Отслеживание здоровья движков
+  - **RecordSuccess/RecordError**: Запись результатов операций
+  - **Auto-switch**: Автоматическое переключение при 3+ ошибках
+  - **Min interval**: 30 сек между переключениями (защита от flapping)
+  - **Priority**: WinDivert > Npcap > Native
+
+- [x] Health Status tracking ✅
+  - **IsHealthy**: Статус здоровья
+  - **ErrorCount**: Счётчик ошибок (сброс при успехе)
+  - **SuccessCount**: Счётчик успехов
+  - **Latency**: Задержка операций
+  - **LastCheck**: Время последней проверки
+
+- [x] Callback поддержка ✅
+  - **SetOnSwitch**: Callback при переключении движка
+  - **GetEngineStats**: Статистика для API/мониторинга
+
+- [x] Тесты для engine_failover ✅
+  - **11 тестов**: Все проходят ✅
+  - **ConcurrentAccess**: Thread-safe проверка
+  - **3 бенчмарка**: Производительность
+
+### Итоговый эффект
+- **Надёжность**: Авто-восстановление при сбоях движка
+- **Без прерываний**: Плавное переключение без остановки
+- **Monitoring**: Статистика для диагностики
+- **Защита**: Min interval предотвращает rapid switching
+
+---
+
 ## ✅ Завершено (26.03.2026 15:00) - v3.19.15 ДИНАМИЧЕСКАЯ ОПТИМИЗАЦИЯ ПАРАМЕТРОВ
 
 ### System Tuner - Авто-подбор параметров
@@ -1467,33 +1501,32 @@ dev:  33387e8 gitignore: добавить WinDivert64.sys и WinDivert.dll ✅
 
 ---
 
-## ✅ Завершено (26.03.2026 15:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
+## ✅ Завершено (26.03.2026 16:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
 
 ### Выполненные задачи
-- [x] Merge dev → main (v3.19.15 изменения) ✅
+- [x] Merge dev → main (v3.19.16 изменения) ✅
 - [x] Проверка компиляции после merge ✅
 - [x] Отправка origin/dev ✅
 
 ### Статус веток
 ```
-main: 83c9322 feat: dynamic system tuning (buffers, timeouts, MTU) ✅
-dev:  83c9322 feat: dynamic system tuning (buffers, timeouts, MTU) ✅
+main: 509f99c feat: engine failover with health monitoring ✅
+dev:  509f99c feat: engine failover with health monitoring ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev (83c9322)
+- ✅ origin/dev (509f99c)
 - 🔄 origin/main (требуется merge)
 
-### Изменения v3.19.15
-- ✅ auto/tuner.go - динамическая оптимизация параметров
-- ✅ auto/tuner_windows.go - Windows API для памяти
-- ✅ auto/tuner_unix.go - sysconf для Linux/macOS
-- ✅ auto/tuner_test.go - 11 тестов, все проходят
+### Изменения v3.19.16
+- ✅ auto/engine_failover.go - failover с health monitoring
+- ✅ auto/engine_failover_test.go - 11 тестов, все проходят
+- ✅ Интеграция с engine_selector
 
 ---
 
-**Последнее обновление**: 26 марта 2026 г. (15:00)
-**Версия**: v3.19.15 (dev: 83c9322, main: 83c9322)
+**Последнее обновление**: 26 марта 2026 г. (16:00)
+**Версия**: v3.19.16 (dev: 509f99c, main: 509f99c)
 **Статус**: ✅ проект стабилен, dev отправлен, требуется merge в main
 
 ### Правила проекта
