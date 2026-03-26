@@ -1,4 +1,4 @@
-# go-pcap2socks TODO
+﻿# go-pcap2socks TODO
 
 ## ✅ Завершено (26.03.2026 17:00) - v3.19.17 SMART DHCP — СТАТИЧЕСКИЕ IP
 
@@ -1526,135 +1526,43 @@ Buffer GetPut:             ~50 ns/op     24 B/op    1 allocs/op  ✅ (целев
 
 ---
 
-**Последнее обновление**: 26 марта 2026 г. (12:00)
-**Версия**: v3.19.12 (dev: 33387e8, main: ffcdf97)
-**Статус**: ✅ проект стабилен, требуется синхронизация dev → main
+**Последнее обновление**: 26 марта 2026 г. (20:00)
+**Версия**: v3.19.19 (dev/main: 1d6e472)
+**Статус**: ✅ проект стабилен, все тесты проходят, ветки синхронизированы
 
 ### Статус веток
 ```
-main: ffcdf97 feat: Simple DHCP server (Npcap only) ✅
-dev:  33387e8 gitignore: добавить WinDivert64.sys и WinDivert.dll ✅
+main: 1d6e472 perf: оптимизация использования памяти и CPU ✅
+dev:  1d6e472 perf: оптимизация использования памяти и CPU ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev
-- 🔄 origin/main (требуется merge dev → main)
+- ✅ origin/dev (1d6e472)
+- ✅ origin/main (1d6e472)
 
-### Правила проекта
-- Не создавать документацию без запроса — только код и исправления
-- Качество важнее количества
-- Продолжать улучшение в dev, потом проверка и отправка в main
-- Все изменения синхронизировать (dev → main → origin)
+### Актуальные компоненты v3.19.19
+- ✅ Smart DHCP Manager (auto/smart_dhcp.go) - статические IP по типам устройств
+- ✅ System Tuner (auto/tuner.go) - авто-подбор буферов и параметров
+- ✅ Proxy Selector (auto/proxy_selector.go) - авто-выбор прокси (HTTP3/SOCKS5/WireGuard)
+- ✅ Engine Selector (auto/engine_selector.go) - авто-выбор движка (WinDivert/Npcap/Native)
+- ✅ Engine Failover (auto/engine_failover.go) - переключение при ошибках
+- ✅ Device Detector (auto/device_detector.go) - определение устройств по MAC (OUI)
 
----
-
-## ✅ Завершено (26.03.2026 17:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
-
-### Выполненные задачи
-- [x] Merge dev → main (v3.19.17 изменения) ✅
-- [x] Проверка компиляции после merge ✅
-- [x] Отправка origin/dev ✅
-
-### Статус веток
+### Метрики производительности (актуальные 26.03.2026 20:00):
 ```
-main: 87d6e98 feat: Smart DHCP with static IP by device type ✅
-dev:  87d6e98 feat: Smart DHCP with static IP by device type ✅
+Router Match:         ~8.5 ns/op    0 B/op    0 allocs/op ✅
+Router DialContext:   ~167 ns/op   40 B/op    2 allocs/op ✅
+Router Cache Hit:     ~245 ns/op   40 B/op    2 allocs/op ✅
+Buffer GetPut:        ~50 ns/op    24 B/op    1 allocs/op ✅
 ```
-
-### Отправлено
-- ✅ origin/dev (87d6e98)
-- 🔄 origin/main (требуется merge)
-
-### Изменения v3.19.17
-- ✅ auto/smart_dhcp.go - Smart DHCP manager
-- ✅ auto/smart_dhcp_test.go - 16 тестов, все проходят
-- ✅ IP ranges по типам устройств (PS4/Xbox/Switch/PC/Mobile/IoT)
-
----
-
-## ✅ Завершено (26.03.2026 17:45) - v3.19.18 SYSTEM TUNER И PROXY SELECTOR
-
-### System Tuner - Авто-оптимизация буферов
-- [x] auto/tuner.go - улучшена структура SystemTuner ✅
-  - **Кэширование config**: AutoTune() вызывается один раз при создании
-  - **GetConfig()**: доступ к кэшированной конфигурации
-  - **GetRecommendation()**: человекочитаемая рекомендация
-  - **MTU**: константа 1486 для всех платформ
-
-- [x] auto/tuner_test.go - исправлен тест ✅
-  - **TestCalculateOptimalMTU**: проверка через AutoTune()
-  - **Удалена функция**: calculateOptimalMTU (теперь константа)
-
-### Proxy Selector - Авто-выбор прокси
-- [x] auto/proxy_selector.go - новый пакет для авто-выбора ✅
-  - **ProxyMode**: Direct, Socks5, HTTP3, WireGuard
-  - **SelectBestProxy**: выбор по latency и speed
-  - **testProxySpeed**: тестирование скорости подключений
-  - **evaluateProxy**: оценка confidence (0.0-1.0)
-  - **ApplyRecommendation**: применение рекомендации
-
-- [x] Интеграция в main.go ✅
-  - **_systemTuner**: глобальный SystemTuner
-  - **_proxySelector**: глобальный ProxySelector
-  - **GetSystemTuner()**: доступ из других пакетов
-  - **GetProxySelector()**: доступ из других пакетов
-
-### Npcap buffer optimization
-- [x] core/device/pcap.go - поддержка env переменной ✅
-  - **PCAP_BUFFER_SIZE**: настройка буфера в MB
-  - **Default**: 4MB (оптимально для большинства)
-  - **Формат**: `set PCAP_BUFFER_SIZE=8` (8MB)
-
-### Итоговый эффект
-- **Авто-подбор буферов**: TCP/UDP на основе памяти и сети
-- **Авто-выбор прокси**: HTTP3 → SOCKS5 → WireGuard по latency/speed
-- **GC pressure**: low/medium/high на основе доступной памяти
-- **Max connections**: CPU × 100 (масштабирование)
-- **Connection timeout**: 60-120 сек (на основе CPU)
 
 ### Статус проекта
-- Компиляция: ✅ без ошибок
-- Тесты: ✅ все проходят (auto: 60+ тестов с -race)
-- Ветка: dev (a4bbbb4)
-- Готовность: ✅ готов к merge в main
-
----
-
-**Последнее обновление**: 26 марта 2026 г. (17:45)
-**Версия**: v3.19.18 (dev: a4bbbb4)
-**Статус**: ✅ проект стабилен, готов к merge в main
-
-### Статус веток
-```
-main: 87d6e98 feat: Smart DHCP with static IP by device type ✅
-dev:  a4bbbb4 fix: исправить тест calculateOptimalMTU после рефакторинга ✅
-```
-
-### Отправлено
-- 🔄 origin/dev (требуется push)
-- 🔄 origin/main (требуется merge + push)
-
-### Изменения v3.19.18
-- ✅ auto/tuner.go - улучшена структура SystemTuner с кэшированием config
-- ✅ auto/proxy_selector.go - новый пакет для авто-выбора прокси (HTTP3/SOCKS5/WireGuard)
-- ✅ main.go - интеграция SystemTuner и ProxySelector при запуске
-- ✅ core/device/pcap.go - поддержка PCAP_BUFFER_SIZE env для настройки буфера
-- ✅ auto/tuner_test.go - исправлен тест calculateOptimalMTU
-
-### Производительность v3.19.18
-- **Авто-подбор буферов**: TCP/UDP на основе памяти и сети
-- **Авто-выбор прокси**: HTTP3 → SOCKS5 → WireGuard по latency/speed
-- **GC pressure**: low/medium/high на основе доступной памяти
-- **MTU**: 1486 (оптимально для Ethernet)
-- **Max connections**: CPU × 100 (масштабирование)
-
----
-
-### Правила проекта
-- Не создавать документацию без запроса — только код и исправления
-- Качество важнее количества
-- Продолжать улучшение в dev, потом проверка и отправка в main
-- Все изменения синхронизировать (dev → main → origin)
+- Компиляция: ✅ без ошибок (17.4 MB)
+- Тесты: ✅ все проходят (auto: 60+, proxy: 50+, stats: 10, cfg: 8)
+- Race detector: ✅ все тесты проходят
+- Размер бинарника: 17.4 MB (в пределах нормы <25MB)
+- Ветка: main/dev (1d6e472)
+- Готовность: ✅ проект стабилен, готов к использованию
 
 ---
 
@@ -1674,31 +1582,38 @@ dev:  a4bbbb4 fix: исправить тест calculateOptimalMTU после р
 ```
 go test ./...  # telegram/discord тесты удалены ✅
 ```
-""  
-"---"  
-""  
-"## ? �����襭� (26.03.2026) - ������� DHCP ������ (Npcap Only)"  
-""  
-"### ���������"  
-"- [x] npcap_dhcp/simple_server.go - ���⮩ DHCP �ࢥ� �� Npcap ?"  
-"- [x] ��⮬���᪠� �뤠� IP ���ன�⢠� (PS4 ���⢥ত���) ?"  
-"- [x] ��ࠡ�⪠ ����� � ���-��१���᪮� ?"  
-"- [x] Rate limiting (500ms �� MAC) ?"  
-"- [x] ���� leases (MAC  IP  ExpiresAt) ?"  
-""  
-"### ���⢥ত񭭠� ᮢ���⨬����"  
-"- [x] PS4 (78:c8:81:4e:55:15) - IP 192.168.137.100 ��⮬���᪨ ?"  
-"- [x] PS5 - ��������� (�� �� MAC OUI) ?"  
-"- [x] Xbox/Switch/������ - ��������� (L2 Ethernet) ?"  
-""  
-"### �஡����"  
-"- [ ] �ਫ������ ������ �१ 10-60 ᥪ㭤"  
-"  - **�������**: gopacket packetSource.Packets() ����� ����뢠����"  
-"  - **��襭��**: �ᯮ�짮���� pcap.NextPacket() ����� channels"  
-""  
-"### �����"  
-"- ���������: ? ��� �訡��"  
-"- ��⪠: main (ffcdf97), dev (������� merge)"  
-"- ��ࠢ����: ? origin/main"  
-"- ��⮢�����: ?? DHCP ࠡ�⠥�, �� ���⠡����"  
-"" 
+
+---
+
+## ✅ Завершено (26.03.2026 12:00) - v3.19.12 Simple DHCP Server (Npcap Only)
+
+### Реализация
+- [x] npcap_dhcp/simple_server.go - простой DHCP сервер для Npcap ✅
+  - **Выделение IP**: Динамическое выделение IP из пула
+  - **Поддержка L2**: Ethernet пакеты через Npcap (WinDivert не поддерживает)
+  - **Rate limiting**: 500ms между запросами на MAC
+  - **Leases**: Хранение (MAC → IP → ExpiresAt)
+
+### Статус интеграции
+- [x] PS4 (78:c8:81:4e:55:15) - IP 192.168.137.100 выделен ✅
+- [ ] PS5 - определение по MAC OUI (требуется доработка)
+- [ ] Xbox/Switch/остальные - L2 Ethernet (требуется доработка)
+
+### Известные ограничения
+- [ ] Обработка пакетов 10-60 секунд
+  - **Причина**: gopacket packetSource.Packets() может блокировать
+  - **Решение**: Использовать pcap.NextPacket() с channels
+
+### Статус
+- Компиляция: ✅ без ошибок
+- Ветка: main (ffcdf97), dev (требуется merge)
+- Отправлено: 🔄 origin/main
+- Готовность: ⚠️ DHCP работает, но требует доработки
+
+---
+
+### Правила проекта
+- Не создавать документацию без запроса — только код и исправления
+- Качество важнее количества
+- Продолжать улучшение в dev, потом проверка и отправка в main
+- Все изменения синхронизировать (dev → main → origin)
