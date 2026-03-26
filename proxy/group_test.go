@@ -281,8 +281,8 @@ func TestProxyGroup_Failover_OnConnectionFailure(t *testing.T) {
 	group := NewProxyGroup(cfg)
 	defer group.Stop()
 
-	// Wait for initial health check to complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for initial health check to complete (has 0-1000ms jitter)
+	time.Sleep(1200 * time.Millisecond)
 
 	metadata := &M.Metadata{
 		Network: M.TCP,
@@ -340,8 +340,9 @@ func TestProxyGroup_EmptyGroup(t *testing.T) {
 }
 
 func TestProxyGroup_GetHealthStatus(t *testing.T) {
-	proxy1 := &mockProxyWithHealth{addr: "proxy1://"}
-	proxy2 := &mockProxyWithHealth{addr: "proxy2://"}
+	healthOK := true
+	proxy1 := &mockProxyWithHealth{addr: "proxy1://", healthCheckOK: &healthOK}
+	proxy2 := &mockProxyWithHealth{addr: "proxy2://", healthCheckOK: &healthOK}
 
 	proxies := []Proxy{proxy1, proxy2}
 
@@ -356,8 +357,8 @@ func TestProxyGroup_GetHealthStatus(t *testing.T) {
 	group := NewProxyGroup(cfg)
 	defer group.Stop()
 
-	// Wait for health check
-	time.Sleep(200 * time.Millisecond)
+	// Wait for health check (initial check has 0-1000ms jitter)
+	time.Sleep(1200 * time.Millisecond)
 
 	status := group.GetHealthStatus()
 	if len(status) != 2 {
