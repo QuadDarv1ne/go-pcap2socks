@@ -5,6 +5,42 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.19.12+] - 2026-03-26
+
+### Исправлено
+- **notify/notify.go** - исправлены Toast уведомления (PowerShell XML errors)
+- **main.go** - убраны лишние уведомления от команд службы
+- **main.go** - улучшена обработка ошибок инициализации
+- **main.go** - добавлен graceful shutdown с cleanup
+- **main.go** - добавлена защита от panic в критических секциях
+- **npcap_dhcp/simple_server.go** - улучшена обработка ошибок DHCP
+- **npcap_dhcp/simple_server.go** - добавлено авто-восстановление packetLoop
+- **npcap_dhcp/simple_server.go** - защита от flood DHCP запросов
+- **npcap_dhcp/simple_server.go** - исправлено чтение DHCP опций
+- **stats/store.go** - добавлен метод SetHostname для имён хостов
+
+### Добавлено
+- **npcap_dhcp/simple_server.go** - чтение всех DHCP опций (12, 53, 55, 60, 61)
+- **npcap_dhcp/simple_server.go** - сохранение Hostname, VendorClass, ParameterList в Lease
+- **npcap_dhcp/simple_server.go** - логирование DHCP запросов с именами хостов
+- **main.go** - интеграция с API для отображения имён хостов
+- **stats/store.go** - метод SetHostname для обновления имён устройств
+- **run.bat** - улучшенный скрипт запуска с проверками
+- **build-clean.bat** - скрипт чистой сборки
+- **README_FINAL.md** - полная документация
+
+### Изменено
+- **npcap_dhcp/simple_server.go** - улучшена структура Lease (добавлены поля)
+- **npcap_dhcp/simple_server.go** - улучшен packetLoop с восстановлением при ошибках
+- **main.go** - улучшено логирование при запуске
+- **config.json** - обновлены настройки для PS4
+
+### Удалено
+- **main.go** - лишние Toast уведомления от команд службы
+- **main.go** - неиспользуемые импорты
+
+---
+
 ## [3.19.2] - 2026-03-24
 
 ### Исправлено

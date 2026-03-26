@@ -31,6 +31,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
+	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
@@ -39,7 +40,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/tlsutil"
-	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
@@ -198,6 +198,25 @@ func main() {
 
 	// Log startup with admin check passed
 	slog.Info("Running with administrator privileges")
+	slog.Info("Starting go-pcap2socks", "version", "3.19.12+", "pid", os.Getpid())
+
+	// Setup deferred recovery for graceful shutdown
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Critical error, shutting down", "error", r)
+			// Perform cleanup
+			if _httpServer != nil {
+				_httpServer.Shutdown(context.Background())
+			}
+			if _arpMonitor != nil {
+				_arpMonitor.Stop()
+			}
+			if asyncHandler != nil {
+				asyncHandler.Flush()
+			}
+			os.Exit(1)
+		}
+	}()
 
 	// Setup logging - check SLOG_LEVEL env var
 	logLevel := slog.LevelInfo // Default to info
@@ -455,6 +474,26 @@ func main() {
 						"ip":         lease.IP.String(),
 						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
 					})
+				}
+			}
+
+			// Check if it's simple DHCP server (npcap_dhcp)
+			if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+				dhcpLeases := simpleDHCP.GetLeases()
+				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+				for mac, lease := range dhcpLeases {
+					leaseMap := map[string]interface{}{
+						"mac":        mac,
+						"ip":         lease.IP.String(),
+						"hostname":   lease.Hostname,
+						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+					}
+					leases = append(leases, leaseMap)
+					
+					// Update hostname in stats store
+					if _statsStore != nil && lease.Hostname != "" {
+						_statsStore.SetHostname(mac, lease.Hostname)
+					}
 				}
 			}
 
@@ -1019,39 +1058,20 @@ func Stop() {
 		slog.Info("UPnP manager stopped")
 	}
 
-	// Stop tunnel processor
-	tunnel.Stop()
-	slog.Info("Tunnel processor stopped")
-
 	// Stop DHCP server
 	if _dhcpServer != nil {
 		if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
 			stopper.Stop()
+			slog.Info("DHCP server stopped")
 		}
-		slog.Info("DHCP server stopped")
 	}
 
-	// Stop Smart DHCP manager
-	if _smartDHCP != nil {
-		slog.Info("Smart DHCP manager stopped",
-			"devices", _smartDHCP.GetDeviceCount())
-	}
-
-	// Stop async logger
+	// Flush async logger
 	if asyncHandler != nil {
 		asyncHandler.Flush()
-		if err := asyncHandler.Stop(); err != nil {
-			// Logger stop error - ignore in shutdown
-		}
-		if dropped := asyncHandler.GetDroppedCount(); dropped > 0 {
-			// Log final stats before exit
-			fmt.Fprintf(os.Stderr, "Async logger stopped, dropped: %d records\n", dropped)
-		}
 	}
 
-	// Signal shutdown complete
-	close(_shutdownChan)
-	slog.Info("Service stopped gracefully")
+	slog.Info("Cleanup completed, exiting")
 }
 
 func findInterface(cfgIfce string, localizer *i18n.Localizer) (net.Interface, error) {
@@ -1733,10 +1753,8 @@ func discoverUPnP() {
 func installService() {
 	if err := service.Install(); err != nil {
 		slog.Error("install service error", slog.Any("err", err))
-		notify.Show("Ошибка", "Не удалось установить сервис: "+err.Error(), notify.NotifyError)
 	} else {
 		slog.Info("Service installed successfully")
-		notify.Show("Успех", "Сервис установлен", notify.NotifySuccess)
 	}
 }
 
@@ -1744,10 +1762,8 @@ func installService() {
 func uninstallService() {
 	if err := service.Uninstall(); err != nil {
 		slog.Error("uninstall service error", slog.Any("err", err))
-		notify.Show("Ошибка", "Не удалось удалить сервис: "+err.Error(), notify.NotifyError)
 	} else {
 		slog.Info("Service uninstalled successfully")
-		notify.Show("Успех", "Сервис удален", notify.NotifySuccess)
 	}
 }
 
@@ -1755,10 +1771,8 @@ func uninstallService() {
 func startService() {
 	if err := service.Start(); err != nil {
 		slog.Error("start service error", slog.Any("err", err))
-		notify.Show("Ошибка", "Не удалось запустить сервис: "+err.Error(), notify.NotifyError)
 	} else {
 		slog.Info("Service started")
-		notify.Show("Успех", "Сервис запущен", notify.NotifySuccess)
 	}
 }
 
@@ -1766,10 +1780,8 @@ func startService() {
 func stopService() {
 	if err := service.Stop(); err != nil {
 		slog.Error("stop service error", slog.Any("err", err))
-		notify.Show("Ошибка", "Не удалось остановить сервис: "+err.Error(), notify.NotifyError)
 	} else {
 		slog.Info("Service stopped")
-		notify.Show("Успех", "Сервис остановлен", notify.NotifySuccess)
 	}
 }
 

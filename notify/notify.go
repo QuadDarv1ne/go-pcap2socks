@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -62,32 +63,52 @@ func logNotification(title, message, notifyType string) {
 
 func showToastNotification(title, message, notifyType string) {
 	// Используем PowerShell для показа toast уведомления
+	// Экранируем специальные XML символы
+	titleEsc := escapeXML(title)
+	messageEsc := escapeXML(message)
+	
 	script := `
+param($title, $message)
+
+try {
 	[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 	[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-	
+
 	$template = @"
-	<toast>
-		<visual>
-			<binding template="ToastText02">
-				<text id="1">{0}</text>
-				<text id="2">{1}</text>
-			</binding>
-		</visual>
-	</toast>
+<toast>
+	<visual>
+		<binding template="ToastText02">
+			<text id="1">$title</text>
+			<text id="2">$message</text>
+		</binding>
+	</visual>
+</toast>
 "@
-	
+
 	$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-	$xml.LoadXml($template -f $args[0], $args[1])
-	
+	$xml.LoadXml($template)
+
 	$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 	[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("go-pcap2socks").Show($toast)
+} catch {
+	# Игнорируем ошибки toast уведомлений
+}
 	`
 
-	cmd := exec.Command("powershell", "-Command", script, title, message)
+	cmd := exec.Command("powershell", "-Command", script, "-", titleEsc, messageEsc)
+	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run() // Игнорируем ошибки, если PowerShell недоступен
+}
+
+func escapeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&apos;")
+	return s
 }
 
 // ClearHistory очищает историю уведомлений

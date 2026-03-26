@@ -193,6 +193,16 @@ func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
 	}
 }
 
+// RecordTrafficWithHostname records traffic and updates hostname if available
+func (s *Store) RecordTrafficWithHostname(ip, mac, hostname string, bytes uint64, isUpload bool) {
+	// Update hostname if provided
+	if hostname != "" {
+		s.SetHostname(mac, hostname)
+	}
+	// Record traffic
+	s.RecordTraffic(ip, mac, bytes, isUpload)
+}
+
 // UpdateHeartbeat updates the last seen time for a device
 func (s *Store) UpdateHeartbeat(ip, mac string) {
 	s.mu.RLock()
@@ -228,6 +238,29 @@ func (s *Store) SetDisconnected(ip string) {
 		device.Connected = false
 		device.mu.Unlock()
 	}
+}
+
+// SetHostname sets the hostname for a device identified by MAC address
+func (s *Store) SetHostname(mac, hostname string) {
+	if hostname == "" {
+		return
+	}
+	
+	s.mu.RLock()
+	for _, device := range s.devices {
+		device.RLock()
+		match := device.MAC == mac
+		device.RUnlock()
+		
+		if match {
+			device.mu.Lock()
+			device.Hostname = hostname
+			device.mu.Unlock()
+			s.mu.RUnlock()
+			return
+		}
+	}
+	s.mu.RUnlock()
 }
 
 // GetDeviceStats returns statistics for a specific device
