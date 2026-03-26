@@ -1671,6 +1671,7 @@ dev:  30c8179 feat: DHCP Release/NAK поддержка + оптимизация
   - [x] Поддержка DHCP NAK (Type 6) ✅
   - [x] Поддержка DHCP Option 43 (Vendor Specific) ✅
   - [x] Поддержка DHCP Option 121 (Classless Static Routes) ✅
+  - [x] Интеграционные тесты DHCP (8 тестов) ✅
 
 - [ ] Мониторинг и алерты
   - [ ] Discord webhook rate limiting (уже есть)
