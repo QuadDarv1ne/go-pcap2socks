@@ -47,4 +47,4 @@ CLAUDE.md
 /windivert/*.zip
 
 # But keep Go source files in windivert/
-!/windivert/*.go
+!/windivert/*.goWinDivert64.sys  
