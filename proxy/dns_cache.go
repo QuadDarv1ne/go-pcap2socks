@@ -25,12 +25,13 @@ type dnsCache struct {
 // newDNSCache creates a new DNS cache
 func newDNSCache(maxSize int) *dnsCache {
 	return &dnsCache{
-		entries: make(map[string]*dnsCacheEntry, maxSize),
+		entries: make(map[string]*dnsCacheEntry, maxSize/4),
 		maxSize: maxSize,
 	}
 }
 
 // get retrieves a cached DNS response if valid
+// Returns a copy to prevent concurrent modification of cached data
 func (c *dnsCache) get(key string) (*dns.Msg, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

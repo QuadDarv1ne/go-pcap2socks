@@ -142,21 +142,22 @@ func (a Addr) UDPAddr() *net.UDPAddr {
 		return nil
 	}
 
-	var ip []byte
-	var port int
 	switch a[0] {
 	case AtypDomainName /* unsupported */ :
 		return nil
 	case AtypIPv4:
-		ip = make([]byte, net.IPv4len)
-		copy(ip, a[1:1+net.IPv4len])
-		port = int(binary.BigEndian.Uint16(a[1+net.IPv4len:]))
+		var ip [net.IPv4len]byte
+		copy(ip[:], a[1:1+net.IPv4len])
+		port := int(binary.BigEndian.Uint16(a[1+net.IPv4len:]))
+		return &net.UDPAddr{IP: ip[:], Port: port}
 	case AtypIPv6:
-		ip = make([]byte, net.IPv6len)
-		copy(ip, a[1:1+net.IPv6len])
-		port = int(binary.BigEndian.Uint16(a[1+net.IPv6len:]))
+		var ip [net.IPv6len]byte
+		copy(ip[:], a[1:1+net.IPv6len])
+		port := int(binary.BigEndian.Uint16(a[1+net.IPv6len:]))
+		return &net.UDPAddr{IP: ip[:], Port: port}
+	default:
+		return nil
 	}
-	return &net.UDPAddr{IP: ip, Port: port}
 }
 
 // User provides basic socks5 auth functionality.
@@ -309,21 +310,32 @@ func SplitAddr(b []byte) Addr {
 // SerializeAddr serializes destination address and port to Addr.
 // If a domain name is provided, AtypDomainName would be used first.
 func SerializeAddr(domainName string, dstIP net.IP, dstPort uint16) Addr {
-	var (
-		buf  [][]byte
-		port [2]byte
-	)
-	binary.BigEndian.PutUint16(port[:], dstPort)
+	var addr Addr
+	port := make([]byte, 2)
+	binary.BigEndian.PutUint16(port, dstPort)
 
 	if domainName != "" /* Domain Name */ {
 		length := len(domainName)
-		buf = [][]byte{{AtypDomainName, uint8(length)}, []byte(domainName), port[:]}
+		// ATYP(1) + LEN(1) + domain + port(2)
+		addr = make(Addr, 1+1+length+2)
+		addr[0] = AtypDomainName
+		addr[1] = uint8(length)
+		copy(addr[2:], domainName)
+		copy(addr[2+length:], port)
 	} else if dstIP.To4() != nil /* IPv4 */ {
-		buf = [][]byte{{AtypIPv4}, dstIP.To4(), port[:]}
+		// ATYP(1) + IPv4(4) + port(2)
+		addr = make(Addr, 1+net.IPv4len+2)
+		addr[0] = AtypIPv4
+		copy(addr[1:], dstIP.To4())
+		copy(addr[1+net.IPv4len:], port)
 	} else /* IPv6 */ {
-		buf = [][]byte{{AtypIPv6}, dstIP.To16(), port[:]}
+		// ATYP(1) + IPv6(16) + port(2)
+		addr = make(Addr, 1+net.IPv6len+2)
+		addr[0] = AtypIPv6
+		copy(addr[1:], dstIP.To16())
+		copy(addr[1+net.IPv6len:], port)
 	}
-	return bytes.Join(buf, nil)
+	return addr
 }
 
 // ParseAddr parses a socks addr from net.Addr.
@@ -436,6 +448,10 @@ func EncodeUDPPacket(addr Addr, payload []byte) (packet []byte, err error) {
 	if addr == nil {
 		return nil, errors.New("address is invalid")
 	}
-	packet = bytes.Join([][]byte{{0x00, 0x00, 0x00}, addr, payload}, nil)
+	// RSV(2) + FRSAG(1) + addr + payload
+	headerLen := 3 + len(addr)
+	packet = make([]byte, headerLen+len(payload))
+	copy(packet[3:], addr)
+	copy(packet[headerLen:], payload)
 	return
 }

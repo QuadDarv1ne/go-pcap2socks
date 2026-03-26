@@ -40,10 +40,13 @@ func (sp *StatsProxy) DialContext(ctx context.Context, metadata *M.Metadata) (ne
 	}
 
 	if sp.enabled && sp.statsStore != nil {
+		srcIP := metadata.SrcIP.String()
+		dstIP := metadata.DstIP.String()
+
 		// Get rate limits from stats store
-		uploadLimit, downloadLimit := sp.statsStore.GetRateLimit(metadata.SrcIP.String())
+		uploadLimit, downloadLimit := sp.statsStore.GetRateLimit(srcIP)
 		if uploadLimit > 0 || downloadLimit > 0 {
-			sp.rateLimiter.SetLimit(metadata.SrcIP.String(), uploadLimit, downloadLimit)
+			sp.rateLimiter.SetLimit(srcIP, uploadLimit, downloadLimit)
 		}
 
 		return &statsConn{
@@ -51,6 +54,8 @@ func (sp *StatsProxy) DialContext(ctx context.Context, metadata *M.Metadata) (ne
 			statsStore:  sp.statsStore,
 			rateLimiter: sp.rateLimiter,
 			metadata:    metadata,
+			srcIP:       srcIP,
+			dstIP:       dstIP,
 		}, nil
 	}
 
@@ -64,10 +69,13 @@ func (sp *StatsProxy) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	}
 
 	if sp.enabled && sp.statsStore != nil {
+		srcIP := metadata.SrcIP.String()
+		dstIP := metadata.DstIP.String()
+
 		// Get rate limits from stats store
-		uploadLimit, downloadLimit := sp.statsStore.GetRateLimit(metadata.SrcIP.String())
+		uploadLimit, downloadLimit := sp.statsStore.GetRateLimit(srcIP)
 		if uploadLimit > 0 || downloadLimit > 0 {
-			sp.rateLimiter.SetLimit(metadata.SrcIP.String(), uploadLimit, downloadLimit)
+			sp.rateLimiter.SetLimit(srcIP, uploadLimit, downloadLimit)
 		}
 
 		return &statsPacketConn{
@@ -75,6 +83,8 @@ func (sp *StatsProxy) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 			statsStore:  sp.statsStore,
 			rateLimiter: sp.rateLimiter,
 			metadata:    metadata,
+			srcIP:       srcIP,
+			dstIP:       dstIP,
 		}, nil
 	}
 
@@ -95,42 +105,32 @@ type statsConn struct {
 	statsStore  *stats.Store
 	rateLimiter *ratelimit.RateLimiter
 	metadata    *M.Metadata
+	srcIP       string // Cached to avoid repeated String() calls
+	dstIP       string
 }
 
 func (sc *statsConn) Read(b []byte) (int, error) {
 	// Check rate limit for download
-	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.metadata.SrcIP.String(), len(b), false) {
-		// Rate limited - add small delay
+	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.srcIP, len(b), false) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	n, err := sc.Conn.Read(b)
-	if n > 0 && sc.statsStore != nil && sc.metadata != nil {
-		sc.statsStore.RecordTraffic(
-			sc.metadata.DstIP.String(),
-			sc.metadata.SrcIP.String(),
-			uint64(n),
-			false, // download
-		)
+	if n > 0 && sc.statsStore != nil {
+		sc.statsStore.RecordTraffic(sc.dstIP, sc.srcIP, uint64(n), false)
 	}
 	return n, err
 }
 
 func (sc *statsConn) Write(b []byte) (int, error) {
 	// Check rate limit for upload
-	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.metadata.SrcIP.String(), len(b), true) {
-		// Rate limited - add small delay
+	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.srcIP, len(b), true) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	n, err := sc.Conn.Write(b)
-	if n > 0 && sc.statsStore != nil && sc.metadata != nil {
-		sc.statsStore.RecordTraffic(
-			sc.metadata.DstIP.String(),
-			sc.metadata.SrcIP.String(),
-			uint64(n),
-			true, // upload
-		)
+	if n > 0 && sc.statsStore != nil {
+		sc.statsStore.RecordTraffic(sc.dstIP, sc.srcIP, uint64(n), true)
 	}
 	return n, err
 }
@@ -141,42 +141,32 @@ type statsPacketConn struct {
 	statsStore  *stats.Store
 	rateLimiter *ratelimit.RateLimiter
 	metadata    *M.Metadata
+	srcIP       string // Cached to avoid repeated String() calls
+	dstIP       string
 }
 
 func (spc *statsPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	// Check rate limit for download
-	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.metadata.SrcIP.String(), len(p), false) {
-		// Rate limited - add small delay
+	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.srcIP, len(p), false) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	n, addr, err := spc.PacketConn.ReadFrom(p)
-	if n > 0 && spc.statsStore != nil && spc.metadata != nil {
-		spc.statsStore.RecordTraffic(
-			spc.metadata.DstIP.String(),
-			spc.metadata.SrcIP.String(),
-			uint64(n),
-			false, // download
-		)
+	if n > 0 && spc.statsStore != nil {
+		spc.statsStore.RecordTraffic(spc.dstIP, spc.srcIP, uint64(n), false)
 	}
 	return n, addr, err
 }
 
 func (spc *statsPacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	// Check rate limit for upload
-	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.metadata.SrcIP.String(), len(p), true) {
-		// Rate limited - add small delay
+	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.srcIP, len(p), true) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	n, err := spc.PacketConn.WriteTo(p, addr)
-	if n > 0 && spc.statsStore != nil && spc.metadata != nil {
-		spc.statsStore.RecordTraffic(
-			spc.metadata.DstIP.String(),
-			spc.metadata.SrcIP.String(),
-			uint64(n),
-			true, // upload
-		)
+	if n > 0 && spc.statsStore != nil {
+		spc.statsStore.RecordTraffic(spc.dstIP, spc.srcIP, uint64(n), true)
 	}
 	return n, err
 }

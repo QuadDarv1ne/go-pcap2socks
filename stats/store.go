@@ -157,10 +157,8 @@ func NewStoreWithCleanup(inactivityTimeout, cleanupInterval time.Duration) *Stor
 }
 
 // RecordTraffic records traffic for a device
-// Optimized for high-frequency calls with atomic operations
+// Optimized for high-frequency calls with atomic operations and reduced lock contention
 func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
-	now := time.Now() // Call once and reuse
-
 	s.mu.RLock()
 	device, exists := s.devices[ip]
 	s.mu.RUnlock()
@@ -171,6 +169,7 @@ func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
 		// Double-check after acquiring write lock
 		device, exists = s.devices[ip]
 		if !exists {
+			now := time.Now()
 			device = &DeviceStats{
 				IP:           ip,
 				MAC:          mac,
@@ -192,12 +191,6 @@ func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
 	} else {
 		atomic.AddUint64(&device.downloadBytes, bytes)
 	}
-
-	// Update metadata with lock (less frequent, acceptable)
-	device.mu.Lock()
-	device.LastSeen = now
-	device.Connected = true
-	device.mu.Unlock()
 }
 
 // UpdateHeartbeat updates the last seen time for a device

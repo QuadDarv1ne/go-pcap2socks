@@ -1,5 +1,60 @@
 # go-pcap2socks TODO
 
+## ✅ Завершено (26.03.2026 12:00) - v3.19.12 ЧЕТВЁРТАЯ ВОЛНА ОПТИМИЗАЦИИ
+
+### Атомарные операции и lock-free структуры
+- [x] metrics/collector.go: конверсия на atomic.Uint64/Int64 ✅
+  - **Было**: sync.RWMutex на всех операциях
+  - **Стало**: lock-free атомарные операции
+  - **Эффект**: Устранена блокировка в RecordConnection/RecordTraffic
+
+### Оптимизация proxy/stats.go
+- [x] Кэширование IP адресов ✅
+  - **Добавлено**: srcIP, dstIP поля в statsConn/statsPacketConn
+  - **Эффект**: Избегание repeated String() вызовов на каждый пакет
+
+### tunnel/tcp.go оптимизации
+- [x] //go:noinline для copyBuffer ✅
+- [x] Уменьшены строки направлений: "origin->remote" → "o->r" ✅
+
+### ratelimit/ratelimit.go
+- [x] //go:inline для Allow() ✅
+
+### updater/updater.go
+- [x] Предварительное выделение в parseVersion: make([]int, 0, 3) ✅
+- [x] Оптимизирован splitString: подсчёт разделителей для pre-allocation ✅
+- [x] //go:inline для parseInt и GetExecutableDir ✅
+
+### stats/hostname.go
+- [x] Объединённая cache проверка в одном if ✅
+
+### stats/cleanup.go
+- [x] Упрощён CleanupInactive: удалена избыточная RLock ✅
+
+### tunnel/addr.go
+- [x] Добавлена parseAddrToNetip() для zero-copy операций ✅
+
+### proxy/direct.go
+- [x] Fast path для *net.UDPAddr в WriteTo ✅
+
+### core/device/iobased/endpoint.go
+- [x] Упрощён dispatchLoop и writePacket ✅
+
+### core/device/pcap.go
+- [x] Прямая проверка байтов IP в handleDHCP (без To4()) ✅
+- [x] Замена на strings.Contains вместо кастомных функций ✅
+
+### common/pool
+- [x] Удалены дубликаты Get/Put из pool.go (уже в alloc.go) ✅
+- [x] //go:inline для Get/Put в pool.go и alloc.go ✅
+
+### Итоговый эффект
+- **Производительность**: Lock-free metrics, кэширование IP
+- **Память**: Меньше аллокаций на String() вызовах
+- **Код**: Удалены дубликаты, упрощены горячие пути
+
+---
+
 ## ✅ Завершено (26.03.2026 10:00) - v3.19.11 ОПТИМИЗАЦИЯ И ОЧИСТКА ПРОЕКТА
 
 ### Очистка временных файлов

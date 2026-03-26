@@ -184,17 +184,16 @@ func (m *ARPMonitor) getARPTable() ([]ARPEntry, error) {
 
 // parseWindowsARP parses Windows arp -a output
 func parseWindowsARP(output []byte) ([]ARPEntry, error) {
-	entries := []ARPEntry{}
-	lines := strings.Split(string(output), "\n")
+	// Pre-allocate for typical ARP table size
+	entries := make([]ARPEntry, 0, 32)
 
 	// Regex for Windows ARP output: 192.168.1.100    00-11-22-33-44-55
-	ipRegex := regexp.MustCompile(`(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17})`)
+	ipRegex := regexp.MustCompile(`(?m)^(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17})`)
 
-	for _, line := range lines {
-		matches := ipRegex.FindStringSubmatch(line)
+	for _, matches := range ipRegex.FindAllSubmatch(output, -1) {
 		if len(matches) >= 3 {
-			ip := net.ParseIP(matches[1])
-			macStr := strings.Replace(matches[2], "-", ":", -1)
+			ip := net.ParseIP(string(matches[1]))
+			macStr := strings.Replace(string(matches[2]), "-", ":", -1)
 			mac, err := net.ParseMAC(macStr)
 			if err == nil {
 				entries = append(entries, ARPEntry{IP: ip, MAC: mac})
@@ -207,14 +206,18 @@ func parseWindowsARP(output []byte) ([]ARPEntry, error) {
 
 // parseLinuxARP parses Linux ip neigh output
 func parseLinuxARP(output []byte) ([]ARPEntry, error) {
-	entries := []ARPEntry{}
-	lines := strings.Split(string(output), "\n")
+	// Pre-allocate for typical ARP table size
+	entries := make([]ARPEntry, 0, 32)
+	lines := bytes.Split(output, []byte{'\n'})
 
 	for _, line := range lines {
-		parts := strings.Fields(line)
+		if len(line) == 0 {
+			continue
+		}
+		parts := bytes.Fields(line)
 		if len(parts) >= 3 {
-			ip := net.ParseIP(parts[0])
-			mac, err := net.ParseMAC(parts[2])
+			ip := net.ParseIP(string(parts[0]))
+			mac, err := net.ParseMAC(string(parts[2]))
 			if err == nil && ip != nil {
 				entries = append(entries, ARPEntry{IP: ip, MAC: mac})
 			}
@@ -226,17 +229,16 @@ func parseLinuxARP(output []byte) ([]ARPEntry, error) {
 
 // parseMacOSARP parses macOS arp -a output
 func parseMacOSARP(output []byte) ([]ARPEntry, error) {
-	entries := []ARPEntry{}
-	lines := strings.Split(string(output), "\n")
+	// Pre-allocate for typical ARP table size
+	entries := make([]ARPEntry, 0, 32)
 
 	// Regex for macOS ARP: ? (192.168.1.100) at 00:11:22:33:44:55
 	ipRegex := regexp.MustCompile(`\? \((\d+\.\d+\.\d+\.\d+)\) at ([0-9a-fA-F:]{17})`)
 
-	for _, line := range lines {
-		matches := ipRegex.FindStringSubmatch(line)
+	for _, matches := range ipRegex.FindAllSubmatch(output, -1) {
 		if len(matches) >= 3 {
-			ip := net.ParseIP(matches[1])
-			mac, err := net.ParseMAC(matches[2])
+			ip := net.ParseIP(string(matches[1]))
+			mac, err := net.ParseMAC(string(matches[2]))
 			if err == nil {
 				entries = append(entries, ARPEntry{IP: ip, MAC: mac})
 			}

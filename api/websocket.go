@@ -45,17 +45,24 @@ type WebSocketHub struct {
 	unregister chan *WebSocketClient
 	stopChan   chan struct{}
 	stopOnce   sync.Once
+
+	// Pool for client slices to reduce allocations
+	clientSlicePool sync.Pool
 }
 
 // NewWebSocketHub creates a new WebSocket hub
 func NewWebSocketHub() *WebSocketHub {
-	return &WebSocketHub{
+	h := &WebSocketHub{
 		clients:    make(map[*WebSocketClient]bool),
 		broadcast:  make(chan []byte, 256),
 		register:   make(chan *WebSocketClient, 16),   // Buffered to prevent blocking
 		unregister: make(chan *WebSocketClient, 16),  // Buffered to prevent blocking
 		stopChan:   make(chan struct{}),
 	}
+	h.clientSlicePool.New = func() any {
+		return make([]*WebSocketClient, 0, 16)
+	}
+	return h
 }
 
 // Run starts the hub's main loop
@@ -77,8 +84,9 @@ func (h *WebSocketHub) Run() {
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
-			// Сначала собираем клиенты которые не могут получить сообщение
-			clientsToClose := make([]*WebSocketClient, 0, len(h.clients))
+			// Get slice from pool to reduce allocations
+			clientsToClose := h.clientSlicePool.Get().([]*WebSocketClient)
+			clientsToClose = clientsToClose[:0]
 			for client := range h.clients {
 				select {
 				case client.send <- message:
@@ -89,7 +97,7 @@ func (h *WebSocketHub) Run() {
 			}
 			h.mu.RUnlock()
 
-			// Закрыть клиенты вне блокировки для предотвращения deadlock
+			// Close clients outside lock to prevent deadlock
 			if len(clientsToClose) > 0 {
 				h.mu.Lock()
 				for _, client := range clientsToClose {
@@ -100,6 +108,8 @@ func (h *WebSocketHub) Run() {
 				}
 				h.mu.Unlock()
 			}
+			// Return slice to pool after clearing
+			h.clientSlicePool.Put(clientsToClose[:0])
 
 		case <-h.stopChan:
 			h.mu.Lock()

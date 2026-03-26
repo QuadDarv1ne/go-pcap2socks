@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gopacket/gopacket"
@@ -30,6 +31,7 @@ type Endpoint struct {
 	file    *os.File
 	packets chan pcapPacket
 	wg      sync.WaitGroup
+	dropped atomic.Uint64 // Track dropped packets due to backpressure
 }
 
 var _ stack.GSOEndpoint = (*Endpoint)(nil)
@@ -68,7 +70,7 @@ func NewEthSniffer(lower stack.LinkEndpoint, outputFile string) (*Endpoint, erro
 	e := &Endpoint{
 		writer:  w,
 		file:    f,
-		packets: make(chan pcapPacket, 1000),
+		packets: make(chan pcapPacket, 4096), // Increased buffer for better burst handling
 	}
 
 	// Initialize nested endpoint
@@ -114,23 +116,47 @@ func (e *Endpoint) capturePacket(pkt *stack.PacketBuffer) {
 		Length:        len(data),
 	}
 
-	// Send packet to channel (non-blocking)
+	// Send packet to channel with backpressure handling
 	select {
 	case e.packets <- pcapPacket{info: ci, data: append([]byte(nil), data...)}:
 	default:
-		slog.Warn("PCAP capture channel full, dropping packet")
+		// Channel full - drop packet and increment counter
+		e.dropped.Add(1)
+		// Log only every 1000 dropped packets to avoid log spam
+		if dropped := e.dropped.Load(); dropped%1000 == 0 {
+			slog.Warn("PCAP capture channel full, dropping packets", "dropped", dropped)
+		}
 	}
 }
 
 // packetWriter reads packets from the channel and writes them to the PCAP file
+// Uses batching for better I/O performance
 func (e *Endpoint) packetWriter() {
 	defer e.wg.Done()
 
-	for pkt := range e.packets {
-		err := e.writer.WritePacket(pkt.info, pkt.data)
-		if err != nil {
-			slog.Error("Failed to write packet to PCAP", "error", err)
+	// Batch write for better performance
+	const batchSize = 16
+	packets := make([]pcapPacket, 0, batchSize)
+
+	flush := func() {
+		for _, pkt := range packets {
+			if err := e.writer.WritePacket(pkt.info, pkt.data); err != nil {
+				slog.Error("Failed to write packet to PCAP", "error", err)
+			}
 		}
+		packets = packets[:0]
+	}
+
+	for pkt := range e.packets {
+		packets = append(packets, pkt)
+		if len(packets) >= batchSize {
+			flush()
+		}
+	}
+
+	// Flush remaining packets
+	if len(packets) > 0 {
+		flush()
 	}
 }
 
@@ -148,4 +174,9 @@ func (e *Endpoint) Close() {
 
 	// Close child endpoint
 	e.Endpoint.Close()
+}
+
+// GetDroppedPacketCount returns the number of dropped packets due to backpressure
+func (e *Endpoint) GetDroppedPacketCount() uint64 {
+	return e.dropped.Load()
 }

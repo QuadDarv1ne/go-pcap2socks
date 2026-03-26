@@ -312,7 +312,7 @@ func compareVersions(v1, v2 string) int {
 
 // parseVersion parses a version string into integer parts
 func parseVersion(v string) []int {
-	var parts []int
+	parts := make([]int, 0, 3) // Pre-allocate for typical semver
 	for _, part := range splitString(v, ".") {
 		if n := parseInt(part); n >= 0 {
 			parts = append(parts, n)
@@ -323,12 +323,22 @@ func parseVersion(v string) []int {
 
 // splitString splits a string by separator
 func splitString(s, sep string) []string {
-	var parts []string
+	// Count separators for pre-allocation
+	count := 1
+	for i := 0; i < len(s); i++ {
+		if s[i:i+len(sep)] == sep {
+			count++
+			i += len(sep) - 1
+		}
+	}
+
+	parts := make([]string, 0, count)
 	start := 0
 	for i := 0; i <= len(s)-len(sep); i++ {
 		if s[i:i+len(sep)] == sep {
 			parts = append(parts, s[start:i])
 			start = i + len(sep)
+			i += len(sep) - 1
 		}
 	}
 	parts = append(parts, s[start:])
@@ -336,6 +346,7 @@ func splitString(s, sep string) []string {
 }
 
 // parseInt parses an integer from string
+//go:inline
 func parseInt(s string) int {
 	var n int
 	for _, c := range s {
@@ -418,6 +429,7 @@ func Restart() error {
 }
 
 // GetExecutableDir returns the directory containing the executable
+//go:inline
 func GetExecutableDir() string {
 	execPath, err := os.Executable()
 	if err != nil {

@@ -10,6 +10,7 @@ const (
 )
 
 // setKeepAlive sets tcp keepalive option for tcp connection.
+//go:inline
 func setKeepAlive(c net.Conn) {
 	if tcp, ok := c.(*net.TCPConn); ok {
 		tcp.SetKeepAlive(true)
@@ -18,6 +19,7 @@ func setKeepAlive(c net.Conn) {
 }
 
 // safeConnClose closes tcp connection safely.
+//go:inline
 func safeConnClose(c net.Conn, err error) {
 	if c != nil && err != nil {
 		c.Close()

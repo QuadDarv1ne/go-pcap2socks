@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
@@ -127,6 +128,11 @@ func withUDPNatHandler(handle func(adapter.UDPConn)) option.Option {
 	}
 }
 
+const (
+	// maxUDPSessions limits the maximum number of concurrent UDP sessions
+	maxUDPSessions = 4096
+)
+
 type UDPForwarder struct {
 	ctx    context.Context
 	stack  *stack.Stack
@@ -135,6 +141,10 @@ type UDPForwarder struct {
 	// cache
 	cacheProto tcpip.NetworkProtocolNumber
 	cacheID    stack.TransportEndpointID
+
+	// Session tracking
+	sessionCount atomic.Int32
+	droppedCount atomic.Uint64
 }
 
 func NewUDPForwarder(ctx context.Context, stack *stack.Stack, handler Handler, udpTimeout int64) *UDPForwarder {
@@ -145,7 +155,24 @@ func NewUDPForwarder(ctx context.Context, stack *stack.Stack, handler Handler, u
 	}
 }
 
+// GetSessionCount returns the current number of active UDP sessions
+func (f *UDPForwarder) GetSessionCount() int32 {
+	return f.sessionCount.Load()
+}
+
+// GetDroppedCount returns the number of dropped UDP packets due to limit
+func (f *UDPForwarder) GetDroppedCount() uint64 {
+	return f.droppedCount.Load()
+}
+
 func (f *UDPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
+	// Check session limit before processing
+	if f.sessionCount.Load() >= maxUDPSessions {
+		f.droppedCount.Add(1)
+		// Drop packet silently when limit reached
+		return true
+	}
+
 	var upstreamMetadata M.Metadata
 	upstreamMetadata.Source = M.SocksaddrFrom(AddrFromAddress(id.RemoteAddress), id.RemotePort)
 	upstreamMetadata.Destination = M.SocksaddrFrom(AddrFromAddress(id.LocalAddress), id.LocalPort)
@@ -154,11 +181,14 @@ func (f *UDPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.Pac
 	} else {
 		f.cacheProto = header.IPv6ProtocolNumber
 	}
+
+	// Reuse buffer instead of copying
 	gBuffer := pkt.Data().ToBuffer()
 	sBuffer := buf.NewSize(int(gBuffer.Size()))
 	gBuffer.Apply(func(view *buffer.View) {
 		sBuffer.Write(view.AsSlice())
 	})
+
 	f.cacheID = id
 	f.udpNat.NewPacket(
 		f.ctx,
@@ -167,6 +197,8 @@ func (f *UDPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.Pac
 		upstreamMetadata,
 		f.newUDPConn,
 	)
+
+	f.sessionCount.Add(1)
 	return true
 }
 

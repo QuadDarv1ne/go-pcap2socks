@@ -156,7 +156,8 @@ func (g *ProxyGroup) healthCheckLoop() {
 	ticker := time.NewTicker(g.checkInterval)
 	defer ticker.Stop()
 
-	// Initial check
+	// Initial check with jitter to avoid thundering herd
+	time.Sleep(time.Duration(randInt(0, 1000)) * time.Millisecond)
 	g.checkAllProxies()
 
 	for {
@@ -164,10 +165,15 @@ func (g *ProxyGroup) healthCheckLoop() {
 		case <-ticker.C:
 			g.checkAllProxies()
 		case <-g.stopChan:
-			slog.Info("Proxy group health check stopped", "group", g.name)
+			slog.Debug("Proxy group health check stopped", "group", g.name)
 			return
 		}
 	}
+}
+
+// randInt returns a random int in [min, max)
+func randInt(min, max int) int {
+	return min + int(time.Now().UnixNano()%int64(max-min))
 }
 
 // checkAllProxies checks health of all proxies in the group
@@ -209,17 +215,18 @@ func (g *ProxyGroup) checkProxyHealth(proxy Proxy) bool {
 
 	// Try to establish a connection to check health
 	// For SOCKS5, we can try to connect to a well-known endpoint
-	testMetadata := M.GetMetadata()
-	defer M.PutMetadata(testMetadata)
-	testMetadata.Network = M.TCP
-	testMetadata.DstIP = net.ParseIP("8.8.8.8")
-	testMetadata.DstPort = 53
+	// Use stack-allocated metadata to reduce allocations
+	testMetadata := M.Metadata{
+		Network: M.TCP,
+		DstIP:   net.IPv4(8, 8, 8, 8),
+		DstPort: 53,
+	}
 
-	conn, err := proxy.DialContext(ctx, testMetadata)
+	conn, err := proxy.DialContext(ctx, &testMetadata)
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	defer conn.Close()
 
 	return true
 }

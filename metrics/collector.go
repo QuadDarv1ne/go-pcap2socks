@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
@@ -12,18 +13,18 @@ import (
 
 // Collector collects and exports Prometheus metrics
 type Collector struct {
-	mu                sync.RWMutex
 	statsStore        *stats.Store
 	startTime         time.Time
-	connectionsTotal  uint64
-	connectionsActive uint64
-	bytesTotal        uint64
-	bytesUpload       uint64
-	bytesDownload     uint64
-	packetsTotal      uint64
-	errorsTotal       uint64
-	cacheHits         uint64
-	cacheMisses       uint64
+	connectionsTotal  atomic.Uint64
+	connectionsActive atomic.Int64
+	bytesTotal        atomic.Uint64
+	bytesUpload       atomic.Uint64
+	bytesDownload     atomic.Uint64
+	packetsTotal      atomic.Uint64
+	errorsTotal       atomic.Uint64
+	cacheHits         atomic.Uint64
+	cacheMisses       atomic.Uint64
+	writeMu           sync.Mutex // Protects WriteMetrics only
 }
 
 // NewCollector creates a new metrics collector
@@ -36,62 +37,46 @@ func NewCollector(statsStore *stats.Store) *Collector {
 
 // RecordConnection increments connection counters
 func (c *Collector) RecordConnection() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.connectionsTotal++
-	c.connectionsActive++
+	c.connectionsTotal.Add(1)
+	c.connectionsActive.Add(1)
 }
 
 // RecordConnectionClose decrements active connections
 func (c *Collector) RecordConnectionClose() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.connectionsActive > 0 {
-		c.connectionsActive--
-	}
+	c.connectionsActive.Add(-1)
 }
 
 // RecordTraffic records traffic statistics
 func (c *Collector) RecordTraffic(upload, download uint64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.bytesTotal += upload + download
-	c.bytesUpload += upload
-	c.bytesDownload += download
+	c.bytesTotal.Add(upload + download)
+	c.bytesUpload.Add(upload)
+	c.bytesDownload.Add(download)
 }
 
 // RecordPacket increments packet counter
 func (c *Collector) RecordPacket() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.packetsTotal++
+	c.packetsTotal.Add(1)
 }
 
 // RecordError increments error counter
 func (c *Collector) RecordError() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.errorsTotal++
+	c.errorsTotal.Add(1)
 }
 
 // RecordCacheHit records a cache hit
 func (c *Collector) RecordCacheHit() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cacheHits++
+	c.cacheHits.Add(1)
 }
 
 // RecordCacheMiss records a cache miss
 func (c *Collector) RecordCacheMiss() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cacheMisses++
+	c.cacheMisses.Add(1)
 }
 
 // WriteMetrics writes Prometheus format metrics to writer
 func (c *Collector) WriteMetrics(w io.Writer) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 
 	// Get stats from store
 	var totalUpload, totalDownload, totalPackets uint64
@@ -102,6 +87,17 @@ func (c *Collector) WriteMetrics(w io.Writer) {
 	}
 
 	uptime := time.Since(c.startTime).Seconds()
+
+	// Load atomic values
+	connectionsTotal := c.connectionsTotal.Load()
+	connectionsActive := c.connectionsActive.Load()
+	bytesTotal := c.bytesTotal.Load()
+	bytesUpload := c.bytesUpload.Load()
+	bytesDownload := c.bytesDownload.Load()
+	packetsTotal := c.packetsTotal.Load()
+	errorsTotal := c.errorsTotal.Load()
+	cacheHits := c.cacheHits.Load()
+	cacheMisses := c.cacheMisses.Load()
 
 	// Helper function to write metric
 	writeMetric := func(name, help, typ string, value interface{}, labels ...string) {
@@ -119,13 +115,13 @@ func (c *Collector) WriteMetrics(w io.Writer) {
 	writeMetric("go_pcap2socks_active_devices", "Number of active devices", "gauge", activeDevices)
 
 	// Connection metrics
-	writeMetric("go_pcap2socks_connections_total", "Total number of connections", "counter", c.connectionsTotal)
-	writeMetric("go_pcap2socks_connections_active", "Current active connections", "gauge", c.connectionsActive)
+	writeMetric("go_pcap2socks_connections_total", "Total number of connections", "counter", connectionsTotal)
+	writeMetric("go_pcap2socks_connections_active", "Current active connections", "gauge", connectionsActive)
 
 	// Traffic metrics
-	writeMetric("go_pcap2socks_bytes_total", "Total bytes transferred", "counter", c.bytesTotal)
-	writeMetric("go_pcap2socks_bytes_upload", "Total bytes uploaded", "counter", c.bytesUpload)
-	writeMetric("go_pcap2socks_bytes_download", "Total bytes downloaded", "counter", c.bytesDownload)
+	writeMetric("go_pcap2socks_bytes_total", "Total bytes transferred", "counter", bytesTotal)
+	writeMetric("go_pcap2socks_bytes_upload", "Total bytes uploaded", "counter", bytesUpload)
+	writeMetric("go_pcap2socks_bytes_download", "Total bytes downloaded", "counter", bytesDownload)
 
 	// Stats store metrics (actual traffic)
 	writeMetric("go_pcap2socks_stats_bytes_upload", "Upload bytes from stats store", "counter", totalUpload)
@@ -133,18 +129,18 @@ func (c *Collector) WriteMetrics(w io.Writer) {
 	writeMetric("go_pcap2socks_stats_packets_total", "Total packets from stats store", "counter", totalPackets)
 
 	// Packet metrics
-	writeMetric("go_pcap2socks_packets_total", "Total packets processed", "counter", c.packetsTotal)
+	writeMetric("go_pcap2socks_packets_total", "Total packets processed", "counter", packetsTotal)
 
 	// Error metrics
-	writeMetric("go_pcap2socks_errors_total", "Total errors encountered", "counter", c.errorsTotal)
+	writeMetric("go_pcap2socks_errors_total", "Total errors encountered", "counter", errorsTotal)
 
 	// Cache metrics
-	writeMetric("go_pcap2socks_cache_hits_total", "Total cache hits", "counter", c.cacheHits)
-	writeMetric("go_pcap2socks_cache_misses_total", "Total cache misses", "counter", c.cacheMisses)
-	
+	writeMetric("go_pcap2socks_cache_hits_total", "Total cache hits", "counter", cacheHits)
+	writeMetric("go_pcap2socks_cache_misses_total", "Total cache misses", "counter", cacheMisses)
+
 	// Cache hit ratio
-	if c.cacheHits+c.cacheMisses > 0 {
-		hitRatio := float64(c.cacheHits) / float64(c.cacheHits+c.cacheMisses) * 100
+	if cacheHits+cacheMisses > 0 {
+		hitRatio := float64(cacheHits) / float64(cacheHits+cacheMisses) * 100
 		writeMetric("go_pcap2socks_cache_hit_ratio_percent", "Cache hit ratio percentage", "gauge", hitRatio)
 	}
 }

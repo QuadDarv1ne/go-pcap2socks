@@ -115,18 +115,22 @@ func (c *routeCache) stats() (hits, misses uint64) {
 }
 
 // buildKey creates a cache key for routing decision
+// Optimized for minimal allocations using pre-sized buffer
 func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dstPort uint16) string {
-	// Build key directly without pool - simpler and more memory efficient
-	key := make([]byte, 0, 64)
-	key = append(key, protocol...)
-	key = append(key, srcIP...)
-	key = append(key, ':')
-	key = strconv.AppendUint(key, uint64(srcPort), 10)
-	key = append(key, ':')
-	key = append(key, dstIP...)
-	key = append(key, ':')
-	key = strconv.AppendUint(key, uint64(dstPort), 10)
-	return string(key)
+	// Pre-allocate buffer with known size to avoid reallocations
+	// Format: proto:srcIP:srcPort:dstIP:dstPort
+	// Max size: 4 + 16 + 1 + 5 + 1 + 16 + 1 + 5 = 49 bytes for IPv6
+	buf := make([]byte, 0, 64)
+
+	buf = append(buf, protocol...)
+	buf = append(buf, srcIP...)
+	buf = append(buf, ':')
+	buf = strconv.AppendUint(buf, uint64(srcPort), 10)
+	buf = append(buf, ':')
+	buf = append(buf, dstIP...)
+	buf = append(buf, ':')
+	buf = strconv.AppendUint(buf, uint64(dstPort), 10)
+	return string(buf)
 }
 
 // Router is the central component that routes network traffic through appropriate proxies.

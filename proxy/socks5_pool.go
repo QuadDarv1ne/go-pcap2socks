@@ -50,33 +50,36 @@ func (p *Socks5ConnPool) GetConnection(ctx context.Context) (net.Conn, error) {
 	// Try to get from pool first
 	if pooled := p.pool.Get(); pooled != nil {
 		pc := pooled.(*pooledSocks5Conn)
-		
+
 		// Check if connection is still valid
 		if time.Since(pc.lastUsed) > p.maxIdleTime {
 			pc.conn.Close()
 			slog.Debug("Socks5 pool: connection expired", "addr", p.addr)
 			return p.GetConnection(ctx) // Recursively get a new one
 		}
-		
-		// Check if connection is still alive
+
+		// Check if connection is still alive using SetReadDeadline
+		// Use a small buffer to check for pending data
 		pc.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		buf := make([]byte, 1)
-		_, err := pc.conn.Read(buf)
+		var buf [1]byte
+		n, err := pc.conn.Read(buf[:])
 		pc.conn.SetReadDeadline(time.Time{})
-		
-		if err == nil {
-			// Connection has data, don't reuse
-			pc.conn.Close()
-			slog.Debug("Socks5 pool: connection has pending data", "addr", p.addr)
-			return p.GetConnection(ctx)
+
+		if err == nil && n == 0 {
+			// Connection is clean and reusable (no data, no error)
+			slog.Debug("Socks5 pool: reusing connection", "addr", p.addr)
+			pc.lastUsed = time.Now()
+			return pc.conn, nil
 		}
-		
-		// Connection is clean and reusable
-		slog.Debug("Socks5 pool: reusing connection", "addr", p.addr)
-		pc.lastUsed = time.Now()
-		return pc.conn, nil
+
+		// Connection has data or error, don't reuse
+		pc.conn.Close()
+		if err == nil && n > 0 {
+			slog.Debug("Socks5 pool: connection has pending data", "addr", p.addr)
+		}
+		return p.GetConnection(ctx) // Recursively get a new one
 	}
-	
+
 	// Create new connection
 	return p.dialNewConnection(ctx)
 }
