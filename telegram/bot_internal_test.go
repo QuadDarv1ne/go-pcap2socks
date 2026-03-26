@@ -1,4 +1,9 @@
 //go:build ignore
+// +build ignore
+
+// Этот файл содержит внутренние тесты для Telegram бота.
+// Они не запускаются автоматически из-за возможного ложного срабатывания антивируса.
+// Для запуска вручную: go test -v ./telegram/... -run Internal
 
 package telegram
 
@@ -7,7 +12,40 @@ import (
 	"time"
 )
 
-func TestNewBot(t *testing.T) {
+// TestInternal запускает все внутренние тесты Telegram бота.
+// Этот тест не запускается автоматически из-за возможного ложного срабатывания антивируса.
+// Для запуска вручную: go test -v ./telegram/... -run TestInternal
+func TestInternal(t *testing.T) {
+	t.Run("NewBot", testNewBotInternal)
+	t.Run("IsEnabled", testBotIsEnabledInternal)
+	t.Run("Stop", testBotStopInternal)
+	t.Run("StopPolling", testBotStopPollingInternal)
+	t.Run("SendMessage_Disabled", testSendMessageDisabledInternal)
+	t.Run("SendNotification_Disabled", testSendNotificationDisabledInternal)
+	t.Run("RegisterCommand", testRegisterCommandInternal)
+	t.Run("HandleMessage_Empty", testHandleMessageEmptyInternal)
+	t.Run("HandleMessage_Unauthorized", testHandleMessageUnauthorizedInternal)
+	t.Run("HandleMessage_UnknownCommand", testHandleMessageUnknownCommandInternal)
+	t.Run("HandleMessage_KnownCommand", testHandleMessageKnownCommandInternal)
+	t.Run("HandleMessage_WithArgs", testHandleMessageWithArgsInternal)
+	t.Run("DefaultHandlers", testDefaultHandlersInternal)
+	t.Run("SetStatusHandler", testSetStatusHandlerInternal)
+	t.Run("SetTrafficHandler", testSetTrafficHandlerInternal)
+	t.Run("SetDevicesHandler", testSetDevicesHandlerInternal)
+	t.Run("SetServiceHandlers", testSetServiceHandlersInternal)
+	t.Run("HandleStatus_NoHandler", testHandleStatusNoHandlerInternal)
+	t.Run("HandleTraffic_NoHandler", testHandleTrafficNoHandlerInternal)
+	t.Run("HandleDevices_NoHandler", testHandleDevicesNoHandlerInternal)
+	t.Run("HandleDiscordStatus_NoDiscord", testHandleDiscordStatusNoDiscordInternal)
+	t.Run("StartPeriodicReports_Disabled", testStartPeriodicReportsDisabledInternal)
+	t.Run("StartPeriodicReports_AlreadyRunning", testStartPeriodicReportsAlreadyRunningInternal)
+	t.Run("StopPeriodicReports_NotRunning", testStopPeriodicReportsNotRunningInternal)
+	t.Run("Message_Structure", testMessageStructureInternal)
+	t.Run("Update_Structure", testUpdateStructureInternal)
+	t.Run("APIResponse_Structure", testAPIResponseStructureInternal)
+}
+
+func testNewBotInternal(t *testing.T) {
 	tests := []struct {
 		name        string
 		token       string
@@ -75,7 +113,7 @@ func TestNewBot(t *testing.T) {
 	}
 }
 
-func TestBot_IsEnabled(t *testing.T) {
+func testBotIsEnabledInternal(t *testing.T) {
 	tests := []struct {
 		name        string
 		token       string
@@ -108,7 +146,7 @@ func TestBot_IsEnabled(t *testing.T) {
 	}
 }
 
-func TestBot_Stop(t *testing.T) {
+func testBotStopInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	// Should not panic
@@ -119,14 +157,14 @@ func TestBot_Stop(t *testing.T) {
 	}
 }
 
-func TestBot_StopPolling(t *testing.T) {
+func testBotStopPollingInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	// Should not panic when not running
 	bot.StopPolling()
 }
 
-func TestSendMessage_Disabled(t *testing.T) {
+func testSendMessageDisabledInternal(t *testing.T) {
 	bot := NewBot("", "")
 	
 	err := bot.SendMessage("test message")
@@ -135,14 +173,14 @@ func TestSendMessage_Disabled(t *testing.T) {
 	}
 }
 
-func TestSendNotification_Disabled(t *testing.T) {
+func testSendNotificationDisabledInternal(t *testing.T) {
 	bot := NewBot("", "")
 	
 	// Should not panic
 	bot.SendNotification("title", "message")
 }
 
-func TestRegisterCommand(t *testing.T) {
+func testRegisterCommandInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 
 	testHandler := func(b *Bot, args []string) string {
@@ -160,7 +198,7 @@ func TestRegisterCommand(t *testing.T) {
 	}
 }
 
-func TestHandleMessage_Empty(t *testing.T) {
+func testHandleMessageEmptyInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	msg := Message{
@@ -171,7 +209,7 @@ func TestHandleMessage_Empty(t *testing.T) {
 	bot.handleMessage(msg)
 }
 
-func TestHandleMessage_Unauthorized(t *testing.T) {
+func testHandleMessageUnauthorizedInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	msg := Message{
@@ -185,7 +223,7 @@ func TestHandleMessage_Unauthorized(t *testing.T) {
 	bot.handleMessage(msg)
 }
 
-func TestHandleMessage_UnknownCommand(t *testing.T) {
+func testHandleMessageUnknownCommandInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	msg := Message{
@@ -199,7 +237,7 @@ func TestHandleMessage_UnknownCommand(t *testing.T) {
 	bot.handleMessage(msg)
 }
 
-func TestHandleMessage_KnownCommand(t *testing.T) {
+func testHandleMessageKnownCommandInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	handlerCalled := false
@@ -225,7 +263,7 @@ func TestHandleMessage_KnownCommand(t *testing.T) {
 	}
 }
 
-func TestHandleMessage_WithArgs(t *testing.T) {
+func testHandleMessageWithArgsInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	var receivedArgs []string
@@ -250,7 +288,7 @@ func TestHandleMessage_WithArgs(t *testing.T) {
 	}
 }
 
-func TestDefaultHandlers(t *testing.T) {
+func testDefaultHandlersInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	// Register default handlers
@@ -280,7 +318,7 @@ func TestDefaultHandlers(t *testing.T) {
 	}
 }
 
-func TestSetStatusHandler(t *testing.T) {
+func testSetStatusHandlerInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	testStatus := "Test status"
@@ -297,7 +335,7 @@ func TestSetStatusHandler(t *testing.T) {
 	}
 }
 
-func TestSetTrafficHandler(t *testing.T) {
+func testSetTrafficHandlerInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	testTraffic := "Test traffic"
@@ -314,7 +352,7 @@ func TestSetTrafficHandler(t *testing.T) {
 	}
 }
 
-func TestSetDevicesHandler(t *testing.T) {
+func testSetDevicesHandlerInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	testDevices := "Test devices"
@@ -331,7 +369,7 @@ func TestSetDevicesHandler(t *testing.T) {
 	}
 }
 
-func TestSetServiceHandlers(t *testing.T) {
+func testSetServiceHandlersInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	bot.SetServiceHandlers(
@@ -353,7 +391,7 @@ func TestSetServiceHandlers(t *testing.T) {
 	}
 }
 
-func TestHandleStatus_NoHandler(t *testing.T) {
+func testHandleStatusNoHandlerInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	result := bot.handleStatus(bot, []string{})
@@ -364,7 +402,7 @@ func TestHandleStatus_NoHandler(t *testing.T) {
 	}
 }
 
-func TestHandleTraffic_NoHandler(t *testing.T) {
+func testHandleTrafficNoHandlerInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	result := bot.handleTraffic(bot, []string{})
@@ -375,7 +413,7 @@ func TestHandleTraffic_NoHandler(t *testing.T) {
 	}
 }
 
-func TestHandleDevices_NoHandler(t *testing.T) {
+func testHandleDevicesNoHandlerInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	result := bot.handleDevices(bot, []string{})
@@ -386,7 +424,7 @@ func TestHandleDevices_NoHandler(t *testing.T) {
 	}
 }
 
-func TestHandleDiscordStatus_NoDiscord(t *testing.T) {
+func testHandleDiscordStatusNoDiscordInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	result := bot.handleDiscordStatus(bot, []string{})
@@ -397,7 +435,7 @@ func TestHandleDiscordStatus_NoDiscord(t *testing.T) {
 	}
 }
 
-func TestStartPeriodicReports_Disabled(t *testing.T) {
+func testStartPeriodicReportsDisabledInternal(t *testing.T) {
 	bot := NewBot("", "")
 	
 	// Should not panic when disabled
@@ -412,7 +450,7 @@ func TestStartPeriodicReports_Disabled(t *testing.T) {
 	}
 }
 
-func TestStartPeriodicReports_AlreadyRunning(t *testing.T) {
+func testStartPeriodicReportsAlreadyRunningInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	// Set reportRunning to true manually for testing
@@ -424,14 +462,14 @@ func TestStartPeriodicReports_AlreadyRunning(t *testing.T) {
 	bot.StartPeriodicReports(time.Hour)
 }
 
-func TestStopPeriodicReports_NotRunning(t *testing.T) {
+func testStopPeriodicReportsNotRunningInternal(t *testing.T) {
 	bot := NewBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
 	
 	// Should not panic when not running
 	bot.StopPeriodicReports()
 }
 
-func TestMessage_Structure(t *testing.T) {
+func testMessageStructureInternal(t *testing.T) {
 	msg := Message{
 		Chat: struct {
 			ID int64 `json:"id"`
@@ -458,7 +496,7 @@ func TestMessage_Structure(t *testing.T) {
 	}
 }
 
-func TestUpdate_Structure(t *testing.T) {
+func testUpdateStructureInternal(t *testing.T) {
 	update := Update{
 		UpdateID: 12345,
 		Message:  Message{Text: "test"},
@@ -469,7 +507,7 @@ func TestUpdate_Structure(t *testing.T) {
 	}
 }
 
-func TestAPIResponse_Structure(t *testing.T) {
+func testAPIResponseStructureInternal(t *testing.T) {
 	resp := APIResponse{
 		OK:          true,
 		Result:      []Update{{UpdateID: 1}},

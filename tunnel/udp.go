@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	alog "github.com/anacrolix/log"
@@ -20,8 +20,8 @@ const (
 	// Reduced from 5 minutes to 3 minutes for faster resource cleanup
 	UdpSessionTimeout = 3 * time.Minute
 
-	// udpRelayBufferSize uses adaptive buffer sizing
-	udpRelayBufferSize = buffer.SmallBufferSize // DNS and typical UDP fits in 512 bytes
+	// udpRelayBufferSize optimized for DNS and typical UDP (most packets < 512 bytes)
+	udpRelayBufferSize = 512
 
 	// upnpCacheDuration is how long to cache discovered UPnP devices
 	upnpCacheDuration = 5 * time.Minute
@@ -172,8 +172,8 @@ func HandleUDPConn(uc adapter.UDPConn) {
 func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	buf := buffer.Get(udpRelayBufferSize)
-	defer buffer.Put(buf)
+	buf := pool.Get(udpRelayBufferSize)
+	defer pool.Put(buf)
 
 	for {
 		from.SetReadDeadline(time.Now().Add(UdpSessionTimeout))

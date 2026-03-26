@@ -137,7 +137,7 @@ func NewDNS(cfg cfg.DNS, interfaceName string) *DNS {
 		dohClients:    dohClients,
 		dotClients:    dotClients,
 		tcpPools:      tcpPools,
-		cache:         newDNSCache(10000), // Cache up to 10k DNS entries
+		cache:         newDNSCache(1000), // Cache up to 1k DNS entries (reduced from 10k for memory optimization)
 		stopCleanup:   make(chan struct{}),
 	}
 
