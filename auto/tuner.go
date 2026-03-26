@@ -2,6 +2,7 @@
 package auto
 
 import (
+	"fmt"
 	"runtime"
 	"time"
 )
@@ -30,13 +31,16 @@ type TuningConfig struct {
 // SystemTuner handles dynamic system tuning
 type SystemTuner struct {
 	resources *SystemResources
+	config    TuningConfig
 }
 
 // NewSystemTuner creates a new system tuner
 func NewSystemTuner() *SystemTuner {
-	return &SystemTuner{
+	t := &SystemTuner{
 		resources: detectSystemResources(),
 	}
+	t.config = t.AutoTune()
+	return t
 }
 
 // detectSystemResources detects current system resources
@@ -60,24 +64,29 @@ func detectSystemResources() *SystemResources {
 // AutoTune returns optimal configuration for current system
 func (t *SystemTuner) AutoTune() TuningConfig {
 	config := TuningConfig{}
+	mem := t.resources.AvailableMemory
+	netSpeed := t.resources.NetworkSpeed
+	cpuCount := t.resources.CPUCount
 
 	// TCP Buffer sizing based on available memory
-	if t.resources.AvailableMemory > 8*GB {
+	switch {
+	case mem > 8*GB:
 		config.TCPBufferSize = 65536 // 64KB
-	} else if t.resources.AvailableMemory > 4*GB {
+	case mem > 4*GB:
 		config.TCPBufferSize = 32768 // 32KB
-	} else if t.resources.AvailableMemory > 2*GB {
+	case mem > 2*GB:
 		config.TCPBufferSize = 16384 // 16KB
-	} else {
+	default:
 		config.TCPBufferSize = 8192 // 8KB
 	}
 
 	// UDP Buffer sizing based on network speed
-	if t.resources.NetworkSpeed > 1000 { // 1 Gbps
+	switch {
+	case netSpeed > 1000: // 1 Gbps
 		config.UDPBufferSize = 65536
-	} else if t.resources.NetworkSpeed > 100 { // 100 Mbps
+	case netSpeed > 100: // 100 Mbps
 		config.UDPBufferSize = 32768
-	} else {
+	default:
 		config.UDPBufferSize = 16384
 	}
 
@@ -85,28 +94,30 @@ func (t *SystemTuner) AutoTune() TuningConfig {
 	config.PacketBufferSize = calculatePacketBuffer(t.resources)
 
 	// Max connections based on CPU count
-	config.MaxConnections = t.resources.CPUCount * 100
+	config.MaxConnections = cpuCount * 100
 
-	// Connection timeout based on load
-	if t.resources.CPUCount >= 8 {
+	// Connection timeout based on CPU count
+	switch {
+	case cpuCount >= 8:
 		config.ConnectionTimeout = 120 * time.Second
-	} else if t.resources.CPUCount >= 4 {
+	case cpuCount >= 4:
 		config.ConnectionTimeout = 90 * time.Second
-	} else {
+	default:
 		config.ConnectionTimeout = 60 * time.Second
 	}
 
 	// GC pressure recommendation
-	if t.resources.AvailableMemory > 8*GB {
+	switch {
+	case mem > 8*GB:
 		config.GCPressure = "low"
-	} else if t.resources.AvailableMemory > 4*GB {
+	case mem > 4*GB:
 		config.GCPressure = "medium"
-	} else {
+	default:
 		config.GCPressure = "high"
 	}
 
-	// MTU optimization
-	config.MTU = calculateOptimalMTU(t.resources.GOOS)
+	// MTU optimization (same for all platforms)
+	config.MTU = 1486
 
 	return config
 }
@@ -114,7 +125,7 @@ func (t *SystemTuner) AutoTune() TuningConfig {
 // calculatePacketBuffer calculates optimal packet buffer size
 func calculatePacketBuffer(res *SystemResources) int {
 	// Base size: 256 packets
-	// Scale by CPU count and memory
+	// Scale by CPU count (capped at 8) and memory
 	baseSize := 256
 
 	cpuMultiplier := res.CPUCount
@@ -123,27 +134,14 @@ func calculatePacketBuffer(res *SystemResources) int {
 	}
 
 	memoryMultiplier := 1
-	if res.AvailableMemory > 8*GB {
+	switch {
+	case res.AvailableMemory > 8*GB:
 		memoryMultiplier = 4
-	} else if res.AvailableMemory > 4*GB {
+	case res.AvailableMemory > 4*GB:
 		memoryMultiplier = 2
 	}
 
 	return baseSize * cpuMultiplier * memoryMultiplier
-}
-
-// calculateOptimalMTU returns optimal MTU for the platform
-func calculateOptimalMTU(goos string) int {
-	switch goos {
-	case "windows":
-		return 1486
-	case "linux":
-		return 1486
-	case "darwin":
-		return 1486
-	default:
-		return 1486
-	}
 }
 
 // ApplyGCPressure applies GC pressure settings
@@ -159,11 +157,16 @@ func (t *SystemTuner) GetResources() *SystemResources {
 	return t.resources
 }
 
+// GetConfig returns the current tuning configuration
+func (t *SystemTuner) GetConfig() TuningConfig {
+	return t.config
+}
+
 // GetRecommendation returns a recommendation message
 func (t *SystemTuner) GetRecommendation() string {
-	config := t.AutoTune()
-	_ = config
-	return ""
+	memGB := float64(t.resources.AvailableMemory) / float64(GB)
+	return fmt.Sprintf("System: %d CPUs, %.1fGB RAM, MTU=%d",
+		t.resources.CPUCount, memGB, t.config.MTU)
 }
 
 // Memory constants

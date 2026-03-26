@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -161,7 +163,17 @@ func createPcapHandle(dev pcap.Interface) (*pcap.InactiveHandle, error) {
 		return nil, fmt.Errorf("set immediate mode error: %w", err)
 	}
 
-	err = handle.SetBufferSize(4 * 1024 * 1024) // 4MB buffer for better performance
+	// Use optimized buffer size from SystemTuner if available, otherwise use default 4MB
+	bufferSize := 4 * 1024 * 1024 // Default 4MB
+	// Note: We can't access main._systemTuner here due to package boundaries
+	// The buffer size is set to 4MB by default, which is optimal for most systems
+	// For custom tuning, use environment variable PCAP_BUFFER_SIZE (in MB)
+	if envBufferSize := os.Getenv("PCAP_BUFFER_SIZE"); envBufferSize != "" {
+		if size, err := strconv.Atoi(envBufferSize); err == nil && size > 0 {
+			bufferSize = size * 1024 * 1024
+		}
+	}
+	err = handle.SetBufferSize(bufferSize)
 	if err != nil {
 		return nil, fmt.Errorf("set buffer size error: %w", err)
 	}
