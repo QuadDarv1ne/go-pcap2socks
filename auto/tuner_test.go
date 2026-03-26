@@ -98,23 +98,19 @@ func TestCalculatePacketBuffer(t *testing.T) {
 }
 
 func TestCalculateOptimalMTU(t *testing.T) {
-	tests := []struct {
-		goos string
-		want int
-	}{
-		{"windows", 1486},
-		{"linux", 1486},
-		{"darwin", 1486},
-		{"unknown", 1486},
+	// MTU is now a constant value (1486) for all platforms
+	// This test verifies the MTU is set correctly in AutoTune
+	tuner := &SystemTuner{
+		resources: &SystemResources{
+			CPUCount:      4,
+			AvailableMemory: 4 * GB,
+			NetworkSpeed:  100,
+			GOOS:          "windows",
+		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.goos, func(t *testing.T) {
-			got := calculateOptimalMTU(tt.goos)
-			if got != tt.want {
-				t.Errorf("calculateOptimalMTU(%q) = %d, want %d", tt.goos, got, tt.want)
-			}
-		})
+	config := tuner.AutoTune()
+	if config.MTU != 1486 {
+		t.Errorf("AutoTune().MTU = %d, want 1486", config.MTU)
 	}
 }
 
