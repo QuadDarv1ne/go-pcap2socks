@@ -1,5 +1,52 @@
 # go-pcap2socks TODO
 
+## ✅ Завершено (26.03.2026 17:00) - v3.19.17 SMART DHCP — СТАТИЧЕСКИЕ IP
+
+### Smart DHCP Manager
+- [x] Создан пакет auto/smart_dhcp.go ✅
+  - **Static Leases**: Статические IP для известных устройств
+  - **Device Type Ranges**: PS4/PS5 (.100-.119), Xbox (.120-.139), Switch (.140-.149)
+  - **PC Range**: .150-.199, Mobile: .200-.229, IoT: .230-.249
+  - **IP Pool Management**: Выделение/освобождение IP
+  - **Connection Tracking**: Rate limiting (подключения в минуту)
+
+- [x] IP Pool Management ✅
+  - **NewIPPool**: Создание пула с start/end
+  - **Allocate/IsAllocated**: Выделение IP
+  - **AllocateAny**: Авто-выделение любого свободного
+  - **RemoveLease**: Освобождение IP при отключении
+
+- [x] Device Type Allocation ✅
+  - **getIPRangeForType**: Диапазоны для каждого типа устройств
+  - **offsetIP**: Вычисление IP по offset от базового
+  - **ipInRange**: Проверка попадания IP в диапазон
+
+- [x] Statistics & Monitoring ✅
+  - **GetStats**: Общая статистика (устройства, pool usage)
+  - **GetDeviceByType**: Устройства по типу
+  - **GetLeaseByMAC**: Lease по MAC адресу
+
+- [x] Тесты для smart_dhcp ✅
+  - **16 тестов**: Все проходят ✅
+  - **TestGetIPForDevice**: Выделение IP для PS4
+  - **TestAllocateIPForType**: Диапазоны для всех типов
+  - **TestGetStaticLeases**: Список лиз
+  - **TestGetLeaseByMAC**: Поиск по MAC
+  - **TestRemoveLease**: Удаление лиза
+  - **TestGetDeviceCount**: Подсчёт устройств
+  - **TestGetDeviceByType**: Фильтрация по типу
+  - **TestRecordConnection**: Rate limiting
+  - **TestGetStats**: Статистика
+  - **TestIPPool_***: Тесты пула IP
+
+### Итоговый эффект
+- **Статические IP**: Устройства получают одинаковые IP при переподключении
+- **Сортировка по типам**: Игровые консоли в одном диапазоне, PC в другом
+- **Удобство**: Легко настроить проброс портов для статических IP
+- **Rate Limiting**: Защита от DHCP flood
+
+---
+
 ## ✅ Завершено (26.03.2026 16:00) - v3.19.16 AUTOMATIC ENGINE FAILOVER
 
 ### Engine Failover - Авто-переключение при ошибках
@@ -1501,32 +1548,32 @@ dev:  33387e8 gitignore: добавить WinDivert64.sys и WinDivert.dll ✅
 
 ---
 
-## ✅ Завершено (26.03.2026 16:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
+## ✅ Завершено (26.03.2026 17:00) - СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА
 
 ### Выполненные задачи
-- [x] Merge dev → main (v3.19.16 изменения) ✅
+- [x] Merge dev → main (v3.19.17 изменения) ✅
 - [x] Проверка компиляции после merge ✅
 - [x] Отправка origin/dev ✅
 
 ### Статус веток
 ```
-main: 509f99c feat: engine failover with health monitoring ✅
-dev:  509f99c feat: engine failover with health monitoring ✅
+main: 87d6e98 feat: Smart DHCP with static IP by device type ✅
+dev:  87d6e98 feat: Smart DHCP with static IP by device type ✅
 ```
 
 ### Отправлено
-- ✅ origin/dev (509f99c)
+- ✅ origin/dev (87d6e98)
 - 🔄 origin/main (требуется merge)
 
-### Изменения v3.19.16
-- ✅ auto/engine_failover.go - failover с health monitoring
-- ✅ auto/engine_failover_test.go - 11 тестов, все проходят
-- ✅ Интеграция с engine_selector
+### Изменения v3.19.17
+- ✅ auto/smart_dhcp.go - Smart DHCP manager
+- ✅ auto/smart_dhcp_test.go - 16 тестов, все проходят
+- ✅ IP ranges по типам устройств (PS4/Xbox/Switch/PC/Mobile/IoT)
 
 ---
 
-**Последнее обновление**: 26 марта 2026 г. (16:00)
-**Версия**: v3.19.16 (dev: 509f99c, main: 509f99c)
+**Последнее обновление**: 26 марта 2026 г. (17:00)
+**Версия**: v3.19.17 (dev: 87d6e98, main: 87d6e98)
 **Статус**: ✅ проект стабилен, dev отправлен, требуется merge в main
 
 ### Правила проекта
