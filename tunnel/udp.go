@@ -26,11 +26,11 @@ var (
 // UDP tunnel constants
 const (
 	// UdpSessionTimeout is the timeout for UDP sessions
-	// Reduced from 5 minutes to 3 minutes for faster resource cleanup
-	UdpSessionTimeout = 3 * time.Minute
+	// Reduced to 90 seconds for faster resource cleanup and gaming responsiveness
+	UdpSessionTimeout = 90 * time.Second
 
-	// udpRelayBufferSize optimized for DNS and typical UDP (most packets < 512 bytes)
-	udpRelayBufferSize = 512
+	// udpRelayBufferSize increased to support larger UDP packets (PS4, gaming, etc.)
+	udpRelayBufferSize = 65535
 
 	// upnpCacheDuration is how long to cache discovered UPnP devices
 	upnpCacheDuration = 5 * time.Minute

@@ -1,24 +1,30 @@
 {
   "pcap": {
-    "interfaceGateway": "172.27.48.1",
-    "mtu": 1486,
-    "network": "172.27.48.0/20",
-    "localIP": "172.27.48.1",
-    "localMAC": "00:15:5d:d4:02:44"
+    "interfaceGateway": "192.168.137.1",
+    "mtu": 1473,
+    "network": "192.168.137.0/24",
+    "localIP": "192.168.137.1",
+    "localMAC": "b0:25:aa:65:67:bb"
   },
   "dhcp": {
     "enabled": true,
-    "poolStart": "172.27.48.101",
-    "poolEnd": "172.27.48.201",
+    "poolStart": "192.168.137.101",
+    "poolEnd": "192.168.137.201",
     "leaseDuration": 86400
   },
   "dns": {
     "servers": [
       {
+        "address": "1.1.1.1:53"
+      },
+      {
+        "address": "1.0.0.1:53"
+      },
+      {
         "address": "8.8.8.8:53"
       },
       {
-        "address": "1.1.1.1:53"
+        "address": "8.8.4.4:53"
       }
     ]
   },
@@ -72,7 +78,11 @@
         6667
       ],
       "xbox": [
-        3074
+        3074,
+        3075,
+        3478,
+        3479,
+        3480
       ]
     }
   },
