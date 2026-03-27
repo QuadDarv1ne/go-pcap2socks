@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -32,6 +33,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
@@ -40,6 +42,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
+	"github.com/QuadDarv1ne/go-pcap2socks/shutdown"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/tlsutil"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
@@ -205,11 +208,23 @@ func main() {
 	slog.Info("Running with administrator privileges")
 	slog.Info("Starting go-pcap2socks", "version", "3.19.12+", "pid", os.Getpid())
 
+	// Optimize GOMAXPROCS for better performance
+	goroutine.OptimizeProcs()
+
+	// Initialize shutdown manager
+	executable, _ := os.Executable()
+	stateFile := filepath.Join(filepath.Dir(executable), "state.json")
+	_shutdownManager = shutdown.NewManager(stateFile)
+	slog.Info("Shutdown manager initialized", "state_file", stateFile)
+
 	// Setup deferred recovery for graceful shutdown
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("Critical error, shutting down", "error", r)
-			// Perform cleanup
+			// Perform graceful shutdown
+			if _shutdownManager != nil {
+				_shutdownManager.ShutdownWithTimeout(30 * time.Second)
+			}
 			if _httpServer != nil {
 				_httpServer.Shutdown(context.Background())
 			}
@@ -397,10 +412,10 @@ func main() {
 
 	// Run DNS benchmark in background
 	if config.DNS.AutoBench {
-		go func() {
+		goroutine.SafeGo(func() {
 			time.Sleep(2 * time.Second) // Wait for network to be ready
 			_dnsResolver.Benchmark(context.Background())
-		}()
+		})
 	}
 
 	// Initialize DNS-over-HTTPS server
@@ -874,6 +889,9 @@ var (
 	// _dohServer holds the DNS-over-HTTPS server
 	_dohServer *dns.DoHServer
 
+	// _shutdownManager holds the graceful shutdown manager
+	_shutdownManager *shutdown.Manager
+
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}
 )
@@ -907,6 +925,27 @@ func IsRunning() bool {
 func Stop() {
 	slog.Info("Stopping service...")
 	_running = false
+
+	// Use shutdown manager if available
+	if _shutdownManager != nil {
+		slog.Info("Using shutdown manager for graceful shutdown")
+		
+		// Update state before shutdown
+		if _statsStore != nil {
+			total, upload, download, packets, _, _ := _statsStore.GetStats()
+			_shutdownManager.UpdateStatistics(map[string]uint64{
+				"total_bytes":    total,
+				"upload_bytes":   upload,
+				"download_bytes": download,
+				"packets":        packets,
+			})
+		}
+		
+		// Perform graceful shutdown with timeout
+		if err := _shutdownManager.ShutdownWithTimeout(30 * time.Second); err != nil {
+			slog.Warn("Shutdown manager reported errors", "error", err)
+		}
+	}
 
 	// Stop router first to stop cleanup goroutine
 	if _defaultProxy != nil {
@@ -974,6 +1013,15 @@ func Stop() {
 		if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
 			stopper.Stop()
 			slog.Info("DHCP server stopped")
+		}
+	}
+
+	// Stop DoH server
+	if _dohServer != nil {
+		if err := _dohServer.Stop(); err != nil {
+			slog.Error("DoH server shutdown error", slog.Any("err", err))
+		} else {
+			slog.Info("DoH server stopped")
 		}
 	}
 
