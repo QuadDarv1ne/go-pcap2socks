@@ -34,6 +34,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
+	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
@@ -355,6 +356,12 @@ func main() {
 				slog.Warn("UPnP manager start failed", "err", err)
 			}
 		}
+	}
+
+	// Initialize MTU discoverer
+	if config.MTU != nil && config.MTU.Enabled {
+		_mtuDiscoverer = mtu.NewMTUDiscoverer()
+		slog.Info("MTU discoverer initialized", "auto_discover", config.MTU.AutoDiscover, "base_mtu", config.MTU.BaseMTU)
 	}
 
 	// Выполнение команд из executeOnStart с проверкой безопасности
@@ -795,6 +802,9 @@ var (
 
 	// _upnpManager holds the UPnP manager
 	_upnpManager *upnpmanager.Manager
+
+	// _mtuDiscoverer holds the MTU discoverer for Path MTU Discovery
+	_mtuDiscoverer *mtu.MTUDiscoverer
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}

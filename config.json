@@ -6,6 +6,23 @@
     "localIP": "192.168.137.1",
     "localMAC": "b0:25:aa:65:67:bb"
   },
+  "mtu": {
+    "enabled": true,
+    "autoDiscover": true,
+    "baseMTU": 1486,
+    "minMTU": 576,
+    "maxMTU": 9000,
+    "probeTimeout": 2000,
+    "cacheExpiry": 600,
+    "mssClamping": true,
+    "protocolOverheads": {
+      "direct": 0,
+      "socks5": 10,
+      "http": 20,
+      "wireguard": 60,
+      "pppoe": 8
+    }
+  },
   "dhcp": {
     "enabled": true,
     "poolStart": "192.168.137.101",
