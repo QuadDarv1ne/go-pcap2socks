@@ -3,23 +3,23 @@ package api
 import (
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // rateLimiter implements a simple token bucket rate limiter per IP
+// Optimized with sync.Map for lock-free visitor lookup
 type rateLimiter struct {
-	mu              sync.RWMutex
-	visitors        map[string]*visitor
-	rate            int           // requests per window
-	window          time.Duration // time window
-	cleanupInterval time.Duration // cleanup interval
+	visitors        sync.Map // map[string]*visitor
+	rate            int32    // requests per window (atomic)
+	window          time.Duration
+	cleanupInterval time.Duration
 	stopChan        chan struct{}
 }
 
 type visitor struct {
-	tokens    int
-	lastReset time.Time
-	mu        sync.Mutex
+	tokens    atomic.Int32
+	lastReset atomic.Value // time.Time
 }
 
 // newRateLimiter creates a new rate limiter
@@ -27,8 +27,7 @@ type visitor struct {
 // window: time window for rate limiting (e.g., 1 minute)
 func newRateLimiter(rate int, window time.Duration) *rateLimiter {
 	rl := &rateLimiter{
-		visitors:        make(map[string]*visitor),
-		rate:            rate,
+		rate:            int32(rate),
 		window:          window,
 		cleanupInterval: window * 2, // cleanup old visitors every 2 windows
 		stopChan:        make(chan struct{}),
@@ -39,38 +38,46 @@ func newRateLimiter(rate int, window time.Duration) *rateLimiter {
 }
 
 // allow checks if a request from the given IP should be allowed
+// Optimized with sync.Map Load for lock-free reads
 func (rl *rateLimiter) allow(ip string) bool {
-	rl.mu.RLock()
-	v, exists := rl.visitors[ip]
-	rl.mu.RUnlock()
-
-	if !exists {
-		rl.mu.Lock()
-		v = &visitor{
-			tokens:    rl.rate,
-			lastReset: time.Now(),
+	// Fast path: try to load existing visitor
+	var v *visitor
+	if val, ok := rl.visitors.Load(ip); ok {
+		v = val.(*visitor)
+	} else {
+		// Create new visitor
+		v = &visitor{}
+		v.tokens.Store(rl.rate)
+		v.lastReset.Store(time.Now())
+		
+		// Store and check if we won (in case of concurrent access)
+		if actual, loaded := rl.visitors.LoadOrStore(ip, v); loaded {
+			v = actual.(*visitor)
 		}
-		rl.visitors[ip] = v
-		rl.mu.Unlock()
 	}
 
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	// Reset tokens if window has passed
+	// Check and update tokens atomically
 	now := time.Now()
-	if now.Sub(v.lastReset) > rl.window {
-		v.tokens = rl.rate
-		v.lastReset = now
+	lastReset := v.lastReset.Load().(time.Time)
+	
+	// Reset tokens if window has passed
+	if now.Sub(lastReset) > rl.window {
+		v.tokens.Store(rl.rate)
+		v.lastReset.Store(now)
+		lastReset = now
 	}
 
-	// Check if tokens available
-	if v.tokens > 0 {
-		v.tokens--
-		return true
+	// Try to decrement tokens atomically
+	for {
+		tokens := v.tokens.Load()
+		if tokens <= 0 {
+			return false
+		}
+		if v.tokens.CompareAndSwap(tokens, tokens-1) {
+			return true
+		}
+		// Retry if CAS failed (concurrent access)
 	}
-
-	return false
 }
 
 // cleanupLoop removes old visitors periodically
@@ -89,18 +96,17 @@ func (rl *rateLimiter) cleanupLoop() {
 }
 
 // cleanupVisitors removes visitors that haven't been seen recently
+// Optimized with sync.Map Range for lock-free iteration
 func (rl *rateLimiter) cleanupVisitors() {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
 	now := time.Now()
-	for ip, v := range rl.visitors {
-		v.mu.Lock()
-		if now.Sub(v.lastReset) > rl.cleanupInterval {
-			delete(rl.visitors, ip)
+	rl.visitors.Range(func(k, v any) bool {
+		visitor := v.(*visitor)
+		lastReset := visitor.lastReset.Load().(time.Time)
+		if now.Sub(lastReset) > rl.cleanupInterval {
+			rl.visitors.Delete(k)
 		}
-		v.mu.Unlock()
-	}
+		return true
+	})
 }
 
 // stop stops the cleanup goroutine
