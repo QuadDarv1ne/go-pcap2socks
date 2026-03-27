@@ -1,18 +1,52 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 27 марта 2026 г. (23:00)
-**Версия**: v3.19.36+ (dev: health-checker-bandwidth-pooling, main: performance-optimizations)
-**Статус**: ✅ проект стабилен, все тесты проходят, 12/19 улучшений реализовано
+**Последнее обновление**: 27 марта 2026 г. (23:30)
+**Версия**: v3.19.37+ (dev: fuzz-testing, main: performance-optimizations)
+**Статус**: ✅ проект стабилен, все тесты проходят, 13/19 улучшений реализовано
 
 ### Статус веток
 ```
 main: performance-optimizations v3.19.35 - Performance optimizations, DI, structured errors ✅
-dev:  health-checker-bandwidth-pooling - Health checker, bandwidth limiting, connection pooling, DNS prefetch ✅
+dev:  fuzz-testing - Fuzzing tests for parsers + all previous improvements ✅
 ```
 
 ---
 
-## 🔄 В работе (27.03.2026 23:00) - v3.19.36+ HEALTH CHECKER & BANDWIDTH LIMITING
+## 🔄 В работе (27.03.2026 23:30) - v3.19.37+ FUZZING TESTS
+
+### Тестирование безопасности и стабильности парсеров
+
+#### 1. Fuzzing Tests for Parsers
+- [x] **Добавлено**: `dhcp/fuzz_test.go` - 3 fuzz теста для DHCP парсеров
+  - `FuzzParseDHCPMessage` - парсинг DHCP сообщений
+  - `FuzzDHCPMessageMarshal` - маршалинг DHCP сообщений
+  - `FuzzParseDHCPOptions` - парсинг DHCP опций
+- [x] **Добавлено**: `dns/fuzz_test.go` - 3 fuzz теста для DNS парсеров
+  - `FuzzParseDNSResponse` - парсинг DNS ответов
+  - `FuzzEncodeDNSQuery` - кодирование DNS запросов
+  - `FuzzParseDNSName` - парсинг DNS имен
+- [x] **Добавлено**: `cfg/fuzz_test.go` - 3 fuzz теста для конфиг парсеров
+  - `FuzzParseBandwidth` - парсинг строкок bandwidth
+  - `FuzzLoadConfig` - загрузка конфигурации
+  - `FuzzRuleNormalize` - нормализация правил
+- [x] **Добавлено**: `transport/fuzz_test.go` - 4 fuzz теста для SOCKS5 транспорта
+  - `FuzzReadAddr` - парсинг адресов SOCKS5
+  - `FuzzEncodeUDPPacket` - кодирование UDP пакетов
+  - `FuzzDecodeUDPPacket` - декодирование UDP пакетов
+  - `FuzzClientHandshake` - handshake SOCKS5
+- [x] **Документация**: `FUZZING.md` с инструкциями по запуску
+- [x] **Эффект**: Обнаружение уязвимостей безопасности, паник, edge cases
+
+### Итоговый эффект v3.19.37+
+- **Новых файлов**: 5 (4 fuzz теста + FUZZING.md)
+- **Fuzz тестов**: 13
+- **Строк добавлено**: ~350
+- **Компиляция**: ✅ Успешна
+- **Прогресс**: 13/19 задач (68%)
+
+---
+
+## 🔄 Завершено (27.03.2026 23:00) - v3.19.36+ HEALTH CHECKER & BANDWIDTH LIMITING
 
 ### Новые функции и улучшения стабильности
 
