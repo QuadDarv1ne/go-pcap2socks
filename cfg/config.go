@@ -296,7 +296,14 @@ type DNSServer struct {
 }
 
 type DNS struct {
-	Servers []DNSServer `json:"servers"`
+	Servers       []DNSServer `json:"servers"`
+	DoHServers    []string    `json:"dohServers,omitempty"`
+	DoTServers    []string    `json:"dotServers,omitempty"`
+	UseSystemDNS  bool        `json:"useSystemDNS"`
+	AutoBench     bool        `json:"autoBench"`
+	BenchInterval int         `json:"benchInterval"` // seconds
+	CacheSize     int         `json:"cacheSize"`
+	CacheTTL      int         `json:"cacheTTL"` // seconds
 }
 
 type Capture struct {

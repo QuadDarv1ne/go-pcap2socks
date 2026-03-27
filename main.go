@@ -31,6 +31,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
+	"github.com/QuadDarv1ne/go-pcap2socks/dns"
 	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
@@ -362,6 +363,44 @@ func main() {
 	if config.MTU != nil && config.MTU.Enabled {
 		_mtuDiscoverer = mtu.NewMTUDiscoverer()
 		slog.Info("MTU discoverer initialized", "auto_discover", config.MTU.AutoDiscover, "base_mtu", config.MTU.BaseMTU)
+	}
+
+	// Initialize DNS resolver with benchmarking and caching
+	// Convert DNSServer to plain servers
+	plainServers := make([]string, 0)
+	for _, s := range config.DNS.Servers {
+		plainServers = append(plainServers, s.Address)
+	}
+
+	// Add system DNS if enabled
+	if config.DNS.UseSystemDNS {
+		systemDNS := dns.GetSystemDNSServers()
+		plainServers = append(plainServers, systemDNS...)
+	}
+
+	_dnsResolver = dns.NewResolver(&dns.ResolverConfig{
+		Servers:       plainServers,
+		DoHServers:    config.DNS.DoHServers,
+		DoTServers:    config.DNS.DoTServers,
+		UseSystemDNS:  config.DNS.UseSystemDNS,
+		AutoBench:     config.DNS.AutoBench,
+		BenchInterval: config.DNS.BenchInterval,
+		CacheSize:     config.DNS.CacheSize,
+		CacheTTL:      config.DNS.CacheTTL,
+	})
+
+	slog.Info("DNS resolver initialized",
+		"servers", len(plainServers),
+		"doh_servers", len(config.DNS.DoHServers),
+		"cache_size", config.DNS.CacheSize,
+		"cache_ttl", config.DNS.CacheTTL)
+
+	// Run DNS benchmark in background
+	if config.DNS.AutoBench {
+		go func() {
+			time.Sleep(2 * time.Second) // Wait for network to be ready
+			_dnsResolver.Benchmark(context.Background())
+		}()
 	}
 
 	// Выполнение команд из executeOnStart с проверкой безопасности
@@ -805,6 +844,9 @@ var (
 
 	// _mtuDiscoverer holds the MTU discoverer for Path MTU Discovery
 	_mtuDiscoverer *mtu.MTUDiscoverer
+
+	// _dnsResolver holds the DNS resolver with benchmarking and caching
+	_dnsResolver *dns.Resolver
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}

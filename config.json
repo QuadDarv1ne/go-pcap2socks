@@ -36,8 +36,27 @@
       },
       {
         "address": "1.0.0.1:53"
+      },
+      {
+        "address": "8.8.8.8:53"
+      },
+      {
+        "address": "8.8.4.4:53"
       }
-    ]
+    ],
+    "dohServers": [
+      "https://cloudflare-dns.com/dns-query",
+      "https://dns.google.com/dns-query"
+    ],
+    "dotServers": [
+      "1.1.1.1:853",
+      "8.8.8.8:853"
+    ],
+    "useSystemDNS": true,
+    "autoBench": true,
+    "benchInterval": 300,
+    "cacheSize": 1024,
+    "cacheTTL": 300
   },
   "routing": {
     "rules": [
