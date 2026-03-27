@@ -186,6 +186,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/macfilter/update", s.rateLimitMiddleware(s.authMiddleware(s.handleMACFilterUpdate)))
 	s.mux.HandleFunc("/api/devices/names", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceNames)))
 	s.mux.HandleFunc("/api/devices/ratelimit", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceRateLimit)))
+	s.mux.HandleFunc("/api/interfaces", s.rateLimitMiddleware(s.authMiddleware(s.handleInterfaces)))
 	s.mux.HandleFunc("/ws", s.rateLimitMiddleware(s.authMiddleware(s.handleWebSocket)))
 }
 
@@ -1410,4 +1411,27 @@ func countConnected(devices []Device) int {
 		}
 	}
 	return count
+}
+
+// handleInterfaces returns list of available network interfaces
+func (s *Server) handleInterfaces(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Import auto package locally to avoid circular dependency
+	interfaces := getInterfaceList()
+	s.sendSuccess(w, map[string]interface{}{
+		"interfaces": interfaces,
+		"count":      len(interfaces),
+	})
+}
+
+// getInterfaceList returns list of network interfaces (delegated to auto package)
+var getInterfaceList func() []interface{}
+
+// SetInterfaceListFn sets the function to get interface list
+func SetInterfaceListFn(fn func() []interface{}) {
+	getInterfaceList = fn
 }
