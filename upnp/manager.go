@@ -5,18 +5,20 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 )
 
 // Manager handles UPnP port forwarding
+// Optimized with sync.Map for lock-free activeMaps access
 type Manager struct {
 	upnp        *UPnP
 	config      *cfg.UPnP
 	internalIP  string
-	mu          sync.RWMutex
-	activeMaps  map[string]bool // "protocol:port" -> true
+	activeMaps  sync.Map // map[string]bool ("protocol:port" -> true)
+	mappingCount atomic.Int32
 }
 
 // NewManager creates a new UPnP manager
@@ -29,7 +31,6 @@ func NewManager(config *cfg.UPnP, internalIP string) *Manager {
 		upnp:       New(),
 		config:     config,
 		internalIP: internalIP,
-		activeMaps: make(map[string]bool),
 	}
 }
 
@@ -63,13 +64,11 @@ func (m *Manager) Start() error {
 }
 
 // ApplyPortMappings applies all configured port mappings
+// Optimized with sync.Map for lock-free access
 func (m *Manager) ApplyPortMappings() error {
 	if m == nil {
 		return nil
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	leaseDuration := m.config.LeaseDuration
 	if leaseDuration == 0 {
@@ -116,7 +115,9 @@ func (m *Manager) ApplyPortMappings() error {
 
 func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) error {
 	key := fmt.Sprintf("%s:%d", mapping.Protocol, mapping.ExternalPort)
-	if m.activeMaps[key] {
+	
+	// Check if already mapped (lock-free)
+	if _, ok := m.activeMaps.Load(key); ok {
 		return nil
 	}
 
@@ -131,7 +132,8 @@ func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) err
 		if err != nil {
 			return fmt.Errorf("TCP mapping failed: %w", err)
 		}
-		m.activeMaps["TCP:"+fmt.Sprint(mapping.ExternalPort)] = true
+		m.activeMaps.Store("TCP:"+fmt.Sprint(mapping.ExternalPort), true)
+		m.mappingCount.Add(1)
 	}
 
 	// Add UDP mapping
@@ -140,30 +142,32 @@ func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) err
 		if err != nil {
 			return fmt.Errorf("UDP mapping failed: %w", err)
 		}
-		m.activeMaps["UDP:"+fmt.Sprint(mapping.ExternalPort)] = true
+		m.activeMaps.Store("UDP:"+fmt.Sprint(mapping.ExternalPort), true)
+		m.mappingCount.Add(1)
 	}
 
 	return nil
 }
 
 // Stop removes all port mappings
+// Optimized with sync.Map Range for lock-free iteration
 func (m *Manager) Stop() error {
 	if m == nil {
 		return nil
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for key := range m.activeMaps {
+	m.activeMaps.Range(func(k, v any) bool {
+		key := k.(string)
 		var protocol string
 		var port int
 		fmt.Sscanf(key, "%s:%d", &protocol, &port)
 
 		_ = m.upnp.DeletePortMapping(protocol, port)
-	}
+		return true
+	})
 
-	m.activeMaps = make(map[string]bool)
+	m.activeMaps = sync.Map{}
+	m.mappingCount.Store(0)
 	return nil
 }
 
@@ -176,13 +180,12 @@ func (m *Manager) GetExternalIP() (string, error) {
 }
 
 // GetActiveMappings returns the number of active port mappings
+// Optimized with atomic load
 func (m *Manager) GetActiveMappings() int {
 	if m == nil {
 		return 0
 	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.activeMaps)
+	return int(m.mappingCount.Load())
 }
 
 // GetConfig returns the UPnP configuration
@@ -194,13 +197,11 @@ func (m *Manager) GetConfig() *cfg.UPnP {
 }
 
 // AddDynamicMapping adds a port mapping dynamically (e.g., when game starts)
+// Optimized with sync.Map Store for lock-free update
 func (m *Manager) AddDynamicMapping(protocol string, externalPort, internalPort int, description string) error {
 	if m == nil {
 		return fmt.Errorf("UPnP not initialized")
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	leaseDuration := 3600 // Default 1 hour
 	if m.config != nil && m.config.LeaseDuration > 0 {
@@ -218,16 +219,16 @@ func (m *Manager) AddDynamicMapping(protocol string, externalPort, internalPort 
 }
 
 // RemoveDynamicMapping removes a dynamically added port mapping
+// Optimized with sync.Map Delete for lock-free removal
 func (m *Manager) RemoveDynamicMapping(protocol string, port int) error {
 	if m == nil {
 		return fmt.Errorf("UPnP not initialized")
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	key := protocol + ":" + fmt.Sprint(port)
-	if !m.activeMaps[key] {
+	
+	// Check if mapped (lock-free)
+	if _, ok := m.activeMaps.Load(key); !ok {
 		return nil // Not mapped
 	}
 
@@ -235,7 +236,8 @@ func (m *Manager) RemoveDynamicMapping(protocol string, port int) error {
 		return err
 	}
 
-	delete(m.activeMaps, key)
+	m.activeMaps.Delete(key)
+	m.mappingCount.Add(-1)
 	return nil
 }
 

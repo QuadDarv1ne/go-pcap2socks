@@ -60,9 +60,7 @@ func TestManager_GetActiveMappings(t *testing.T) {
 	})
 
 	t.Run("empty manager returns 0", func(t *testing.T) {
-		mgr := &Manager{
-			activeMaps: make(map[string]bool),
-		}
+		mgr := &Manager{}
 		if got := mgr.GetActiveMappings(); got != 0 {
 			t.Errorf("GetActiveMappings() = %d, want 0", got)
 		}
@@ -152,7 +150,6 @@ func TestManager_AddDynamicMapping(t *testing.T) {
 			upnp:       New(),
 			config:     nil,
 			internalIP: "192.168.1.1",
-			activeMaps: make(map[string]bool),
 		}
 		// Should not panic, uses default lease duration
 		err := mgr.AddDynamicMapping("TCP", 8080, 8080, "test")
