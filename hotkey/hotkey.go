@@ -1,13 +1,23 @@
 //go:build windows
 
+// Package hotkey provides global hotkey management for Windows.
 package hotkey
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"syscall"
 )
 
+// Pre-defined errors for hotkey operations
+var (
+	ErrHotkeyRegisterFailed = errors.New("failed to register hotkey")
+	ErrHotkeyAlreadyRegistered = errors.New("hotkey already registered")
+)
+
+// Hotkey constants
 const (
 	// Virtual key codes
 	VK_P     = 0x50
@@ -54,9 +64,16 @@ func NewManager() *Manager {
 	}
 }
 
+// Register registers a hotkey with its callback function.
+// Returns ErrHotkeyRegisterFailed if registration fails.
 func (m *Manager) Register(id, virtualKey, modifiers int, name string, callback func()) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Check if already registered
+	if _, exists := m.hotkeys[id]; exists {
+		return ErrHotkeyAlreadyRegistered
+	}
 
 	// Register with Windows
 	ret, _, err := procRegisterHotkey.Call(
@@ -67,7 +84,7 @@ func (m *Manager) Register(id, virtualKey, modifiers int, name string, callback 
 	)
 
 	if ret == 0 {
-		return err
+		return fmt.Errorf("%w: %v", ErrHotkeyRegisterFailed, err)
 	}
 
 	m.hotkeys[id] = HotkeyConfig{
@@ -82,6 +99,7 @@ func (m *Manager) Register(id, virtualKey, modifiers int, name string, callback 
 	return nil
 }
 
+// Unregister unregisters a hotkey by ID.
 func (m *Manager) Unregister(id int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

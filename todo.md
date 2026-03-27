@@ -1,14 +1,43 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (01:00)
-**Версия**: v3.19.33 (dev: i18n-profiles-improvements, main: 2097d24)
-**Статус**: ✅ проект стабилен, все тесты проходят, улучшения i18n и profiles внедрены
+**Последнее обновление**: 28 марта 2026 г. (01:15)
+**Версия**: v3.19.34 (dev: updater-discord-hotkey-improvements, main: de0a017)
+**Статус**: ✅ проект стабилен, все тесты проходят, улучшения updater, discord и hotkey внедрены
 
 ### Статус веток
 ```
-main: 2097d24 Merge branch 'dev' into main - v3.19.32 asynclogger and env improvements ✅
-dev:  i18n-profiles-improvements I18n and Profiles package improvements (errors, docs) ✅
+main: de0a017 Merge branch 'dev' into main - v3.19.33 i18n and profiles improvements ✅
+dev:  updater-discord-hotkey-improvements Updater, Discord and Hotkey package improvements (errors, docs) ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 01:15) - v3.19.34 UPDATER DISCORD AND HOTKEY IMPROVEMENTS
+
+### Улучшение updater, discord и hotkey package (predefined errors, documentation)
+
+#### Updater Package Improvements (`updater/updater.go`)
+- [x] **Добавлено**: 5 предопределённых ошибок (`ErrUpdateCheckFailed`, `ErrUpdateDownloadFailed`, `ErrUpdateApplyFailed`, `ErrInvalidVersion`, `ErrNoAssetForPlatform`)
+- [x] **Добавлено**: Документация для пакета и CheckForUpdates()
+- [x] **Улучшено**: Все ошибки в CheckForUpdates() используют предопределённые константы
+- [x] **Эффект**: Типобезопасные ошибки для update операций
+
+#### Discord Package Improvements (`discord/webhook.go`)
+- [x] **Добавлено**: 3 предопределённые ошибки (`ErrWebhookDisabled`, `ErrWebhookSendFailed`, `ErrInvalidWebhookURL`)
+- [x] **Добавлено**: Документация для пакета
+- [x] **Улучшено**: Send() возвращает ErrWebhookDisabled вместо fmt.Errorf
+- [x] **Эффект**: Типобезопасные ошибки для discord webhook
+
+#### Hotkey Package Improvements (`hotkey/hotkey.go`)
+- [x] **Добавлено**: 2 предопределённые ошибки (`ErrHotkeyRegisterFailed`, `ErrHotkeyAlreadyRegistered`)
+- [x] **Добавлено**: Документация для пакета и Register()
+- [x] **Улучшено**: Register() проверяет дубликаты и возвращает ErrHotkeyAlreadyRegistered
+- [x] **Эффект**: Типобезопасные ошибки для hotkey операций
+
+### Итоговый эффект v3.19.34
+- **Предопределённые ошибки**: +10 в updater, discord и hotkey
+- **Документация**: Улучшена в 3 файлах
+- **Качество**: Консистентный стиль, легче тестировать
 
 ---
 
