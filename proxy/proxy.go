@@ -3,13 +3,22 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
+// Pre-defined errors for proxy operations
+var (
+	ErrDialTimeout    = errors.New("dial timeout")
+	ErrDefaultDialer  = errors.New("default dialer not set")
+	ErrProxyNotSet    = errors.New("proxy not set")
+)
+
 const (
+	// tcpConnectTimeout is the default timeout for TCP connections
 	tcpConnectTimeout = 5 * time.Second
 )
 

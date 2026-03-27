@@ -1,14 +1,42 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 27 марта 2026 г. (23:30)
-**Версия**: v3.19.28 (dev: code-quality-improvements, main: d10c619)
-**Статус**: ✅ проект стабилен, все тесты проходят, оптимизации и улучшения кода внедрены
+**Последнее обновление**: 27 марта 2026 г. (23:45)
+**Версия**: v3.19.29 (dev: proxy-improvements, main: eefc5cd)
+**Статус**: ✅ проект стабилен, все тесты проходят, улучшения proxy package внедрены
 
 ### Статус веток
 ```
-main: d10c619 Merge v3.19.27 Socks5WithFallback HTTP3 datagram optimization ✅
-dev:  code-quality-improvements Code quality improvements (50+ predefined errors, refactoring) ✅
+main: eefc5cd Merge branch 'dev' into main - todo.md v3.19.28 updates ✅
+dev:  proxy-improvements Proxy package improvements (errors, docs, validation) ✅
 ```
+
+---
+
+## ✅ Завершено (27.03.2026 23:45) - v3.19.29 PROXY PACKAGE IMPROVEMENTS
+
+### Улучшение proxy package (predefined errors, documentation, validation)
+
+#### Proxy Package Improvements
+- [x] **proxy/proxy.go** ✅
+  - **Добавлено**: 3 предопределённые ошибки (`ErrDialTimeout`, `ErrDefaultDialer`, `ErrProxyNotSet`)
+  - **Улучшено**: Документация для `tcpConnectTimeout`
+  - **Эффект**: Типобезопасные ошибки для proxy операций
+
+- [x] **proxy/base.go** ✅
+  - **Добавлено**: Предопределённая ошибка `ErrBaseUnsupported`
+  - **Улучшено**: Документация для `Base`, `Addr`, `Mode`, `DialContext`, `DialUDP`
+  - **Эффект**: Явные ошибки для base implementation
+
+- [x] **proxy/mode.go** ✅
+  - **Добавлено**: Метод `IsValid()` для валидации режима
+  - **Улучшено**: Документация для констант и `Mode.String()`
+  - **Эффект**: Валидация режимов прокси
+
+### Итоговый эффект v3.19.29
+- **Предопределённые ошибки**: +4 в proxy package
+- **Документация**: Улучшена в 3 файлах
+- **Валидация**: Добавлен `Mode.IsValid()`
+- **Качество**: Консистентный стиль, легче тестировать
 
 ---
 
