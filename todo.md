@@ -1,14 +1,68 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 27 марта 2026 г. (00:00)
-**Версия**: v3.19.19 (dev: performance optimization, main: 00b879e)
+**Последнее обновление**: 27 марта 2026 г. (15:00)
+**Версия**: v3.19.20 (dev: 14ffc8c, main: 55282c8)
 **Статус**: ✅ проект стабилен, все тесты проходят, оптимизации внедрены
 
 ### Статус веток
 ```
-main: 00b879e docs: интеграция документации и очистка дублирующих файлов ✅
-dev:  performance optimization - sync.Map, кэширование, inline ✅
+main: 55282c8 Merge v3.19.20 DHCP metrics atomic optimization ✅
+dev:  14ffc8c perf: DHCP metrics atomic optimization v3.19.20 ✅
 ```
+
+---
+
+## ✅ Завершено (27.03.2026 15:00) - v3.19.20 DHCP METRICS ATOMIC OPTIMIZATION
+
+### Оптимизация DHCP метрик (atomic operations)
+
+#### MetricsCollector Optimization (`dhcp/metrics.go`)
+- [x] **atomic.Int64 для счётчиков** ✅
+  - **Было**: `int64` + `sync.RWMutex` для каждого поля
+  - **Стало**: `atomic.Int64` для lock-free updates
+  - **Поля**: `discoverCount`, `offerCount`, `requestCount`, `ackCount`, `nakCount`, `releaseCount`, `declineCount`, `errorCount`, `activeLeases`, `totalAllocations`, `totalRenewals`
+  - **Эффект**: Record* методы без блокировок
+
+- [x] **atomic.Value для временных меток** ✅
+  - **Поля**: `lastAllocationAt` (time.Time), `lastRequestMAC` (string), `lastRequestIP` (string)
+  - **Эффект**: Lock-free запись/чтение последних запросов
+
+- [x] **hourlyStatsMu вместо общего mu** ✅
+  - **Было**: Один `mu` для всех hourly stats
+  - **Стало**: Отдельный `hourlyStatsMu` (меньше contention)
+  - **Эффект**: Параллельные Record* и GetHourlyStats не блокируют друг друга
+
+- [x] **getOrCreateHourlyStats с double-checked locking** ✅
+  - **Fast path**: RLock проверка существования
+  - **Slow path**: Lock создание нового
+  - **Эффект**: Меньше блокировок при чтении существующих stats
+
+- [x] **GetMetrics с atomic loads** ✅
+  - **Lock-free snapshot**: Все поля читаются через `.Load()`
+  - **Nil-safe**: Проверка `atomic.Value.Load() != nil` перед конверсией
+  - **Эффект**: Можно вызывать из любого goroutine без блокировок
+
+- [x] **GetHourlyStats с копированием map** ✅
+  - **Было**: RLock на всё время итерации
+  - **Стало**: Копирование map + RLock только на копирование
+  - **Эффект**: Меньше время удержания блокировки
+
+- [x] **HourlyStats с atomic counters** ✅
+  - **Добавлен**: `releaseCount atomic.Int64`
+  - **Все поля**: `atomic.Int64` для lock-free updates
+  - **Эффект**: Record* в hourly stats без блокировок
+
+#### HourlyStatsSnapshot
+- [x] **Добавлен ReleaseCount** ✅
+  - **Поле**: `ReleaseCount int64` в snapshot
+  - **Эффект**: Полные метрики DHCP RELEASE событий
+
+### Итоговый эффект v3.19.20
+- **Record* методы**: Lock-free (было с мьютексом)
+- **GetMetrics**: Lock-free read snapshot (было RLock)
+- **GetHourlyStats**: Меньше время блокировки (копирование map)
+- **Contention**: Значительно меньше при высокой нагрузке DHCP
+- **Thread-safe**: Все методы безопасны для concurrent вызова
 
 ---
 
