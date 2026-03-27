@@ -1,14 +1,38 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (00:15)
-**Версия**: v3.19.30 (dev: metadata-validation, main: ff7e02c)
-**Статус**: ✅ проект стабилен, все тесты проходят, улучшения metadata и core внедрены
+**Последнее обновление**: 28 марта 2026 г. (00:30)
+**Версия**: v3.19.31 (dev: tunnel-improvements, main: 79ee4e5)
+**Статус**: ✅ проект стабилен, все тесты проходят, улучшения tunnel package внедрены
 
 ### Статус веток
 ```
-main: ff7e02c Merge branch 'dev' into main - v3.19.29 proxy package improvements ✅
-dev:  metadata-improvements Metadata and core improvements (validation, docs) ✅
+main: 79ee4e5 Merge branch 'dev' into main - v3.19.30 metadata and core improvements ✅
+dev:  tunnel-improvements Tunnel package improvements (errors, docs) ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 00:30) - v3.19.31 TUNNEL PACKAGE IMPROVEMENTS
+
+### Улучшение tunnel package (predefined errors, documentation)
+
+#### Tunnel Package Improvements
+- [x] **tunnel/tcp.go** ✅
+  - **Добавлено**: 3 предопределённые ошибки (`ErrTunnelDialFailed`, `ErrTunnelCopyFailed`, `ErrTunnelClosed`)
+  - **Добавлено**: Документация для пакета
+  - **Добавлено**: Документация для TCP tunnel констант
+  - **Эффект**: Типобезопасные ошибки для tunnel операций
+
+- [x] **tunnel/udp.go** ✅
+  - **Добавлено**: 3 предопределённые ошибки (`ErrUDPSessionTimeout`, `ErrUPnPMappingFailed`, `ErrPortExcluded`)
+  - **Добавлено**: Документация для пакета
+  - **Добавлено**: Документация для UDP tunnel констант
+  - **Эффект**: Типобезопасные ошибки для UDP tunnel операций
+
+### Итоговый эффект v3.19.31
+- **Предопределённые ошибки**: +6 в tunnel package
+- **Документация**: Улучшена в 2 файлах
+- **Качество**: Консистентный стиль, легче тестировать
 
 ---
 
