@@ -19,6 +19,22 @@ var (
 	ErrWinDivertSend    = fmt.Errorf("WinDivert send error")
 	ErrInvalidPacket    = fmt.Errorf("invalid packet data")
 	ErrPacketTooShort   = fmt.Errorf("packet too short")
+	ErrQueueOverflow    = fmt.Errorf("WinDivert queue overflow detected")
+)
+
+// WinDivert monitoring constants
+const (
+	// DefaultQueueLength is the default WinDivert queue length
+	DefaultQueueLength = 4096
+
+	// MaxQueueLength is the maximum queue length before overflow
+	MaxQueueLength = 8192
+
+	// QueueCheckInterval is how often to check queue length
+	QueueCheckInterval = 100 * time.Millisecond
+
+	// QueueOverflowThreshold is the queue length threshold for overflow warning
+	QueueOverflowThreshold = 3000
 )
 
 // Batch processing constants
@@ -57,10 +73,15 @@ type Handle struct {
 	filter     string
 	stopChan   chan struct{}
 	packetChan chan *godivert.Packet
-	
+
 	// Batch processing support
 	batchPool    sync.Pool      // pools [][]byte for batch recv
 	packetPool   *packetBufferPool // zero-copy packet buffers
+
+	// Queue monitoring
+	queueLength     atomic.Int32
+	queueOverflowed atomic.Bool
+	overflowCount   atomic.Int32
 }
 
 // packetBufferPool provides zero-copy packet buffer management
@@ -503,4 +524,85 @@ func (bp *BatchProcessor) GetStats() BatchStats {
 		BatchSize:   bp.batchSize,
 		ChannelSize: len(bp.batchChan),
 	}
+}
+
+// QueueStats holds WinDivert queue statistics
+type QueueStats struct {
+	QueueLength     int32 `json:"queue_length"`
+	Overflowed      bool  `json:"overflowed"`
+	OverflowCount   int32 `json:"overflow_count"`
+	MaxQueueLength  int32 `json:"max_queue_length"`
+	AvgQueueLength  int32 `json:"avg_queue_length"`
+	Samples         int   `json:"samples"`
+}
+
+// GetQueueStats returns queue statistics
+func (h *Handle) GetQueueStats() QueueStats {
+	return QueueStats{
+		QueueLength:   h.queueLength.Load(),
+		Overflowed:    h.queueOverflowed.Load(),
+		OverflowCount: h.overflowCount.Load(),
+		MaxQueueLength: MaxQueueLength,
+	}
+}
+
+// IsQueueOverflowed returns true if queue overflow was detected
+func (h *Handle) IsQueueOverflowed() bool {
+	return h.queueOverflowed.Load()
+}
+
+// GetQueueLength returns current queue length
+func (h *Handle) GetQueueLength() int32 {
+	return h.queueLength.Load()
+}
+
+// ResetOverflowCounter resets the overflow counter
+func (h *Handle) ResetOverflowCounter() {
+	h.overflowCount.Store(0)
+	h.queueOverflowed.Store(false)
+}
+
+// FallbackType represents the type of fallback capture method
+type FallbackType int
+
+const (
+	// FallbackNone means no fallback
+	FallbackNone FallbackType = iota
+	// FallbackNpcap means use Npcap as fallback
+	FallbackNpcap
+	// FallbackRawSocket means use raw sockets as fallback
+	FallbackRawSocket
+)
+
+// FallbackConfig holds configuration for WinDivert fallback
+type FallbackConfig struct {
+	Enabled        bool         `json:"enabled"`
+	FallbackType   FallbackType `json:"type"`
+	AutoSwitch     bool         `json:"autoSwitch"`
+	OverflowThreshold int       `json:"overflowThreshold"`
+}
+
+// DefaultFallbackConfig returns default fallback configuration
+func DefaultFallbackConfig() *FallbackConfig {
+	return &FallbackConfig{
+		Enabled:         true,
+		FallbackType:    FallbackNpcap,
+		AutoSwitch:      true,
+		OverflowThreshold: QueueOverflowThreshold,
+	}
+}
+
+// CheckFallbackNeeded checks if fallback is needed based on queue stats
+func (h *Handle) CheckFallbackNeeded(config *FallbackConfig) bool {
+	if !config.Enabled {
+		return false
+	}
+
+	// Check overflow
+	if config.AutoSwitch && h.IsQueueOverflowed() {
+		slog.Warn("WinDivert overflow detected, fallback may be needed")
+		return true
+	}
+
+	return false
 }
