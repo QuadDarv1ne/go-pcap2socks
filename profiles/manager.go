@@ -1,6 +1,8 @@
+// Package profiles provides profile management for go-pcap2socks configurations.
 package profiles
 
 import (
+	"errors"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +11,15 @@ import (
 	"sync"
 )
 
+// Pre-defined errors for profile operations
+var (
+	ErrProfileNotFound   = errors.New("profile not found")
+	ErrProfileSaveFailed = errors.New("failed to save profile")
+	ErrProfileLoadFailed = errors.New("failed to load profile")
+	ErrInvalidProfile    = errors.New("invalid profile name")
+)
+
+// Manager handles profile storage and retrieval
 type Manager struct {
 	mu          sync.RWMutex
 	profilesDir string

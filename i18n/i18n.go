@@ -2,12 +2,19 @@
 package i18n
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
+)
+
+// Pre-defined errors for i18n operations
+var (
+	ErrUnsupportedLanguage = errors.New("unsupported language")
+	ErrStackNotInitialized = errors.New("stack not initialized")
 )
 
 // Language represents a supported language code.
@@ -168,6 +175,8 @@ type Localizer struct {
 }
 
 // NewLocalizer creates a new Localizer for the specified language.
+// If lang is empty, it tries to get language from PCAP2SOCKS_LANG environment variable.
+// Falls back to English if no valid language is specified.
 func NewLocalizer(lang Language) *Localizer {
 	if lang == "" {
 		// Try to get language from environment variable
@@ -217,16 +226,17 @@ func (l *Localizer) FormatNetworkConfig(ipRangeStart, ipRangeEnd net.IP, mask ne
 }
 
 // GetStackStatusMessage returns a localized message for stack status.
-func (l *Localizer) GetStackStatusMessage(s *stack.Stack) string {
+// Returns ErrStackNotInitialized if stack is nil.
+func (l *Localizer) GetStackStatusMessage(s *stack.Stack) (string, error) {
 	if s == nil {
-		return "Stack not initialized"
+		return "", ErrStackNotInitialized
 	}
 	switch l.lang {
 	case Russian:
-		return "Стек инициализирован"
+		return "Стек инициализирован", nil
 	case Chinese:
-		return "协议栈已初始化"
+		return "协议栈已初始化", nil
 	default:
-		return "Stack initialized"
+		return "Stack initialized", nil
 	}
 }

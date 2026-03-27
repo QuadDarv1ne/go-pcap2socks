@@ -1,14 +1,40 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (00:45)
-**Версия**: v3.19.32 (dev: logger-env-improvements, main: c2ea4df)
-**Статус**: ✅ проект стабилен, все тесты проходят, улучшения asynclogger и env внедрены
+**Последнее обновление**: 28 марта 2026 г. (01:00)
+**Версия**: v3.19.33 (dev: i18n-profiles-improvements, main: 2097d24)
+**Статус**: ✅ проект стабилен, все тесты проходят, улучшения i18n и profiles внедрены
 
 ### Статус веток
 ```
-main: c2ea4df Merge branch 'dev' into main - v3.19.31 tunnel package improvements ✅
-dev:  logger-env-improvements AsyncLogger and Env package improvements (errors, docs) ✅
+main: 2097d24 Merge branch 'dev' into main - v3.19.32 asynclogger and env improvements ✅
+dev:  i18n-profiles-improvements I18n and Profiles package improvements (errors, docs) ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 01:00) - v3.19.33 I18N AND PROFILES IMPROVEMENTS
+
+### Улучшение i18n и profiles package (predefined errors, documentation)
+
+#### I18n Package Improvements (`i18n/i18n.go`)
+- [x] **Добавлено**: 2 предопределённые ошибки (`ErrUnsupportedLanguage`, `ErrStackNotInitialized`)
+- [x] **Улучшено**: GetStackStatusMessage() теперь возвращает (string, error) вместо string
+- [x] **Улучшено**: Документация для NewLocalizer и других функций
+- [x] **Эффект**: Типобезопасные ошибки для i18n операций
+
+#### Profiles Package Improvements (`profiles/manager.go`)
+- [x] **Добавлено**: 4 предопределённые ошибки (`ErrProfileNotFound`, `ErrProfileSaveFailed`, `ErrProfileLoadFailed`, `ErrInvalidProfile`)
+- [x] **Добавлено**: Документация для всех публичных функций
+- [x] **Улучшено**: SaveProfile проверяет пустое имя и возвращает ErrInvalidProfile
+- [x] **Улучшено**: LoadProfile возвращает ErrProfileNotFound если файл не существует
+- [x] **Улучшено**: SwitchProfile возвращает ErrProfileNotFound если профиль не существует
+- [x] **Эффект**: Типобезопасные ошибки для profile операций
+
+### Итоговый эффект v3.19.33
+- **Предопределённые ошибки**: +6 в i18n и profiles
+- **Обработка ошибок**: Улучшена в GetStackStatusMessage, SaveProfile, LoadProfile, SwitchProfile
+- **Документация**: Улучшена в 2 файлах
+- **Качество**: Консистентный стиль, легче тестировать
 
 ---
 
