@@ -28,6 +28,7 @@ func (d *Direct) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 		return nil, err
 	}
 	setKeepAlive(c)
+	setNoDelay(c)
 	return c, nil
 }
 

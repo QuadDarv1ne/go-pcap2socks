@@ -30,8 +30,8 @@ const (
 	// This timeout prevents connections from hanging indefinitely after one side closes.
 	TCPWaitTimeout = 60 * time.Second
 
-	// tcpRelayBufferSize is optimized buffer size for TCP relay (2KB for typical HTTP traffic)
-	tcpRelayBufferSize = 2048
+	// tcpRelayBufferSize increased for high-throughput gaming traffic (64KB for optimal performance)
+	tcpRelayBufferSize = 65535
 )
 
 // copyResult holds the result of a copy operation
