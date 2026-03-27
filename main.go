@@ -461,7 +461,7 @@ func main() {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		go func() {
+		goroutine.SafeGo(func() {
 			err := cmd.Start()
 			if err != nil {
 				slog.Error(msgs.ExecuteCommandError, slog.Any("err", err))
@@ -471,7 +471,7 @@ func main() {
 			if err != nil {
 				slog.Debug("Command finished with error", slog.Any("err", err))
 			}
-		}()
+		})
 	}
 
 	err = run(config, localizer)
@@ -501,15 +501,15 @@ func main() {
 	}
 
 	// Start HTTP server in goroutine
-	go func() {
+	goroutine.SafeGo(func() {
 		slog.Info("HTTP server starting on :8085")
 		if err := _httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server error", slog.Any("err", err))
 		}
-	}()
+	})
 
 	// Start web UI server on port 8080
-	go func() {
+	goroutine.SafeGo(func() {
 		slog.Info("Starting web UI server on :8080")
 
 		// Set start time for API
