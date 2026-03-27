@@ -1,7 +1,12 @@
 // Package di provides dependency injection container for go-pcap2socks.
 package di
 
+import (
+	"github.com/QuadDarv1ne/go-pcap2socks/interfaces"
+)
+
 // ServiceCollection defines the core services for go-pcap2socks.
+// This type is deprecated - use Container directly with Register methods.
 type ServiceCollection struct {
 	Container *Container
 }
@@ -15,23 +20,24 @@ func NewServiceCollection() *ServiceCollection {
 
 // ConfigureServices configures all services for the application.
 // This is a template showing how to wire up services using DI.
+// Adapt this function to your actual configuration structure.
 func (sc *ServiceCollection) ConfigureServices(config interface{}) error {
 	builder := NewContainerBuilder()
 
 	// Example configuration - adapt to actual config structure
 	// DNS Resolver
-	builder.AddSingleton((*DNSResolver)(nil), func() (DNSResolver, error) {
-		return NewCachedDNSResolver(), nil
+	builder.AddSingleton((*interfaces.DNSResolver)(nil), func() (interfaces.DNSResolver, error) {
+		return nil, nil // Replace with actual DNS resolver implementation
 	})
 
 	// DHCP Server
-	builder.AddSingleton((*DHCPServer)(nil), func(resolver DNSResolver) (DHCPServer, error) {
-		return NewDHCPServerWithResolver(resolver), nil
+	builder.AddSingleton((*interfaces.DHCPServer)(nil), func(resolver interfaces.DNSResolver) (interfaces.DHCPServer, error) {
+		return nil, nil // Replace with actual DHCP server implementation
 	})
 
 	// Router
-	builder.AddSingleton((*Router)(nil), func(dialer Dialer) (Router, error) {
-		return NewRuleRouter(), nil
+	builder.AddSingleton((*interfaces.Router)(nil), func(dialer interfaces.Dialer) (interfaces.Router, error) {
+		return nil, nil // Replace with actual router implementation
 	})
 
 	container, err := builder.Build()
@@ -43,40 +49,29 @@ func (sc *ServiceCollection) ConfigureServices(config interface{}) error {
 	return nil
 }
 
-// Interface stubs for compilation
-type DNSResolver interface{}
-type DHCPServer interface{}
-type Router interface{}
-type Dialer interface{}
-
-// Constructor stubs
-func NewCachedDNSResolver() DNSResolver     { return nil }
-func NewDHCPServerWithResolver(DNSResolver) DHCPServer { return nil }
-func NewRuleRouter() Router                 { return nil }
-
 // GetResolver returns the DNS resolver service.
-func (sc *ServiceCollection) GetResolver() (DNSResolver, error) {
-	instance, err := sc.Container.Resolve((*DNSResolver)(nil))
+func (sc *ServiceCollection) GetResolver() (interfaces.DNSResolver, error) {
+	instance, err := sc.Container.Resolve((*interfaces.DNSResolver)(nil))
 	if err != nil {
 		return nil, err
 	}
-	return instance.(DNSResolver), nil
+	return instance.(interfaces.DNSResolver), nil
 }
 
 // GetDHCPServer returns the DHCP server service.
-func (sc *ServiceCollection) GetDHCPServer() (DHCPServer, error) {
-	instance, err := sc.Container.Resolve((*DHCPServer)(nil))
+func (sc *ServiceCollection) GetDHCPServer() (interfaces.DHCPServer, error) {
+	instance, err := sc.Container.Resolve((*interfaces.DHCPServer)(nil))
 	if err != nil {
 		return nil, err
 	}
-	return instance.(DHCPServer), nil
+	return instance.(interfaces.DHCPServer), nil
 }
 
 // GetRouter returns the router service.
-func (sc *ServiceCollection) GetRouter() (Router, error) {
-	instance, err := sc.Container.Resolve((*Router)(nil))
+func (sc *ServiceCollection) GetRouter() (interfaces.Router, error) {
+	instance, err := sc.Container.Resolve((*interfaces.Router)(nil))
 	if err != nil {
 		return nil, err
 	}
-	return instance.(Router), nil
+	return instance.(interfaces.Router), nil
 }
