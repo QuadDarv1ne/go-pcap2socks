@@ -52,3 +52,11 @@ CLAUDE.md
 # WinDivert driver in root (runtime file, should not be tracked)
 WinDivert64.sys
 WinDivert.dll
+
+# Dependencies folder (download manually)
+/deps/*.exe
+/deps/*.zip
+/deps/*/WinDivert64.sys
+/deps/*/WinDivert64.dll
+/deps/*/WinDivert32.sys
+/deps/*/WinDivert32.dll

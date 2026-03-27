@@ -651,7 +651,7 @@ func main() {
 			}
 		} else {
 			// Start HTTP server (default)
-			port := 8080
+			port := findAvailablePort(8080)
 			if config.API != nil && config.API.Port > 0 {
 				port = config.API.Port
 			}
@@ -1240,6 +1240,9 @@ func autoConfigure() {
 		slog.Debug("Device type unknown, using default profile")
 	}
 
+	// Check for Windows ICS conflict
+	checkWindowsICSConflict()
+
 	// Auto-select best engine for current system
 	engineSelector := auto.NewEngineSelector()
 	selectedEngine := engineSelector.SelectBestEngine()
@@ -1528,6 +1531,71 @@ func findBestInterface() InterfaceConfig {
 	}
 
 	return InterfaceConfig{}
+}
+
+// checkWindowsICSConflict checks if Windows ICS (Internet Connection Sharing) is enabled
+// and warns about potential DHCP conflicts
+func checkWindowsICSConflict() {
+	// Check if interface has 192.168.137.1 which is default ICS IP
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			ip4 := ipnet.IP.To4()
+			if ip4 == nil {
+				continue
+			}
+
+			if ip4.String() == "192.168.137.1" {
+				slog.Warn("Windows ICS (Internet Connection Sharing) detected!")
+				slog.Warn("Built-in Windows DHCP may conflict with go-pcap2socks DHCP server")
+				slog.Warn("")
+				slog.Warn("To fix, disable ICS:")
+				slog.Warn("  1. Control Panel → Network Connections")
+				slog.Warn("  2. Right-click Wi-Fi adapter → Properties → Sharing tab")
+				slog.Warn("  3. Uncheck 'Allow other network users to connect'")
+				slog.Warn("")
+				slog.Warn("Or use static IP on PS4:")
+				slog.Warn("  IP: 192.168.137.100, Mask: 255.255.255.0")
+				slog.Warn("  Gateway: 192.168.137.1, DNS: 192.168.137.1")
+				slog.Warn("")
+				return
+			}
+		}
+	}
+}
+
+// findAvailablePort finds an available TCP port starting from startPort
+func findAvailablePort(startPort int) int {
+	for port := startPort; port < startPort+100; port++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err == nil {
+			ln.Close()
+			if port != startPort {
+				slog.Warn("Port %d is busy, using %d instead", startPort, port)
+			}
+			return port
+		}
+	}
+	// If no port found in range, return original port (will fail with error)
+	return startPort
 }
 
 func isPrivateIP(ip net.IP) bool {
