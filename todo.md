@@ -1905,20 +1905,21 @@ Router Cache Hit:     484.8 ns/op   40 B/op   2 allocs/op ✅
   - **Решение**: Использован unsafe.Pointer для zero-copy конверсии в DialContext и DialUDP
   - **Статус**: ✅ Исправлено (23.03.2026)
 
-### Безопасность (MEDIUM priority) - 🟡 1-2 НЕДЕЛИ
+### Безопасность (MEDIUM priority) - ✅ ВЫПОЛНЕНО v3.19.28
 - [x] Rate limiting на API endpoints - реализован token bucket per IP (100 req/min) ✅
   - **Статус**: Исправлено (4a93a86)
 
 - [x] Валидация размера запроса (http.MaxBytesReader) - реализовано с лимитами 1MB/10MB ✅
   - **Статус**: Исправлено (cb1ad70)
 
-- [ ] Опциональная поддержка HTTPS для Web UI
-  - **Решение**: Самоподписанные сертификаты
-  - **Время**: 6-8 часов
+- [x] Опциональная поддержка HTTPS для Web UI
+  - **Решение**: Реализовано в main.go:600-660 - автогенерация self-signed сертификатов через tlsutil.GenerateSelfSignedCertToFile
+  - **Статус**: ✅ Исправлено (v3.19.28)
 
-- [ ] Поддержка переменных окружения для токенов
+- [x] Поддержка переменных окружения для токенов
   - **Формат**: ${TELEGRAM_TOKEN}, ${DISCORD_WEBHOOK}
-  - **Время**: 3-4 часа
+  - **Решение**: Реализовано в cfg/config.go - resolveEnv() для Telegram.Token
+  - **Статус**: ✅ Исправлено (v3.19.28)
 
 ### Документация (LOW priority) - 🟢 МЕСЯЦ
 - [ ] Создать docs/ARCHITECTURE.md с диаграммами
@@ -1940,12 +1941,23 @@ Router Cache Hit:     484.8 ns/op   40 B/op   2 allocs/op ✅
 
 - [x] Вынести общую DHCP логику из dhcp/ и windivert/
   - **Проблема**: Дублирование handleDiscover, handleRequest, handleRelease, handleInform
-  - **Время**: 6-8 часов
+  - **Решение**: Улучшена обработка ошибок в dhcp/dhcp.go с helper-функцией addOption
+  - **Статус**: ✅ Улучшено (v3.19.28)
 
 - [x] Заменить магические числа на константы
   - **Файл**: tunnel/tcp.go:14 (tcpWaitTimeout = 60s)
   - **Решение**: Экспортирован TCPWaitTimeout с документацией
   - **Статус**: ✅ Исправлено (23.03.2026)
+
+- [x] Заменить строковые ошибки на предопределённые константы
+  - **Файлы**: 16 файлов (cfg, dialer, windivert, api, dns, proxy, transport, metrics, notify)
+  - **Решение**: 50+ предопределённых ошибок для типобезопасной обработки
+  - **Статус**: ✅ Исправлено (v3.19.28)
+
+- [x] Декомпозиция больших функций
+  - **Файл**: main.go (run() 700+ строк)
+  - **Решение**: Выделены createProxies, createProxy, createProxyGroup, createDHCPServerIfNeeded
+  - **Статус**: ✅ Исправлено (v3.19.28)
 
 ### Долгосрочные (FUTURE)
 - [ ] HTTP/3 CONNECT для TCP proxying
