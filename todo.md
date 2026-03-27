@@ -1,18 +1,42 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 27 марта 2026 г. (23:45)
-**Версия**: v3.19.38+ (dev: ci-cd-race-detection, main: performance-optimizations)
-**Статус**: ✅ проект стабилен, все тесты проходят, 14/19 улучшений реализовано
+**Последнее обновление**: 27 марта 2026 г. (23:55)
+**Версия**: v3.19.39+ (dev: property-based-testing, main: performance-optimizations)
+**Статус**: ✅ проект стабилен, все тесты проходят, 15/19 улучшений реализовано
 
 ### Статус веток
 ```
 main: performance-optimizations v3.19.35 - Performance optimizations, DI, structured errors ✅
-dev:  ci-cd-race-detection - CI/CD, race detection, static analysis ✅
+dev:  property-based-testing - Property-based tests with rapid ✅
 ```
 
 ---
 
-## 🔄 В работе (27.03.2026 23:45) - v3.19.38+ CI/CD & RACE DETECTION
+## 🔄 В работе (27.03.2026 23:55) - v3.19.39+ PROPERTY-BASED TESTING
+
+### Автоматическая генерация тестовых случаев
+
+#### 1. Property-Based Tests with Rapid
+- [x] **Добавлено**: `proxy/rapid_test.go` - 5 property-based тестов
+  - `TestRouterProperties`: Поведение роутера со случайными правилами
+  - `TestRoutingTableProperties`: Детерминизм таблицы маршрутизации
+  - `TestRouteCacheProperties`: Консистентность кэша под нагрузкой
+  - `TestBandwidthParseProperties`: Корректность парсера bandwidth
+  - `TestMACFilterProperties`: Логика blacklist/whitelist MAC фильтра
+- [x] **Добавлено**: Зависимость `pgregory.net/rapid v1.2.0`
+- [x] **Эффект**: Автоматическое обнаружение edge cases, лучшая coverage
+
+### Итоговый эффект v3.19.39+
+- **Новых файлов**: 1 (rapid_test.go)
+- **Тестов добавлено**: 5 property-based
+- **Зависимостей**: 1 (rapid)
+- **Строк добавлено**: ~195
+- **Компиляция**: ✅ Успешна
+- **Прогресс**: 15/19 задач (79%)
+
+---
+
+## ✅ Завершено (27.03.2026 23:45) - v3.19.38+ CI/CD & RACE DETECTION
 
 ### Автоматизация тестирования и статический анализ
 
