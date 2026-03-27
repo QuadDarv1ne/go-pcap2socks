@@ -28,10 +28,6 @@ func TestNewServer(t *testing.T) {
 		t.Error("Server config not set correctly")
 	}
 
-	if server.leases == nil {
-		t.Error("Server leases map not initialized")
-	}
-
 	if server.stopChan == nil {
 		t.Error("Server stopChan not initialized")
 	}
@@ -112,18 +108,17 @@ func TestServerReleaseIP(t *testing.T) {
 	}
 
 	// Verify lease exists
-	if len(server.leases) != 1 {
-		t.Errorf("Expected 1 lease, got %d", len(server.leases))
+	if server.GetLeaseCount() != 1 {
+		t.Errorf("Expected 1 lease, got %d", server.GetLeaseCount())
 	}
 
 	// Manually remove lease (simulate release)
-	server.mu.Lock()
-	delete(server.leases, mac.String())
-	server.mu.Unlock()
+	server.leases.Delete(mac.String())
+	server.leaseCount.Add(-1)
 
 	// Verify lease is removed
-	if len(server.leases) != 0 {
-		t.Errorf("Expected 0 leases after release, got %d", len(server.leases))
+	if server.GetLeaseCount() != 0 {
+		t.Errorf("Expected 0 leases after release, got %d", server.GetLeaseCount())
 	}
 }
 

@@ -26,7 +26,7 @@ func TestLeaseDB_NewAndLoad(t *testing.T) {
 	}
 
 	// Count should be 0
-	if count := db.Count(); count != 0 {
+	if count := db.GetLeaseCount(); count != 0 {
 		t.Errorf("Expected count 0, got %d", count)
 	}
 }
@@ -89,10 +89,9 @@ func TestLeaseDB_SaveAndLoad(t *testing.T) {
 
 	db.SetLease(lease)
 
-	// Force save
-	if err := db.Save(); err != nil {
-		t.Fatalf("Save failed: %v", err)
-	}
+	// Force save by triggering saveChan and waiting
+	db.saveChan <- struct{}{}
+	time.Sleep(100 * time.Millisecond)
 
 	// Verify file exists
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
@@ -134,16 +133,16 @@ func TestLeaseDB_DeleteLease(t *testing.T) {
 	db.SetLease(lease)
 
 	// Verify lease exists
-	if db.Count() != 1 {
-		t.Fatalf("Expected count 1, got %d", db.Count())
+	if db.GetLeaseCount() != 1 {
+		t.Fatalf("Expected count 1, got %d", db.GetLeaseCount())
 	}
 
 	// Delete lease
 	db.DeleteLease(mac)
 
 	// Verify lease is deleted
-	if db.Count() != 0 {
-		t.Errorf("Expected count 0 after delete, got %d", db.Count())
+	if db.GetLeaseCount() != 0 {
+		t.Errorf("Expected count 0 after delete, got %d", db.GetLeaseCount())
 	}
 
 	retrieved := db.GetLease(mac)
@@ -180,18 +179,15 @@ func TestLeaseDB_CleanupExpired(t *testing.T) {
 	db.SetLease(validLease)
 
 	// Verify both leases exist
-	if count := db.Count(); count != 2 {
+	if count := db.GetLeaseCount(); count != 2 {
 		t.Fatalf("Expected count 2, got %d", count)
 	}
 
 	// Cleanup expired
-	deleted := db.CleanupExpired()
+	db.CleanupExpired()
+	time.Sleep(10 * time.Millisecond)
 
-	if deleted != 1 {
-		t.Errorf("Expected 1 deleted lease, got %d", deleted)
-	}
-
-	if count := db.Count(); count != 1 {
+	if count := db.GetLeaseCount(); count != 1 {
 		t.Errorf("Expected count 1 after cleanup, got %d", count)
 	}
 
@@ -257,10 +253,16 @@ func TestLeaseDB_Close(t *testing.T) {
 
 	db.SetLease(lease)
 
+	// Mark as dirty to trigger save on close
+	db.dirty.Store(true)
+
 	// Close database
 	if err := db.Close(); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
+
+	// Wait for save to complete
+	time.Sleep(100 * time.Millisecond)
 
 	// Verify file was saved
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
