@@ -1,18 +1,72 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 27 марта 2026 г. (23:30)
-**Версия**: v3.19.37+ (dev: fuzz-testing, main: performance-optimizations)
-**Статус**: ✅ проект стабилен, все тесты проходят, 13/19 улучшений реализовано
+**Последнее обновление**: 27 марта 2026 г. (23:45)
+**Версия**: v3.19.38+ (dev: ci-cd-race-detection, main: performance-optimizations)
+**Статус**: ✅ проект стабилен, все тесты проходят, 14/19 улучшений реализовано
 
 ### Статус веток
 ```
 main: performance-optimizations v3.19.35 - Performance optimizations, DI, structured errors ✅
-dev:  fuzz-testing - Fuzzing tests for parsers + all previous improvements ✅
+dev:  ci-cd-race-detection - CI/CD, race detection, static analysis ✅
 ```
 
 ---
 
-## 🔄 В работе (27.03.2026 23:30) - v3.19.37+ FUZZING TESTS
+## 🔄 В работе (27.03.2026 23:45) - v3.19.38+ CI/CD & RACE DETECTION
+
+### Автоматизация тестирования и статический анализ
+
+#### 1. GitHub Actions CI/CD Pipeline (`.github/workflows/test.yml`)
+- [x] **Добавлено**: Workflow с 4 jobs (test, fuzz, lint, build)
+- [x] **Test & Race Detection**: Тесты с `-race` флагом для Go 1.21 и 1.22
+- [x] **Fuzzing Tests**: 30-секундные fuzz тесты для всех пакетов
+- [x] **Static Analysis**: golangci-lint с кастомной конфигурацией
+- [x] **Build Verification**: Сборка на Windows и Linux
+- [x] **Coverage**: Загрузка результатов в Codecov
+- [x] **Артефакты**: Сохранение бинарников для каждой платформы
+
+#### 2. Static Analysis Configuration (`.golangci.yml`)
+- [x] **Добавлено**: Конфигурация golangci-lint
+- [x] **Включено**: 20+ линтеров
+  - **Security**: gosec
+  - **Bugs**: errcheck, govet, staticcheck, ineffassign, unused
+  - **Complexity**: gocognit (25), gocyclo (25), nestif (6)
+  - **Style**: gofmt, goimports, misspell, nakedret
+  - **Errors**: err113, errorlint, nilnil
+  - **Best practices**: bodyclose, contextcheck, tparallel
+- [x] **Настроено**: Severity rules (error/warning/info)
+- [x] **Эффект**: Автоматическая проверка качества кода
+
+#### 3. Race Detection Scripts
+- [x] **Добавлено**: `test-race.sh` для Linux/macOS
+- [x] **Добавлено**: `test-race.bat` для Windows
+- [x] **Функционал**: Запуск тестов с `-race` флагом
+- [x] **Вывод**: Логирование в race-test-output.log
+- [x] **Эффект**: Обнаружение data races локально
+
+#### 4. Testing Documentation (`TESTING.md`)
+- [x] **Добавлено**: Полное руководство по тестированию
+- [x] **Разделы**:
+  - Quick Start
+  - Test Types (unit, integration, fuzzing, race)
+  - CI/CD описание
+  - Coverage инструкции
+  - Benchmarks
+  - Common Issues
+  - Best Practices
+- [x] **Эффект**: Упрощение онбординга новых разработчиков
+
+### Итоговый эффект v3.19.38+
+- **Новых файлов**: 5 (CI workflow, linter config, 2 скрипта, документация)
+- **Строк добавлено**: ~650
+- **Линтеров настроено**: 20+
+- **Скриптов**: 2 (race detection)
+- **Компиляция**: ✅ Успешна
+- **Прогресс**: 14/19 задач (74%)
+
+---
+
+## ✅ Завершено (27.03.2026 23:30) - v3.19.37+ FUZZING TESTS
 
 ### Тестирование безопасности и стабильности парсеров
 
