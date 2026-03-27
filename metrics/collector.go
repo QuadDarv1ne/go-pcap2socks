@@ -2,6 +2,7 @@
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -9,6 +10,12 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
+)
+
+// Pre-defined errors for metrics operations
+var (
+	ErrNilStatsStore = errors.New("stats store is nil")
+	ErrWriteFailed   = errors.New("failed to write metrics")
 )
 
 // Collector collects and exports Prometheus metrics
@@ -46,7 +53,7 @@ func (c *Collector) RecordConnectionClose() {
 	c.connectionsActive.Add(-1)
 }
 
-// RecordTraffic records traffic statistics
+// RecordTraffic records upload and download traffic
 func (c *Collector) RecordTraffic(upload, download uint64) {
 	c.bytesTotal.Add(upload + download)
 	c.bytesUpload.Add(upload)

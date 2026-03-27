@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -8,6 +9,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+// Pre-defined errors for notifications
+var (
+	ErrNotificationFailed = errors.New("failed to send notification")
+	ErrPowerShellUnavailable = errors.New("PowerShell is unavailable")
 )
 
 var (

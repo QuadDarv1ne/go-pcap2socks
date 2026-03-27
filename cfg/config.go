@@ -11,6 +11,21 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/env"
 )
 
+// Pre-defined errors for better error handling
+var (
+	ErrConfigFileNotFound     = fmt.Errorf("config file not found")
+	ErrConfigDecode           = fmt.Errorf("failed to decode config")
+	ErrConfigNormalize        = fmt.Errorf("failed to normalize config")
+	ErrConfigValidate         = fmt.Errorf("failed to validate config")
+	ErrNoOutbounds            = fmt.Errorf("no outbounds configured")
+	ErrInvalidInterfaceGateway = fmt.Errorf("invalid interface gateway")
+	ErrInvalidNetwork         = fmt.Errorf("invalid network configuration")
+	ErrInvalidLocalIP         = fmt.Errorf("invalid local IP")
+	ErrInvalidDHCPConfig      = fmt.Errorf("invalid DHCP configuration")
+	ErrInvalidDHCPPool        = fmt.Errorf("invalid DHCP pool configuration")
+	ErrInvalidTelegramConfig  = fmt.Errorf("invalid Telegram configuration")
+)
+
 func Exists(filePath string) bool {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return false
@@ -22,26 +37,28 @@ func Exists(filePath string) bool {
 func Load(filePath string) (*Config, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return nil, ErrConfigFileNotFound
+		}
+		return nil, fmt.Errorf("open config: %w", err)
 	}
 	defer file.Close()
 
 	config := &Config{}
 	decoder := json.NewDecoder(file)
-	err = decoder.Decode(config)
-	if err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
+	if err := decoder.Decode(config); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrConfigDecode, err)
 	}
 
 	// Resolve environment variables in sensitive fields
 	config.resolveEnv()
 
 	if err := config.Normalize(); err != nil {
-		return nil, fmt.Errorf("normalize config: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrConfigNormalize, err)
 	}
 
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("validate config: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrConfigValidate, err)
 	}
 
 	return config, nil
@@ -101,14 +118,14 @@ func (c *Config) Validate() error {
 	if c.PCAP.Network != "" {
 		_, network, err := net.ParseCIDR(c.PCAP.Network)
 		if err != nil {
-			return fmt.Errorf("invalid pcap.network: %w", err)
+			return fmt.Errorf("%w: %s: %w", ErrInvalidNetwork, c.PCAP.Network, err)
 		}
 
 		// Validate LocalIP is within network
 		if c.PCAP.LocalIP != "" {
 			localIP := net.ParseIP(c.PCAP.LocalIP)
 			if localIP == nil {
-				return fmt.Errorf("invalid pcap.localIP: %s", c.PCAP.LocalIP)
+				return fmt.Errorf("%w: %s", ErrInvalidLocalIP, c.PCAP.LocalIP)
 			}
 			if !network.Contains(localIP) {
 				return fmt.Errorf("pcap.localIP %s is not within pcap.network %s", c.PCAP.LocalIP, c.PCAP.Network)
@@ -118,13 +135,13 @@ func (c *Config) Validate() error {
 
 	if c.PCAP.LocalIP != "" {
 		if ip := net.ParseIP(c.PCAP.LocalIP); ip == nil {
-			return fmt.Errorf("invalid pcap.localIP: %s", c.PCAP.LocalIP)
+			return fmt.Errorf("%w: %s", ErrInvalidLocalIP, c.PCAP.LocalIP)
 		}
 	}
 
 	// Validate InterfaceGateway is present when Network is configured
 	if c.PCAP.Network != "" && c.PCAP.InterfaceGateway == "" {
-		return fmt.Errorf("pcap.interfaceGateway is required when pcap.network is configured")
+		return fmt.Errorf("%w: interfaceGateway is required when network is configured", ErrInvalidInterfaceGateway)
 	}
 
 	if c.PCAP.MTU == 0 {
@@ -146,25 +163,18 @@ func (c *Config) Validate() error {
 
 	// Validate outbounds
 	if len(c.Outbounds) == 0 {
-		return fmt.Errorf("no outbounds configured")
+		return ErrNoOutbounds
 	}
 
 	// Validate Telegram config (optional)
 	if c.Telegram != nil && c.Telegram.Enabled {
 		if c.Telegram.Token != "" && c.Telegram.ChatID == "" {
-			return fmt.Errorf("telegram.token set but telegram.chat_id is empty")
+			return fmt.Errorf("%w: token set but chat_id is empty", ErrInvalidTelegramConfig)
 		}
 		if c.Telegram.ChatID != "" && c.Telegram.Token == "" {
-			return fmt.Errorf("telegram.chat_id set but telegram.token is empty")
+			return fmt.Errorf("%w: chat_id set but token is empty", ErrInvalidTelegramConfig)
 		}
 	}
-
-	// Validate Discord config (optional)
-	// if c.Discord != nil && c.Discord.WebhookURL != "" {
-	// 	if !strings.HasPrefix(c.Discord.WebhookURL, "https://discord.com/api/webhooks/") {
-	// 		return fmt.Errorf("invalid discord.webhook_url format")
-	// 	}
-	// }
 
 	return nil
 }
@@ -448,18 +458,18 @@ func (c *Config) validateDHCP() error {
 
 	// Validate pool start IP
 	if c.DHCP.PoolStart == "" {
-		return fmt.Errorf("dhcp.poolStart is required when DHCP is enabled")
+		return fmt.Errorf("%w: poolStart is required when DHCP is enabled", ErrInvalidDHCPConfig)
 	}
 	if ip := net.ParseIP(c.DHCP.PoolStart); ip == nil {
-		return fmt.Errorf("invalid dhcp.poolStart: %s", c.DHCP.PoolStart)
+		return fmt.Errorf("%w: invalid poolStart: %s", ErrInvalidDHCPPool, c.DHCP.PoolStart)
 	}
 
 	// Validate pool end IP
 	if c.DHCP.PoolEnd == "" {
-		return fmt.Errorf("dhcp.poolEnd is required when DHCP is enabled")
+		return fmt.Errorf("%w: poolEnd is required when DHCP is enabled", ErrInvalidDHCPConfig)
 	}
 	if ip := net.ParseIP(c.DHCP.PoolEnd); ip == nil {
-		return fmt.Errorf("invalid dhcp.poolEnd: %s", c.DHCP.PoolEnd)
+		return fmt.Errorf("%w: invalid poolEnd: %s", ErrInvalidDHCPPool, c.DHCP.PoolEnd)
 	}
 
 	// Validate lease duration
@@ -470,7 +480,7 @@ func (c *Config) validateDHCP() error {
 	// Validate pool is within network
 	_, network, err := net.ParseCIDR(c.PCAP.Network)
 	if err != nil {
-		return fmt.Errorf("invalid pcap.network: %w", err)
+		return fmt.Errorf("%w: %w", ErrInvalidNetwork, err)
 	}
 
 	poolStart := net.ParseIP(c.DHCP.PoolStart)

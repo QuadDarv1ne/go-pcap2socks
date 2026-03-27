@@ -212,22 +212,15 @@ func (f *UDPForwarder) newUDPConn(natConn N.PacketConn) N.PacketWriter {
 	// Increment session counter only when new connection is created
 	f.sessionCount.Add(1)
 
-	// Decrement counter after UDP session timeout when connection expires
-	// This matches the UDP session timeout used by udpnat.Service
-	go func() {
-		select {
-		case <-time.After(time.Duration(f.udpTimeout) * time.Second):
-			f.sessionCount.Add(-1)
-		case <-f.ctx.Done():
-			f.sessionCount.Add(-1)
-		}
-	}()
-
+	// Create a wrapper that decrements the counter when the connection is closed
 	return &UDPBackWriter{
 		stack:         f.stack,
 		source:        f.cacheID.RemoteAddress,
 		sourcePort:    f.cacheID.RemotePort,
 		sourceNetwork: f.cacheProto,
+		onClose: func() {
+			f.sessionCount.Add(-1)
+		},
 	}
 }
 
@@ -302,6 +295,16 @@ func (w *UDPBackWriter) WritePacket(packetBuffer *buf.Buffer, destination M.Sock
 	}
 
 	route.Stats().UDP.PacketsSent.Increment()
+	return nil
+}
+
+// Close closes the UDP connection and decrements the session counter
+func (w *UDPBackWriter) Close() error {
+	if w.closed.CompareAndSwap(false, true) {
+		if w.onClose != nil {
+			w.onClose()
+		}
+	}
 	return nil
 }
 

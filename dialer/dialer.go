@@ -2,10 +2,18 @@ package dialer
 
 import (
 	"context"
+	"errors"
 	"net"
 	"syscall"
 
 	"go.uber.org/atomic"
+)
+
+// Pre-defined errors for dialer operations
+var (
+	ErrBindToDevice    = errors.New("failed to bind to device")
+	ErrSetRoutingMark  = errors.New("failed to set routing mark")
+	ErrInvalidInterface = errors.New("invalid network interface")
 )
 
 var (
@@ -31,6 +39,7 @@ type Options struct {
 	RoutingMark int
 }
 
+// DialContext creates a TCP connection with default options
 func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	return DialContextWithOptions(ctx, network, address, &Options{
 		InterfaceName:  DefaultInterfaceName.Load(),
@@ -39,6 +48,7 @@ func DialContext(ctx context.Context, network, address string) (net.Conn, error)
 	})
 }
 
+// DialContextWithOptions creates a TCP connection with custom options
 func DialContextWithOptions(ctx context.Context, network, address string, opts *Options) (net.Conn, error) {
 	d := &net.Dialer{
 		Control: func(network, address string, c syscall.RawConn) error {
@@ -48,6 +58,7 @@ func DialContextWithOptions(ctx context.Context, network, address string, opts *
 	return d.DialContext(ctx, network, address)
 }
 
+// ListenPacket creates a UDP listener with default options
 func ListenPacket(network, address string) (net.PacketConn, error) {
 	return ListenPacketWithOptions(context.Background(), network, address, &Options{
 		InterfaceName:  DefaultInterfaceName.Load(),
@@ -56,6 +67,7 @@ func ListenPacket(network, address string) (net.PacketConn, error) {
 	})
 }
 
+// ListenPacketWithContext creates a UDP listener with context
 func ListenPacketWithContext(ctx context.Context, network, address string) (net.PacketConn, error) {
 	return ListenPacketWithOptions(ctx, network, address, &Options{
 		InterfaceName:  DefaultInterfaceName.Load(),
@@ -64,6 +76,7 @@ func ListenPacketWithContext(ctx context.Context, network, address string) (net.
 	})
 }
 
+// ListenPacketWithOptions creates a UDP listener with custom options
 func ListenPacketWithOptions(ctx context.Context, network, address string, opts *Options) (net.PacketConn, error) {
 	lc := &net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {

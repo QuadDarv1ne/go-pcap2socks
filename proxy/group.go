@@ -325,8 +325,8 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 				return conn, nil
 			}
 
-			// Mark as unhealthy and try next
-			g.healthStatus[idx].Store(false)
+			// Mark as unhealthy using atomic operation to avoid race condition
+			g.healthStatus[idx].CompareAndSwap(true, false)
 			slog.Debug("Proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
 		}
 
@@ -348,8 +348,8 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 	if err != nil {
 		// Decrement on failure
 		g.activeConns[idx].Add(-1)
-		// Mark as unhealthy
-		g.healthStatus[idx].Store(false)
+		// Mark as unhealthy using atomic operation to avoid race condition
+		g.healthStatus[idx].CompareAndSwap(true, false)
 		slog.Debug("Proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
 		return nil, err
 	}
@@ -383,8 +383,8 @@ func (g *ProxyGroup) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	if err != nil {
 		// Decrement on failure
 		g.activeConns[idx].Add(-1)
-		// Mark as unhealthy
-		g.healthStatus[idx].Store(false)
+		// Mark as unhealthy using atomic operation to avoid race condition
+		g.healthStatus[idx].CompareAndSwap(true, false)
 		slog.Debug("Proxy UDP failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
 
 		if g.policy == Failover {
@@ -440,4 +440,22 @@ func (g *ProxyGroup) GetProxyCount() int {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return len(g.proxies)
+}
+
+// GetStats returns proxy group statistics for monitoring
+// Returns: proxy count, healthy count, active connections per proxy
+func (g *ProxyGroup) GetStats() (proxyCount, healthyCount int, activeConns []int32) {
+	g.mu.RLock()
+	proxyCount = len(g.proxies)
+	g.mu.RUnlock()
+
+	healthyCount = 0
+	activeConns = make([]int32, proxyCount)
+	for i := range g.healthStatus {
+		if g.healthStatus[i].Load() {
+			healthyCount++
+		}
+		activeConns[i] = g.activeConns[i].Load()
+	}
+	return
 }

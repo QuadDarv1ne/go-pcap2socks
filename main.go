@@ -699,102 +699,10 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	// Display network configuration
 	displayNetworkConfig(netConfig, localizer)
 
-	proxies := make(map[string]proxy.Proxy)
-
-	// First pass: create individual proxies
-	for _, outbound := range cfg.Outbounds {
-		// Skip groups in first pass
-		if outbound.Group != nil {
-			continue
-		}
-
-		var p proxy.Proxy
-		switch {
-		case outbound.Direct != nil:
-			p = proxy.NewDirect()
-		case outbound.Socks != nil:
-			// Use Socks5WithFallback for automatic failover
-			p, err = proxy.NewSocks5WithFallback(outbound.Socks.Address, outbound.Socks.Username, outbound.Socks.Password)
-			if err != nil {
-				return fmt.Errorf("%s: %w", msgs.NewSocks5Error, err)
-			}
-		case outbound.Reject != nil:
-			p = proxy.NewReject()
-		case outbound.DNS != nil:
-			p = proxy.NewDNS(cfg.DNS, ifce.Name)
-		case outbound.HTTP3 != nil:
-			// Create HTTP/3 proxy
-			p, err = proxy.NewHTTP3(outbound.HTTP3.Address, outbound.HTTP3.SkipVerify)
-			if err != nil {
-				return fmt.Errorf("create HTTP/3 proxy: %w", err)
-			}
-		case outbound.WireGuard != nil:
-			// Create WireGuard tunnel proxy
-			wgCfg := proxy.WireGuardConfig{
-				PrivateKey: outbound.WireGuard.PrivateKey,
-				PublicKey:  outbound.WireGuard.PublicKey,
-				PreauthKey: outbound.WireGuard.PreauthKey,
-				Endpoint:   outbound.WireGuard.Endpoint,
-				LocalIP:    outbound.WireGuard.LocalIP,
-				RemoteIP:   outbound.WireGuard.RemoteIP,
-			}
-			p, err = proxy.NewWireGuard(wgCfg)
-			if err != nil {
-				return fmt.Errorf("create WireGuard proxy: %w", err)
-			}
-		default:
-			return fmt.Errorf("%s: %+v", msgs.InvalidOutbound, outbound)
-		}
-
-		// Wrap with stats tracking
-		p = proxy.NewStatsProxy(p, _statsStore)
-		proxies[outbound.Tag] = p
-	}
-
-	// Second pass: create proxy groups
-	for _, outbound := range cfg.Outbounds {
-		if outbound.Group == nil {
-			continue
-		}
-
-		// Resolve proxy references
-		groupProxies := make([]proxy.Proxy, 0, len(outbound.Group.Proxies))
-		for _, proxyTag := range outbound.Group.Proxies {
-			if p, ok := proxies[proxyTag]; ok {
-				groupProxies = append(groupProxies, p)
-			} else {
-				slog.Warn("Proxy group references unknown proxy", "group", outbound.Tag, "proxy", proxyTag)
-			}
-		}
-
-		if len(groupProxies) == 0 {
-			slog.Warn("Proxy group has no valid proxies", "group", outbound.Tag)
-			continue
-		}
-
-		// Determine policy
-		policy := proxy.Failover
-		switch outbound.Group.Policy {
-		case "round-robin":
-			policy = proxy.RoundRobin
-		case "least-load":
-			policy = proxy.LeastLoad
-		}
-
-		// Create proxy group
-		groupCfg := &proxy.ProxyGroupConfig{
-			Name:     outbound.Tag,
-			Proxies:  groupProxies,
-			Policy:   policy,
-			CheckURL: outbound.Group.CheckURL,
-		}
-		if outbound.Group.CheckInterval > 0 {
-			groupCfg.CheckInterval = time.Duration(outbound.Group.CheckInterval) * time.Second
-		}
-
-		group := proxy.NewProxyGroup(groupCfg)
-		proxies[outbound.Tag] = group
-		slog.Info("Created proxy group", "name", outbound.Tag, "policy", policy.String(), "proxies", len(groupProxies))
+	// Create proxies from configuration
+	proxies, err := createProxies(cfg, cfg.DNS, ifce.Name, _statsStore, localizer)
+	if err != nil {
+		return err
 	}
 
 	_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
@@ -810,43 +718,9 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	proxy.SetDialer(_defaultProxy)
 
 	// Initialize DHCP server if enabled
-	var dhcpServer device.DHCPServer
-	if cfg.DHCP != nil && cfg.DHCP.Enabled {
-		poolStart := net.ParseIP(cfg.DHCP.PoolStart)
-		poolEnd := net.ParseIP(cfg.DHCP.PoolEnd)
-		localIP := net.ParseIP(cfg.PCAP.LocalIP)
-		_, network, _ := net.ParseCIDR(cfg.PCAP.Network)
-
-		// Parse DNS servers for DHCP
-		dnsServers := make([]net.IP, 0, len(cfg.DNS.Servers))
-		for _, dns := range cfg.DNS.Servers {
-			ipStr := strings.Split(dns.Address, ":")[0]
-			if ip := net.ParseIP(ipStr); ip != nil {
-				dnsServers = append(dnsServers, ip)
-			}
-		}
-
-		dhcpConfig := &dhcp.ServerConfig{
-			ServerIP:      localIP,
-			ServerMAC:     netConfig.LocalMAC,
-			Network:       network,
-			LeaseDuration: time.Duration(cfg.DHCP.LeaseDuration) * time.Second,
-			FirstIP:       poolStart,
-			LastIP:        poolEnd,
-			DNSServers:    dnsServers,
-		}
-
-		// Create DHCP server (platform-specific implementation)
-		dhcpServerImpl, err := createDHCPServer(cfg, dhcpConfig, netConfig)
-		if err != nil {
-			return err
-		}
-
-		// Set dhcpServer for device if it implements the interface
-		if ds, ok := dhcpServerImpl.(device.DHCPServer); ok {
-			dhcpServer = ds
-			_dhcpServer = dhcpServerImpl
-		}
+	dhcpServer, err := createDHCPServerIfNeeded(cfg, netConfig)
+	if err != nil {
+		return err
 	}
 
 	_defaultDevice, err = device.OpenWithDHCP(cfg.Capture, ifce, netConfig, func() device.Stacker {
@@ -2437,4 +2311,165 @@ func doUpdate() {
 		fmt.Printf("Update installed but restart failed: %v\n", err)
 		fmt.Println("Please restart the application manually.")
 	}
+}
+
+// createProxies creates all proxies from configuration
+func createProxies(cfg *cfg.Config, dnsCfg cfg.DNS, interfaceName string, statsStore *stats.Store, localizer *i18n.Localizer) (map[string]proxy.Proxy, error) {
+	proxies := make(map[string]proxy.Proxy)
+
+	// First pass: create individual proxies
+	for _, outbound := range cfg.Outbounds {
+		if outbound.Group != nil {
+			continue // Skip groups in first pass
+		}
+
+		p, err := createProxy(outbound, dnsCfg, interfaceName)
+		if err != nil {
+			return nil, err
+		}
+
+		// Wrap with stats tracking
+		p = proxy.NewStatsProxy(p, statsStore)
+		proxies[outbound.Tag] = p
+	}
+
+	// Second pass: create proxy groups
+	for _, outbound := range cfg.Outbounds {
+		if outbound.Group == nil {
+			continue
+		}
+
+		group, err := createProxyGroup(outbound, proxies)
+		if err != nil {
+			slog.Warn("Proxy group creation failed", "group", outbound.Tag, "err", err)
+			continue
+		}
+
+		proxies[outbound.Tag] = group
+	}
+
+	return proxies, nil
+}
+
+// createProxy creates a single proxy from outbound configuration
+func createProxy(outbound cfg.Outbound, dnsCfg cfg.DNS, interfaceName string) (proxy.Proxy, error) {
+	switch {
+	case outbound.Direct != nil:
+		return proxy.NewDirect(), nil
+
+	case outbound.Socks != nil:
+		return proxy.NewSocks5WithFallback(outbound.Socks.Address, outbound.Socks.Username, outbound.Socks.Password)
+
+	case outbound.Reject != nil:
+		return proxy.NewReject(), nil
+
+	case outbound.DNS != nil:
+		return proxy.NewDNS(dnsCfg, interfaceName), nil
+
+	case outbound.HTTP3 != nil:
+		return proxy.NewHTTP3(outbound.HTTP3.Address, outbound.HTTP3.SkipVerify)
+
+	case outbound.WireGuard != nil:
+		wgCfg := proxy.WireGuardConfig{
+			PrivateKey: outbound.WireGuard.PrivateKey,
+			PublicKey:  outbound.WireGuard.PublicKey,
+			PreauthKey: outbound.WireGuard.PreauthKey,
+			Endpoint:   outbound.WireGuard.Endpoint,
+			LocalIP:    outbound.WireGuard.LocalIP,
+			RemoteIP:   outbound.WireGuard.RemoteIP,
+		}
+		return proxy.NewWireGuard(wgCfg)
+
+	default:
+		return nil, fmt.Errorf("invalid outbound: %+v", outbound)
+	}
+}
+
+// createProxyGroup creates a proxy group from outbound configuration
+func createProxyGroup(outbound cfg.Outbound, proxies map[string]proxy.Proxy) (*proxy.ProxyGroup, error) {
+	// Resolve proxy references
+	groupProxies := make([]proxy.Proxy, 0, len(outbound.Group.Proxies))
+	for _, proxyTag := range outbound.Group.Proxies {
+		if p, ok := proxies[proxyTag]; ok {
+			groupProxies = append(groupProxies, p)
+		} else {
+			slog.Warn("Proxy group references unknown proxy", "group", outbound.Tag, "proxy", proxyTag)
+		}
+	}
+
+	if len(groupProxies) == 0 {
+		return nil, fmt.Errorf("proxy group has no valid proxies: %s", outbound.Tag)
+	}
+
+	// Determine policy
+	policy := proxy.Failover
+	switch outbound.Group.Policy {
+	case "round-robin":
+		policy = proxy.RoundRobin
+	case "least-load":
+		policy = proxy.LeastLoad
+	}
+
+	// Create proxy group
+	groupCfg := &proxy.ProxyGroupConfig{
+		Name:     outbound.Tag,
+		Proxies:  groupProxies,
+		Policy:   policy,
+		CheckURL: outbound.Group.CheckURL,
+	}
+	if outbound.Group.CheckInterval > 0 {
+		groupCfg.CheckInterval = time.Duration(outbound.Group.CheckInterval) * time.Second
+	}
+
+	group := proxy.NewProxyGroup(groupCfg)
+	slog.Info("Created proxy group", "name", outbound.Tag, "policy", policy.String(), "proxies", len(groupProxies))
+
+	return group, nil
+}
+
+// createDHCPServerIfNeeded creates DHCP server if enabled in configuration
+func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) (device.DHCPServer, error) {
+	if cfg.DHCP == nil || !cfg.DHCP.Enabled {
+		return nil, nil
+	}
+
+	poolStart := net.ParseIP(cfg.DHCP.PoolStart)
+	poolEnd := net.ParseIP(cfg.DHCP.PoolEnd)
+	localIP := net.ParseIP(cfg.PCAP.LocalIP)
+	_, network, _ := net.ParseCIDR(cfg.PCAP.Network)
+
+	// Parse DNS servers for DHCP
+	dnsServers := make([]net.IP, 0, len(cfg.DNS.Servers))
+	for _, dns := range cfg.DNS.Servers {
+		ipStr := strings.Split(dns.Address, ":")[0]
+		if ip := net.ParseIP(ipStr); ip != nil {
+			dnsServers = append(dnsServers, ip)
+		}
+	}
+
+	dhcpConfig := &dhcp.ServerConfig{
+		ServerIP:      localIP,
+		ServerMAC:     netConfig.LocalMAC,
+		Network:       network,
+		LeaseDuration: time.Duration(cfg.DHCP.LeaseDuration) * time.Second,
+		FirstIP:       poolStart,
+		LastIP:        poolEnd,
+		DNSServers:    dnsServers,
+	}
+
+	// Create DHCP server (platform-specific implementation)
+	dhcpServerImpl, err := createDHCPServer(cfg, dhcpConfig, netConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set global DHCP server
+	_dhcpServer = dhcpServerImpl
+
+	// Return as DHCPServer interface if supported
+	if ds, ok := dhcpServerImpl.(device.DHCPServer); ok {
+		return ds, nil
+	}
+
+	return nil, nil
 }
