@@ -1,7 +1,9 @@
+// Package proxy provides proxy mode definitions.
 package proxy
 
 import "fmt"
 
+// Proxy mode constants
 const (
 	ModeDirect Mode = iota
 	ModeSocks5
@@ -12,8 +14,10 @@ const (
 	ModeWireGuard
 )
 
+// Mode represents the proxy mode.
 type Mode uint8
 
+// String returns the string representation of the mode.
 func (mode Mode) String() string {
 	switch mode {
 	case ModeRouter:
@@ -33,4 +37,9 @@ func (mode Mode) String() string {
 	default:
 		return fmt.Sprintf("proto(%d)", mode)
 	}
+}
+
+// IsValid checks if the mode is valid.
+func (mode Mode) IsValid() bool {
+	return mode >= ModeDirect && mode <= ModeWireGuard
 }
