@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -93,6 +94,7 @@ func (s *DHCPServer) HandleRequest(data []byte) ([]byte, error) {
 }
 
 // packetLoop captures and processes DHCP packets
+// Uses runtime.LockOSThread() for stable Windows performance
 func (s *DHCPServer) packetLoop() {
 	defer s.wg.Done()
 	defer func() {
@@ -104,6 +106,10 @@ func (s *DHCPServer) packetLoop() {
 			go s.packetLoop()
 		}
 	}()
+
+	// Lock goroutine to OS thread for stable WinDivert performance
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	errorCount := 0
 	const maxErrors = 10

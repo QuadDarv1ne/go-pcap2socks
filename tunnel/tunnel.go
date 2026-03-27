@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	_tcpQueue         = make(chan adapter.TCPConn, 256)
+	_tcpQueue         = make(chan adapter.TCPConn, 10000) // Increased buffer for better burst handling
 	_stopChan         = make(chan struct{})
 	_startOnce        sync.Once
 	_activeConnCount  atomic.Int32

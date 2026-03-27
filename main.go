@@ -737,7 +737,7 @@ func main() {
 				
 				// Optionally start HTTP server for redirect
 				if httpsCfg.ForceHTTPS {
-					go func() {
+					goroutine.SafeGo(func() {
 						redirectMux := http.NewServeMux()
 						redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 							http.Redirect(w, r, fmt.Sprintf("https://%s%s", r.Host, r.URL.Path), http.StatusMovedPermanently)
@@ -746,7 +746,7 @@ func main() {
 						if err := http.ListenAndServe(":80", redirectMux); err != nil {
 							slog.Error("HTTP redirect server error", slog.Any("err", err))
 						}
-					}()
+					})
 				}
 
 				if err := http.ListenAndServeTLS(fmt.Sprintf(":%d", config.API.Port),
@@ -1655,8 +1655,10 @@ func autoConfigureAndStart() {
 
 	// Start hotkey manager if enabled
 	if _hotkeyManager != nil {
-		go _hotkeyManager.StartMessageLoop()
-		slog.Info("Hotkey message loop started")
+		goroutine.SafeGo(func() {
+			_hotkeyManager.StartMessageLoop()
+			slog.Info("Hotkey message loop started")
+		})
 	}
 
 	// Setup HTTP server with graceful shutdown on port 8085
@@ -1668,15 +1670,15 @@ func autoConfigureAndStart() {
 	}
 
 	// Start HTTP server in goroutine
-	go func() {
+	goroutine.SafeGo(func() {
 		slog.Info("HTTP server starting on :8085")
 		if err := _httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server error", slog.Any("err", err))
 		}
-	}()
+	})
 
 	// Start web UI server on port 8080
-	go func() {
+	goroutine.SafeGo(func() {
 		slog.Info("Starting web UI server on :8080")
 
 		// Set start time for API
@@ -1871,8 +1873,9 @@ func autoConfigureAndStart() {
 					"port", config.API.Port,
 					"url", fmt.Sprintf("https://localhost:%d", config.API.Port))
 
+				// Optionally start HTTP server for redirect
 				if httpsCfg.ForceHTTPS {
-					go func() {
+					goroutine.SafeGo(func() {
 						redirectMux := http.NewServeMux()
 						redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 							http.Redirect(w, r, fmt.Sprintf("https://%s%s", r.Host, r.URL.Path), http.StatusMovedPermanently)
@@ -1881,7 +1884,7 @@ func autoConfigureAndStart() {
 						if err := http.ListenAndServe(":80", redirectMux); err != nil {
 							slog.Error("HTTP redirect server error", slog.Any("err", err))
 						}
-					}()
+					})
 				}
 
 				if err := http.ListenAndServeTLS(fmt.Sprintf(":%d", config.API.Port),

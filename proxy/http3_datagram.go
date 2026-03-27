@@ -38,7 +38,7 @@ func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr) (*quicDatagr
 		conn:       qconn,
 		localAddr:  qconn.LocalAddr(),
 		remoteAddr: remoteAddr,
-		readChan:   make(chan []byte, 100),
+		readChan:   make(chan []byte, 10000), // Increased buffer for better burst handling
 		errChan:    make(chan error, 1),
 	}
 

@@ -55,9 +55,9 @@ type WebSocketHub struct {
 // NewWebSocketHub creates a new WebSocket hub
 func NewWebSocketHub() *WebSocketHub {
 	h := &WebSocketHub{
-		broadcast:  make(chan []byte, 256),
-		register:   make(chan *WebSocketClient, 16),   // Buffered to prevent blocking
-		unregister: make(chan *WebSocketClient, 16),  // Buffered to prevent blocking
+		broadcast:  make(chan []byte, 10000), // Increased buffer for better burst handling
+		register:   make(chan *WebSocketClient, 1000),   // Increased buffer
+		unregister: make(chan *WebSocketClient, 1000),  // Increased buffer
 		stopChan:   make(chan struct{}),
 	}
 	h.clientSlicePool.New = func() any {
@@ -157,7 +157,7 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	client := &WebSocketClient{
 		conn:     conn,
-		send:     make(chan []byte, 256),
+		send:     make(chan []byte, 10000), // Increased buffer for better burst handling
 		lastPing: time.Now(),
 	}
 
