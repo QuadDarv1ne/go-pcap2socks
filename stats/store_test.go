@@ -9,9 +9,6 @@ func TestNewStore(t *testing.T) {
 	if store == nil {
 		t.Fatal("Expected non-nil store")
 	}
-	if store.devices == nil {
-		t.Error("Expected devices map to be initialized")
-	}
 }
 
 func TestRecordTraffic(t *testing.T) {

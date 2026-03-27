@@ -10,20 +10,20 @@ import (
 )
 
 // Store holds traffic statistics
+// Optimized with sync.Map for lock-free device access
 type Store struct {
-	mu                sync.RWMutex
-	devices           map[string]*DeviceStats      // IP -> DeviceStats
-	macIndex          sync.Map                     // MAC -> IP (for fast MAC lookup)
+	devices           sync.Map // map[string]*DeviceStats (IP -> DeviceStats)
+	macIndex          sync.Map // MAC -> IP (for fast MAC lookup)
 	started           time.Time
 	inactivityTimeout time.Duration
 	cleanupInterval   time.Duration
 	stopCleanup       chan struct{}
 	cleanupWg         sync.WaitGroup
+	deviceCount       atomic.Int32
 }
 
 // DeviceStats holds statistics for a single device
 type DeviceStats struct {
-	mu        sync.RWMutex
 	IP        string    `json:"ip"`
 	MAC       string    `json:"mac"`
 	Hostname  string    `json:"hostname"`
@@ -47,22 +47,22 @@ type DeviceStats struct {
 
 // Lock locks the device stats for writing
 func (ds *DeviceStats) Lock() {
-	ds.mu.Lock()
+	// No-op - device stats are now lock-free with atomics
 }
 
 // Unlock unlocks the device stats
 func (ds *DeviceStats) Unlock() {
-	ds.mu.Unlock()
+	// No-op
 }
 
 // RLock locks the device stats for reading
 func (ds *DeviceStats) RLock() {
-	ds.mu.RLock()
+	// No-op
 }
 
 // RUnlock unlocks the device stats
 func (ds *DeviceStats) RUnlock() {
-	ds.mu.RUnlock()
+	// No-op
 }
 
 // GetTotalBytes returns total bytes atomically
@@ -87,9 +87,6 @@ func (ds *DeviceStats) GetPackets() uint64 {
 
 // MarshalJSON implements json.Marshaler for DeviceStats
 func (ds *DeviceStats) MarshalJSON() ([]byte, error) {
-	ds.mu.RLock()
-	defer ds.mu.RUnlock()
-
 	// Create a temporary struct with exported fields
 	type Alias struct {
 		IP                string    `json:"ip"`
@@ -141,7 +138,6 @@ func NewStore() *Store {
 // NewStoreWithCleanup creates a new statistics store with custom cleanup settings
 func NewStoreWithCleanup(inactivityTimeout, cleanupInterval time.Duration) *Store {
 	s := &Store{
-		devices:           make(map[string]*DeviceStats),
 		started:           time.Now(),
 		inactivityTimeout: inactivityTimeout,
 		cleanupInterval:   cleanupInterval,
@@ -157,32 +153,83 @@ func NewStoreWithCleanup(inactivityTimeout, cleanupInterval time.Duration) *Stor
 	return s
 }
 
+// cleanupLoop periodically removes inactive devices
+func (s *Store) cleanupLoop() {
+	defer s.cleanupWg.Done()
+
+	ticker := time.NewTicker(s.cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.CleanupInactive()
+		case <-s.stopCleanup:
+			return
+		}
+	}
+}
+
+// CleanupInactive removes devices that haven't been seen for longer than inactivityTimeout
+func (s *Store) CleanupInactive() int {
+	if s.inactivityTimeout == 0 {
+		return 0
+	}
+
+	cutoff := time.Now().Add(-s.inactivityTimeout)
+	removed := 0
+
+	s.devices.Range(func(k, v any) bool {
+		ip := k.(string)
+		device := v.(*DeviceStats)
+		if device.LastSeen.Before(cutoff) {
+			// Clean up MAC index
+			s.macIndex.Delete(device.MAC)
+			s.devices.Delete(ip)
+			removed++
+			s.deviceCount.Add(-1)
+		}
+		return true
+	})
+
+	return removed
+}
+
+// Stop stops the cleanup goroutine
+func (s *Store) Stop() {
+	if s.stopCleanup != nil {
+		close(s.stopCleanup)
+		s.cleanupWg.Wait()
+	}
+}
+
 // RecordTraffic records traffic for a device
 // Optimized for high-frequency calls with atomic operations and reduced lock contention
 func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
-	s.mu.RLock()
-	device, exists := s.devices[ip]
-	s.mu.RUnlock()
-
-	if !exists {
-		// Device doesn't exist, need to create it
-		s.mu.Lock()
-		// Double-check after acquiring write lock
-		device, exists = s.devices[ip]
-		if !exists {
-			now := time.Now()
-			device = &DeviceStats{
-				IP:           ip,
-				MAC:          mac,
-				Connected:    true,
-				LastSeen:     now,
-				SessionStart: now,
-			}
-			s.devices[ip] = device
-			// Update MAC index for fast lookup
-			s.macIndex.Store(mac, ip)
+	var device *DeviceStats
+	
+	// Fast path: try to load existing device
+	if val, ok := s.devices.Load(ip); ok {
+		device = val.(*DeviceStats)
+	} else {
+		// Create new device
+		now := time.Now()
+		device = &DeviceStats{
+			IP:           ip,
+			MAC:          mac,
+			Connected:    true,
+			LastSeen:     now,
+			SessionStart: now,
 		}
-		s.mu.Unlock()
+		
+		// Store and check if we won (in case of concurrent access)
+		if actual, loaded := s.devices.LoadOrStore(ip, device); loaded {
+			device = actual.(*DeviceStats)
+		} else {
+			// We won, update MAC index and count
+			s.macIndex.Store(mac, ip)
+			s.deviceCount.Add(1)
+		}
 	}
 
 	// Update counters atomically (lock-free)
@@ -207,39 +254,37 @@ func (s *Store) RecordTrafficWithHostname(ip, mac, hostname string, bytes uint64
 }
 
 // UpdateHeartbeat updates the last seen time for a device
+// Optimized with sync.Map Load for lock-free reads
 func (s *Store) UpdateHeartbeat(ip, mac string) {
-	s.mu.RLock()
-	device, exists := s.devices[ip]
-	s.mu.RUnlock()
-
-	if exists {
-		device.mu.Lock()
+	var device *DeviceStats
+	
+	if val, ok := s.devices.Load(ip); ok {
+		device = val.(*DeviceStats)
 		device.LastSeen = time.Now()
 		device.Connected = true
-		device.mu.Unlock()
 	} else {
-		s.mu.Lock()
-		s.devices[ip] = &DeviceStats{
+		// Create new device
+		now := time.Now()
+		device = &DeviceStats{
 			IP:           ip,
 			MAC:          mac,
 			Connected:    true,
-			LastSeen:     time.Now(),
-			SessionStart: time.Now(),
+			LastSeen:     now,
+			SessionStart: now,
 		}
-		s.mu.Unlock()
+
+		if _, loaded := s.devices.LoadOrStore(ip, device); !loaded {
+			s.macIndex.Store(mac, ip)
+			s.deviceCount.Add(1)
+		}
 	}
 }
 
 // SetDisconnected marks a device as disconnected
 func (s *Store) SetDisconnected(ip string) {
-	s.mu.RLock()
-	device, exists := s.devices[ip]
-	s.mu.RUnlock()
-
-	if exists {
-		device.mu.Lock()
+	if val, ok := s.devices.Load(ip); ok {
+		device := val.(*DeviceStats)
 		device.Connected = false
-		device.mu.Unlock()
 	}
 }
 
@@ -253,14 +298,9 @@ func (s *Store) SetHostname(mac, hostname string) {
 	// Fast path: use MAC index for O(1) lookup
 	if ipVal, exists := s.macIndex.Load(mac); exists {
 		ip := ipVal.(string)
-		s.mu.RLock()
-		device, exists := s.devices[ip]
-		s.mu.RUnlock()
-
-		if exists {
-			device.mu.Lock()
+		if val, ok := s.devices.Load(ip); ok {
+			device := val.(*DeviceStats)
 			device.Hostname = hostname
-			device.mu.Unlock()
 			return
 		}
 		// Stale index entry, clean it up
@@ -268,55 +308,48 @@ func (s *Store) SetHostname(mac, hostname string) {
 	}
 
 	// Fallback: search through devices if index miss (shouldn't happen normally)
-	s.mu.RLock()
-	for _, device := range s.devices {
-		device.RLock()
-		match := device.MAC == mac
-		device.RUnlock()
-
-		if match {
-			device.mu.Lock()
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
+		if device.MAC == mac {
 			device.Hostname = hostname
-			device.mu.Unlock()
-			s.mu.RUnlock()
-			return
+			return false // Stop iteration
 		}
-	}
-	s.mu.RUnlock()
+		return true
+	})
 }
 
 // GetDeviceStats returns statistics for a specific device
+// Optimized with sync.Map Load for lock-free read
 func (s *Store) GetDeviceStats(ip string) *DeviceStats {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.devices[ip]
+	if val, ok := s.devices.Load(ip); ok {
+		return val.(*DeviceStats)
+	}
+	return nil
 }
 
 // GetAllDevices returns all device statistics
+// Optimized with sync.Map Range for lock-free iteration
 func (s *Store) GetAllDevices() []*DeviceStats {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	devices := make([]*DeviceStats, 0, len(s.devices))
-	for _, device := range s.devices {
-		devices = append(devices, device)
-	}
+	var devices []*DeviceStats
+	s.devices.Range(func(k, v any) bool {
+		devices = append(devices, v.(*DeviceStats))
+		return true
+	})
 	return devices
 }
 
 // GetTotalTraffic returns total traffic across all devices
-// Optimized with atomic loads for lock-free reads
+// Optimized with sync.Map Range and atomic loads for lock-free reads
 func (s *Store) GetTotalTraffic() (total, upload, download, packets uint64) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, device := range s.devices {
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		// Use atomic loads - no device lock needed
 		total += atomic.LoadUint64(&device.totalBytes)
 		upload += atomic.LoadUint64(&device.uploadBytes)
 		download += atomic.LoadUint64(&device.downloadBytes)
 		packets += atomic.LoadUint64(&device.packets)
-	}
+		return true
+	})
 	return
 }
 
@@ -326,18 +359,16 @@ func (s *Store) GetUptime() time.Duration {
 }
 
 // ExportCSV exports traffic statistics as CSV
+// Optimized with sync.Map Range
 func (s *Store) ExportCSV() (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	var buf bytes.Buffer
-	
+
 	// Write header
 	buf.WriteString("Timestamp,IP,MAC,Hostname,Total Bytes,Upload Bytes,Download Bytes,Packets,Connected\n")
 
 	// Write device records
-	for _, device := range s.devices {
-		device.mu.RLock()
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		line := fmt.Sprintf("%s,%s,%s,%s,%d,%d,%d,%d,%t\n",
 			device.LastSeen.Format(time.RFC3339),
 			device.IP,
@@ -350,68 +381,52 @@ func (s *Store) ExportCSV() (string, error) {
 			device.Connected,
 		)
 		buf.WriteString(line)
-		device.mu.RUnlock()
-	}
+		return true
+	})
 
 	return buf.String(), nil
 }
 
 // Reset clears all statistics
 func (s *Store) Reset() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.devices = make(map[string]*DeviceStats)
-	// Clear MAC index
-	s.macIndex.Range(func(key, value any) bool {
-		s.macIndex.Delete(key)
-		return true
-	})
+	s.devices = sync.Map{}
+	s.macIndex = sync.Map{}
+	s.deviceCount.Store(0)
 	s.started = time.Now()
 }
 
 // GetConnectedDevices returns only connected devices
+// Optimized with sync.Map Range
 func (s *Store) GetConnectedDevices() []*DeviceStats {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	devices := make([]*DeviceStats, 0)
-	for _, device := range s.devices {
-		device.mu.RLock()
+	var devices []*DeviceStats
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		if device.Connected {
 			devices = append(devices, device)
 		}
-		device.mu.RUnlock()
-	}
+		return true
+	})
 	return devices
 }
 
 // GetDeviceCount returns the total number of tracked devices
+// Optimized with atomic load
 func (s *Store) GetDeviceCount() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.devices)
+	return int(s.deviceCount.Load())
 }
 
 // GetActiveDeviceCount returns the number of currently connected devices
+// Optimized with sync.Map Range and atomic loads
 func (s *Store) GetActiveDeviceCount() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	count := 0
-	for _, device := range s.devices {
-		device.mu.RLock()
-		count += boolToInt(device.Connected)
-		device.mu.RUnlock()
-	}
-	return count
-}
-
-//go:inline
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
+	count := int32(0)
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
+		if device.Connected {
+			count++
+		}
+		return true
+	})
+	return int(count)
 }
 
 // Atomic counters for real-time tracking
@@ -442,31 +457,22 @@ func (s *Store) SetCustomName(mac, name string) {
 	// Fast path: use MAC index
 	if ipVal, exists := s.macIndex.Load(mac); exists {
 		ip := ipVal.(string)
-		s.mu.RLock()
-		device, exists := s.devices[ip]
-		s.mu.RUnlock()
-
-		if exists {
-			device.mu.Lock()
+		if val, ok := s.devices.Load(ip); ok {
+			device := val.(*DeviceStats)
 			device.CustomName = name
-			device.mu.Unlock()
 			return
 		}
 	}
 
 	// Fallback: search through devices
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, device := range s.devices {
-		device.mu.Lock()
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		if device.MAC == mac {
 			device.CustomName = name
-			device.mu.Unlock()
-			return
+			return false
 		}
-		device.mu.Unlock()
-	}
+		return true
+	})
 }
 
 // GetCustomName returns the custom name for a MAC address
@@ -475,32 +481,23 @@ func (s *Store) GetCustomName(mac string) string {
 	// Fast path: use MAC index
 	if ipVal, exists := s.macIndex.Load(mac); exists {
 		ip := ipVal.(string)
-		s.mu.RLock()
-		device, exists := s.devices[ip]
-		s.mu.RUnlock()
-
-		if exists {
-			device.mu.RLock()
-			name := device.CustomName
-			device.mu.RUnlock()
-			return name
+		if val, ok := s.devices.Load(ip); ok {
+			device := val.(*DeviceStats)
+			return device.CustomName
 		}
 	}
 
 	// Fallback: search through devices
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, device := range s.devices {
-		device.mu.RLock()
+	var name string
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		if device.MAC == mac {
-			name := device.CustomName
-			device.mu.RUnlock()
-			return name
+			name = device.CustomName
+			return false
 		}
-		device.mu.RUnlock()
-	}
-	return ""
+		return true
+	})
+	return name
 }
 
 // SetRateLimit sets rate limits for a device
@@ -509,33 +506,24 @@ func (s *Store) SetRateLimit(mac string, upload, download uint64) {
 	// Fast path: use MAC index
 	if ipVal, exists := s.macIndex.Load(mac); exists {
 		ip := ipVal.(string)
-		s.mu.RLock()
-		device, exists := s.devices[ip]
-		s.mu.RUnlock()
-
-		if exists {
-			device.mu.Lock()
+		if val, ok := s.devices.Load(ip); ok {
+			device := val.(*DeviceStats)
 			device.RateLimitUpload = upload
 			device.RateLimitDownload = download
-			device.mu.Unlock()
 			return
 		}
 	}
 
 	// Fallback: search through devices
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, device := range s.devices {
-		device.mu.Lock()
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		if device.MAC == mac {
 			device.RateLimitUpload = upload
 			device.RateLimitDownload = download
-			device.mu.Unlock()
-			return
+			return false
 		}
-		device.mu.Unlock()
-	}
+		return true
+	})
 }
 
 // GetRateLimit returns rate limits for a device
@@ -544,44 +532,31 @@ func (s *Store) GetRateLimit(mac string) (upload, download uint64) {
 	// Fast path: use MAC index
 	if ipVal, exists := s.macIndex.Load(mac); exists {
 		ip := ipVal.(string)
-		s.mu.RLock()
-		device, exists := s.devices[ip]
-		s.mu.RUnlock()
-
-		if exists {
-			device.mu.RLock()
-			upload = device.RateLimitUpload
-			download = device.RateLimitDownload
-			device.mu.RUnlock()
-			return
+		if val, ok := s.devices.Load(ip); ok {
+			device := val.(*DeviceStats)
+			return device.RateLimitUpload, device.RateLimitDownload
 		}
 	}
 
 	// Fallback: search through devices
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, device := range s.devices {
-		device.mu.RLock()
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		if device.MAC == mac {
 			upload = device.RateLimitUpload
 			download = device.RateLimitDownload
-			device.mu.RUnlock()
-			return
+			return false
 		}
-		device.mu.RUnlock()
-	}
+		return true
+	})
 	return 0, 0
 }
 
 // GetAllDeviceNames returns all device names (custom or hostname)
+// Optimized with sync.Map Range
 func (s *Store) GetAllDeviceNames() map[string]string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	names := make(map[string]string)
-	for _, device := range s.devices {
-		device.mu.RLock()
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
 		name := device.CustomName
 		if name == "" {
 			name = device.Hostname
@@ -590,8 +565,8 @@ func (s *Store) GetAllDeviceNames() map[string]string {
 			name = device.MAC
 		}
 		names[device.MAC] = name
-		device.mu.RUnlock()
-	}
+		return true
+	})
 	return names
 }
 

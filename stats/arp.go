@@ -118,14 +118,12 @@ func (m *ARPMonitor) scan(store *Store) {
 		} else {
 			// Update existing device
 			device := m.devices[entry.IP.String()]
-			device.mu.Lock()
 			device.LastSeen = time.Now()
 			device.Connected = true
 			device.MAC = entry.MAC.String()
 			if device.Hostname == "" {
 				device.Hostname = GenerateMACHostname(entry.MAC)
 			}
-			device.mu.Unlock()
 			store.UpdateHeartbeat(entry.IP.String(), entry.MAC.String())
 		}
 	}
@@ -133,7 +131,6 @@ func (m *ARPMonitor) scan(store *Store) {
 	// Check for disconnected devices
 	for ip, device := range m.devices {
 		if !currentIPs[ip] {
-			device.mu.Lock()
 			if device.Connected {
 				device.Connected = false
 				m.notifyChange(DeviceChange{
@@ -143,7 +140,6 @@ func (m *ARPMonitor) scan(store *Store) {
 					Device: device,
 				})
 			}
-			device.mu.Unlock()
 			store.SetDisconnected(ip)
 		}
 	}
