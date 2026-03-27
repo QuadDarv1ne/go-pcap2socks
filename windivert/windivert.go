@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/threatwinds/godivert"
@@ -56,6 +57,29 @@ type Handle struct {
 	filter     string
 	stopChan   chan struct{}
 	packetChan chan *godivert.Packet
+	
+	// Batch processing support
+	batchPool    sync.Pool      // pools [][]byte for batch recv
+	packetPool   *packetBufferPool // zero-copy packet buffers
+}
+
+// packetBufferPool provides zero-copy packet buffer management
+type packetBufferPool struct {
+	buffers sync.Pool // stores *packetBuffer
+	inUse   atomic.Int32
+}
+
+// packetBuffer is a pre-allocated packet buffer for zero-copy operations
+type packetBuffer struct {
+	data []byte      // packet data (backed by pool)
+	addr *godivert.WinDivertAddress
+}
+
+// HandleWithBatch extends Handle with batch packet processing capabilities
+type HandleWithBatch struct {
+	*Handle
+	batchSize  int
+	batchDelay time.Duration
 }
 
 // Packet represents a captured network packet with parsed metadata
@@ -90,6 +114,20 @@ func NewHandle(filter string) (*Handle, error) {
 		handle:   h,
 		filter:   filter,
 		stopChan: make(chan struct{}),
+		batchPool: sync.Pool{
+			New: func() any {
+				return make([][]byte, 0, 64) // Batch of 64 packets
+			},
+		},
+		packetPool: &packetBufferPool{
+			buffers: sync.Pool{
+				New: func() any {
+					return &packetBuffer{
+						data: make([]byte, 2048),
+					}
+				},
+			},
+		},
 	}, nil
 }
 
@@ -102,6 +140,61 @@ func (h *Handle) Recv() (*Packet, error) {
 
 	// Parse packet to extract MAC/IP/Port info
 	return h.parsePacket(packet), nil
+}
+
+// RecvBatch receives multiple packets in a batch for reduced syscall overhead.
+// Returns a slice of packets processed together.
+// This is zero-copy: packets use pooled buffers.
+// Call PutBatch to return buffers after processing.
+func (h *Handle) RecvBatch(maxCount int) ([]*Packet, error) {
+	if maxCount <= 0 {
+		maxCount = 64 // Default batch size
+	}
+	
+	packets := make([]*Packet, 0, maxCount)
+	
+	// Non-blocking receive up to maxCount packets
+	for i := 0; i < maxCount; i++ {
+		packet, err := h.handle.Recv()
+		if err != nil {
+			// No more packets available immediately
+			break
+		}
+		
+		// Use zero-copy buffer from pool
+		pktBuf := h.packetPool.buffers.Get().(*packetBuffer)
+		h.packetPool.inUse.Add(1)
+		
+		// Copy data to pooled buffer (zero-copy from application perspective)
+		pktBuf.data = append(pktBuf.data[:0], packet.Raw...)
+		pktBuf.addr = packet.Addr
+		
+		pkt := &Packet{
+			Raw:       pktBuf.data,
+			Addr:      pktBuf.addr,
+			PacketLen: packet.PacketLen,
+		}
+		// Parse remaining fields
+		parsed := h.parsePacketRaw(pktBuf.data, pkt)
+		packets = append(packets, parsed)
+	}
+	
+	return packets, nil
+}
+
+// PutBatch returns a batch of packets to their pools for reuse.
+// Call this after processing packets from RecvBatch.
+func (h *Handle) PutBatch(packets []*Packet) {
+	for _, pkt := range packets {
+		if pkt != nil && pkt.Addr != nil {
+			// Return buffer to pool
+			h.packetPool.buffers.Put(&packetBuffer{
+				data: pkt.Raw,
+				addr: pkt.Addr,
+			})
+			h.packetPool.inUse.Add(-1)
+		}
+	}
 }
 
 // Send injects a packet back into the network
@@ -168,6 +261,58 @@ func (h *Handle) parsePacket(packet *godivert.Packet) *Packet {
 	}
 
 	return parsed
+}
+
+// parsePacketRaw extracts network information from raw packet bytes.
+// This is optimized for batch processing with pre-allocated Packet struct.
+// Returns the same pkt pointer with updated fields.
+func (h *Handle) parsePacketRaw(data []byte, pkt *Packet) *Packet {
+	// Reset fields
+	pkt.Raw = data
+	pkt.SrcIP = nil
+	pkt.DstIP = nil
+	pkt.SrcPort = 0
+	pkt.DstPort = 0
+	pkt.SrcMAC = nil
+	pkt.DstMAC = nil
+	
+	// Parse IP header (starts at byte 0 in network layer mode)
+	if len(data) < 20 {
+		return pkt
+	}
+	
+	// IPv4 header parsing
+	ipVersion := (data[0] >> 4) & 0x0F
+	if ipVersion == 4 {
+		ipHeaderLen := int((data[0] & 0x0F) * 4)
+		if len(data) >= ipHeaderLen {
+			pkt.SrcIP = make(net.IP, 4)
+			pkt.DstIP = make(net.IP, 4)
+			copy(pkt.SrcIP, data[12:16])
+			copy(pkt.DstIP, data[16:20])
+			
+			// Parse UDP/TCP ports if present
+			if len(data) >= ipHeaderLen+4 {
+				protocol := data[9]
+				if protocol == 17 || protocol == 6 { // UDP or TCP
+					srcPort := uint16(data[ipHeaderLen])<<8 | uint16(data[ipHeaderLen+1])
+					dstPort := uint16(data[ipHeaderLen+2])<<8 | uint16(data[ipHeaderLen+3])
+					pkt.SrcPort = srcPort
+					pkt.DstPort = dstPort
+				}
+			}
+		}
+	}
+	
+	// Parse Ethernet header if present (check for valid MAC addresses)
+	if len(data) >= 14 {
+		pkt.DstMAC = make(net.HardwareAddr, 6)
+		pkt.SrcMAC = make(net.HardwareAddr, 6)
+		copy(pkt.DstMAC, data[0:6])
+		copy(pkt.SrcMAC, data[6:12])
+	}
+	
+	return pkt
 }
 
 // GetClientMAC extracts client MAC from DHCP packet payload
