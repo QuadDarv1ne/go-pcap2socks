@@ -293,3 +293,28 @@ func (b *ContainerBuilder) MustBuild() *Container {
 	}
 	return c
 }
+
+// GetServiceCount returns the number of registered services.
+func (c *Container) GetServiceCount() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.services)
+}
+
+// IsRegistered checks if a service is registered.
+func (c *Container) IsRegistered(serviceType interface{}) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	typ := reflect.TypeOf(serviceType)
+	if typ == nil {
+		return false
+	}
+
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	_, exists := c.services[typ]
+	return exists
+}

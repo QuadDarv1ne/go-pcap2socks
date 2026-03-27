@@ -22,6 +22,7 @@ const (
 	CategoryRouting
 	CategoryAuth
 	CategoryTimeout
+	CategoryResource
 )
 
 func (c ErrorCategory) String() string {
@@ -42,6 +43,8 @@ func (c ErrorCategory) String() string {
 		return "auth"
 	case CategoryTimeout:
 		return "timeout"
+	case CategoryResource:
+		return "resource"
 	default:
 		return "unknown"
 	}
@@ -87,11 +90,18 @@ func (e *Error) Is(target error) bool {
 	return e.Category == t.Category && e.Code == t.Code
 }
 
+// WithContext adds context to the error for better debugging
 func (e *Error) WithContext(key string, value interface{}) *Error {
 	if e.Context == nil {
 		e.Context = make(map[string]interface{})
 	}
 	e.Context[key] = value
+	return e
+}
+
+// WithRetryable marks the error as retryable
+func (e *Error) WithRetryable() *Error {
+	e.Retryable = true
 	return e
 }
 
@@ -135,11 +145,66 @@ func IsRetryable(err error) bool {
 }
 
 func NewNetworkError(op string, addr net.Addr, cause error) *Error {
-	return Wrap(cause, CategoryNetwork, "CONNECTION_FAILED",
+	err := Wrap(cause, CategoryNetwork, "CONNECTION_FAILED",
 		fmt.Sprintf("%s failed", op))
+	if addr != nil {
+		err = err.WithContext("address", addr.String())
+	}
+	return err
 }
 
 func NewProxyError(tag, addr string, cause error) *Error {
-	return Wrap(cause, CategoryProxy, "PROXY_ERROR",
+	err := Wrap(cause, CategoryProxy, "PROXY_ERROR",
 		"proxy operation failed")
+	err = err.WithContext("tag", tag)
+	err = err.WithContext("address", addr)
+	return err
+}
+
+// Wrapf wraps an error with formatting
+func Wrapf(cause error, category ErrorCategory, code, format string, args ...interface{}) *Error {
+	return &Error{
+		Category:  category,
+		Code:      code,
+		Message:   fmt.Sprintf(format, args...),
+		Cause:     cause,
+		Timestamp: time.Now(),
+	}
+}
+
+// Newf creates a new error with formatting
+func Newf(category ErrorCategory, code, format string, args ...interface{}) *Error {
+	return &Error{
+		Category:  category,
+		Code:      code,
+		Message:   fmt.Sprintf(format, args...),
+		Timestamp: time.Now(),
+	}
+}
+
+// IsCategory checks if an error belongs to a specific category
+func IsCategory(err error, category ErrorCategory) bool {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Category == category
+	}
+	return false
+}
+
+// GetCategory returns the category of an error
+func GetCategory(err error) ErrorCategory {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Category
+	}
+	return CategoryUnknown
+}
+
+// GetContext returns the context map from an error if available
+func GetContext(err error) map[string]interface{} {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Context
+	}
+	return nil
 }
