@@ -8,17 +8,19 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // LeaseDB represents a persistent DHCP lease database
+// Optimized with sync.Map for lock-free lease access
 type LeaseDB struct {
-	mu       sync.RWMutex
-	leases   map[string]*DHCPLease
+	leases   sync.Map // map[string]*DHCPLease
 	dbPath   string
-	dirty    bool
+	dirty    atomic.Bool
 	saveChan chan struct{}
 	stopChan chan struct{}
+	leaseCount atomic.Int32
 }
 
 // serializedLease is used for JSON serialization
@@ -33,7 +35,6 @@ type serializedLease struct {
 // NewLeaseDB creates a new lease database
 func NewLeaseDB(dbPath string) *LeaseDB {
 	db := &LeaseDB{
-		leases:   make(map[string]*DHCPLease),
 		dbPath:   dbPath,
 		saveChan: make(chan struct{}, 1), // Buffered to prevent blocking
 		stopChan: make(chan struct{}),
@@ -53,9 +54,6 @@ func NewLeaseDB(dbPath string) *LeaseDB {
 
 // Load loads leases from disk
 func (db *LeaseDB) Load() error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	// Check if file exists
 	if _, err := os.Stat(db.dbPath); os.IsNotExist(err) {
 		slog.Info("DHCP lease database does not exist, starting fresh")
@@ -76,205 +74,178 @@ func (db *LeaseDB) Load() error {
 
 	// Load leases
 	now := time.Now()
+	count := int32(0)
 	for _, sl := range serialized {
 		mac, err := net.ParseMAC(sl.MAC)
 		if err != nil {
 			continue
 		}
 
-		ip := net.ParseIP(sl.IP)
-		if ip == nil {
-			continue
-		}
-
 		// Only load non-expired leases
 		if sl.ExpiresAt.After(now) {
-			db.leases[mac.String()] = &DHCPLease{
-				IP:          ip,
+			lease := &DHCPLease{
+				IP:          net.ParseIP(sl.IP),
 				MAC:         mac,
 				Hostname:    sl.Hostname,
 				ExpiresAt:   sl.ExpiresAt,
 				Transaction: sl.Transaction,
 			}
+			db.leases.Store(sl.MAC, lease)
+			count++
 		}
 	}
 
+	db.leaseCount.Store(count)
+	slog.Info("DHCP lease database loaded", "count", count)
 	return nil
 }
 
-// Save saves leases to disk
-func (db *LeaseDB) Save() error {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
+// SetLease sets or updates a lease
+// Optimized with sync.Map Store for lock-free update
+func (db *LeaseDB) SetLease(lease *DHCPLease) {
+	db.leases.Store(lease.MAC.String(), lease)
+	db.leaseCount.Add(1)
+	db.dirty.Store(true)
 
-	// Convert to serializable format
-	serialized := make([]serializedLease, 0, len(db.leases))
-	for _, lease := range db.leases {
-		serialized = append(serialized, serializedLease{
-			IP:          lease.IP.String(),
-			MAC:         lease.MAC.String(),
-			Hostname:    lease.Hostname,
-			ExpiresAt:   lease.ExpiresAt,
-			Transaction: lease.Transaction,
-		})
+	// Trigger async save
+	select {
+	case db.saveChan <- struct{}{}:
+	default:
+		// Save already pending
 	}
+}
 
-	// Marshal to JSON
-	data, err := json.MarshalIndent(serialized, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal lease db: %w", err)
+// DeleteLease deletes a lease
+// Optimized with sync.Map Delete for lock-free removal
+func (db *LeaseDB) DeleteLease(mac net.HardwareAddr) {
+	macStr := mac.String()
+	db.leases.Delete(macStr)
+	db.leaseCount.Add(-1)
+	db.dirty.Store(true)
+
+	// Trigger async save
+	select {
+	case db.saveChan <- struct{}{}:
+	default:
+		// Save already pending
 	}
+}
 
-	// Ensure directory exists
-	dir := filepath.Dir(db.dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create lease db dir: %w", err)
+// GetLease returns a lease by MAC address
+// Optimized with sync.Map Load for lock-free read
+func (db *LeaseDB) GetLease(mac net.HardwareAddr) *DHCPLease {
+	if val, ok := db.leases.Load(mac.String()); ok {
+		return val.(*DHCPLease)
 	}
-
-	// Write to temp file first, then rename (atomic)
-	tmpPath := db.dbPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return fmt.Errorf("write lease db temp: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, db.dbPath); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("rename lease db: %w", err)
-	}
-
 	return nil
 }
 
-// saveLoop periodically saves dirty database
+// GetAllLeases returns all leases
+// Optimized with sync.Map Range for lock-free iteration
+func (db *LeaseDB) GetAllLeases() map[string]*DHCPLease {
+	result := make(map[string]*DHCPLease)
+	db.leases.Range(func(k, v any) bool {
+		result[k.(string)] = v.(*DHCPLease)
+		return true
+	})
+	return result
+}
+
+// GetLeaseCount returns the number of leases
+func (db *LeaseDB) GetLeaseCount() int {
+	return int(db.leaseCount.Load())
+}
+
+// CleanupExpired removes expired leases
+// Optimized with sync.Map Range for lock-free iteration
+func (db *LeaseDB) CleanupExpired() {
+	now := time.Now()
+	deleted := 0
+
+	db.leases.Range(func(k, v any) bool {
+		lease := v.(*DHCPLease)
+		if now.After(lease.ExpiresAt) {
+			db.leases.Delete(k)
+			deleted++
+		}
+		return true
+	})
+
+	if deleted > 0 {
+		db.leaseCount.Add(-int32(deleted))
+		db.dirty.Store(true)
+
+		// Trigger async save
+		select {
+		case db.saveChan <- struct{}{}:
+		default:
+			// Save already pending
+		}
+	}
+}
+
+// saveLoop saves the database periodically
 func (db *LeaseDB) saveLoop() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-db.saveChan:
-			db.trySave()
-		case <-ticker.C:
-			db.trySave()
+			db.save()
 		case <-db.stopChan:
-			slog.Debug("LeaseDB saveLoop stopped")
+			db.save() // Final save on stop
 			return
 		}
 	}
 }
 
-// trySave attempts to save if database is dirty
-func (db *LeaseDB) trySave() {
-	db.mu.Lock()
-	if !db.dirty {
-		db.mu.Unlock()
+// save saves the database to disk
+func (db *LeaseDB) save() {
+	if !db.dirty.Load() {
 		return
 	}
-	db.dirty = false
-	db.mu.Unlock()
 
-	if err := db.Save(); err != nil {
-		slog.Error("Failed to save lease database", "err", err)
-	}
-}
-
-// markDirty marks database as needing save
-func (db *LeaseDB) markDirty() {
-	db.mu.Lock()
-	db.dirty = true
-	db.mu.Unlock()
-
-	// Non-blocking send to save channel
-	select {
-	case db.saveChan <- struct{}{}:
-	default:
-		// Already pending save
-	}
-}
-
-// GetLease returns lease for MAC
-func (db *LeaseDB) GetLease(mac net.HardwareAddr) *DHCPLease {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	return db.leases[mac.String()]
-}
-
-// SetLease sets lease for MAC
-func (db *LeaseDB) SetLease(lease *DHCPLease) {
-	db.mu.Lock()
-	db.leases[lease.MAC.String()] = lease
-	db.dirty = true
-	db.mu.Unlock()
-
-	// Trigger save
-	select {
-	case db.saveChan <- struct{}{}:
-	default:
-	}
-}
-
-// DeleteLease deletes lease for MAC
-func (db *LeaseDB) DeleteLease(mac net.HardwareAddr) {
-	db.mu.Lock()
-	delete(db.leases, mac.String())
-	db.dirty = true
-	db.mu.Unlock()
-
-	// Trigger save
-	select {
-	case db.saveChan <- struct{}{}:
-	default:
-	}
-}
-
-// GetAllLeases returns all leases (copy)
-func (db *LeaseDB) GetAllLeases() map[string]*DHCPLease {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
-	result := make(map[string]*DHCPLease, len(db.leases))
-	for k, v := range db.leases {
-		result[k] = v
-	}
-	return result
-}
-
-// Count returns number of leases
-func (db *LeaseDB) Count() int {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	return len(db.leases)
-}
-
-// CleanupExpired removes expired leases
-func (db *LeaseDB) CleanupExpired() int {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	now := time.Now()
-	deleted := 0
-	for mac, lease := range db.leases {
-		if now.After(lease.ExpiresAt) {
-			delete(db.leases, mac)
-			deleted++
+	// Collect leases for serialization
+	var serialized []serializedLease
+	db.leases.Range(func(k, v any) bool {
+		lease := v.(*DHCPLease)
+		// Only save non-expired leases
+		if lease.ExpiresAt.After(time.Now()) {
+			serialized = append(serialized, serializedLease{
+				IP:          lease.IP.String(),
+				MAC:         lease.MAC.String(),
+				Hostname:    lease.Hostname,
+				ExpiresAt:   lease.ExpiresAt,
+				Transaction: lease.Transaction,
+			})
 		}
+		return true
+	})
+
+	// Marshal to JSON
+	data, err := json.MarshalIndent(serialized, "", "  ")
+	if err != nil {
+		slog.Error("Failed to marshal lease database", "err", err)
+		return
 	}
 
-	if deleted > 0 {
-		db.dirty = true
+	// Write to file
+	tmpPath := db.dbPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		slog.Error("Failed to write lease database", "err", err)
+		return
 	}
-	return deleted
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, db.dbPath); err != nil {
+		slog.Error("Failed to rename lease database", "err", err)
+		return
+	}
+
+	db.dirty.Store(false)
+	slog.Debug("DHCP lease database saved", "count", len(serialized))
 }
 
-// Close saves and closes the database
+// Close saves the database and stops the saver goroutine
 func (db *LeaseDB) Close() error {
-	// Stop saveLoop
 	close(db.stopChan)
-
-	// Final save
-	db.mu.Lock()
-	db.dirty = true // Force save
-	db.mu.Unlock()
-
-	return db.Save()
+	return nil
 }

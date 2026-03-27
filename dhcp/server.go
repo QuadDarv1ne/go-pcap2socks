@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/auto"
@@ -14,17 +15,18 @@ import (
 )
 
 // Server represents a DHCP server
+// Optimized with sync.Map for lock-free lease access
 type Server struct {
-	mu             sync.RWMutex
 	config         *ServerConfig
-	leases         map[string]*DHCPLease      // MAC -> Lease
-	nextIP         net.IP
+	leases         sync.Map // map[string]*DHCPLease (MAC -> Lease)
+	nextIP         atomic.Value // net.IP
 	stopChan       chan struct{}
-	reserved       map[string]bool            // Track reserved IPs to prevent conflicts
+	reserved       sync.Map // map[string]bool
 	leaseDB        *LeaseDB                   // Persistent lease database
 	metrics        *MetricsCollector
 	smartDHCP      *auto.SmartDHCPManager     // Smart DHCP with device-based IP allocation
-	deviceProfiles map[string]auto.DeviceProfile // MAC -> Device Profile
+	deviceProfiles sync.Map // map[string]auto.DeviceProfile
+	leaseCount     atomic.Int32
 }
 
 // ServerOption is a function that configures the server
@@ -48,7 +50,6 @@ func WithMetrics(m *MetricsCollector) ServerOption {
 func WithSmartDHCP(poolStart, poolEnd string) ServerOption {
 	return func(s *Server) {
 		s.smartDHCP = auto.NewSmartDHCPManager(poolStart, poolEnd)
-		s.deviceProfiles = make(map[string]auto.DeviceProfile)
 	}
 }
 
@@ -56,12 +57,10 @@ func WithSmartDHCP(poolStart, poolEnd string) ServerOption {
 func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 	s := &Server{
 		config:   config,
-		leases:   make(map[string]*DHCPLease),
-		nextIP:   config.FirstIP,
 		stopChan: make(chan struct{}),
-		reserved: make(map[string]bool),
-		metrics:  NewMetricsCollector(), // Default metrics collector
+		metrics:  NewMetricsCollector(),
 	}
+	s.nextIP.Store(config.FirstIP)
 
 	// Apply options
 	for _, opt := range options {
@@ -69,7 +68,7 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 	}
 
 	// Reserve gateway IP
-	s.reserved[config.ServerIP.String()] = true
+	s.reserved.Store(config.ServerIP.String(), true)
 
 	// Load leases from persistent database if available
 	if s.leaseDB != nil {
@@ -78,9 +77,10 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 		}
 		// Restore leases from database
 		for mac, lease := range s.leaseDB.GetAllLeases() {
-			s.leases[mac] = lease
+			s.leases.Store(mac, lease)
+			s.leaseCount.Add(1)
 		}
-		slog.Info("DHCP server restored leases from database", "count", len(s.leases))
+		slog.Info("DHCP server restored leases from database", "count", s.leaseCount.Load())
 	}
 
 	// Start lease cleanup goroutine
@@ -93,6 +93,7 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 }
 
 // HandleRequest processes a DHCP request and returns a response packet
+// Optimized with sync.Map for lock-free lease access
 func (s *Server) HandleRequest(data []byte) ([]byte, error) {
 	msg, err := ParseDHCPMessage(data)
 	if err != nil {
@@ -135,7 +136,7 @@ func (s *Server) handleDiscover(msg *DHCPMessage) ([]byte, error) {
 	if s.smartDHCP != nil {
 		profile := auto.DetectByMAC(macStr)
 		if profile.Type != auto.DeviceUnknown {
-			s.deviceProfiles[macStr] = profile
+			s.deviceProfiles.Store(macStr, profile)
 			slog.Info("DHCP: Device detected",
 				"mac", macStr,
 				"type", profile.Type,
@@ -169,16 +170,16 @@ func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
 	}
 
 	// Check if we have a lease for this MAC
-	s.mu.RLock()
-	lease, exists := s.leases[macStr]
-	s.mu.RUnlock()
+	var lease *DHCPLease
+	if val, ok := s.leases.Load(macStr); ok {
+		lease = val.(*DHCPLease)
+	}
 
 	isRenewal := false
-	if exists && lease.IP.Equal(requestedIP) {
+	if lease != nil && lease.IP.Equal(requestedIP) {
 		// Renew existing lease
-		s.mu.Lock()
 		lease.ExpiresAt = time.Now().Add(s.config.LeaseDuration)
-		s.mu.Unlock()
+		s.leases.Store(macStr, lease)
 		isRenewal = true
 	} else {
 		// New lease
@@ -203,9 +204,8 @@ func (s *Server) handleRelease(msg *DHCPMessage) ([]byte, error) {
 	macStr := msg.ClientHardware.String()
 	s.metrics.RecordRelease()
 
-	s.mu.Lock()
-	delete(s.leases, macStr)
-	s.mu.Unlock()
+	s.leases.Delete(macStr)
+	s.leaseCount.Add(-1)
 
 	// Delete from persistent database
 	if s.leaseDB != nil {
@@ -279,13 +279,11 @@ func (s *Server) buildResponse(request *DHCPMessage, messageType uint8, ip net.I
 }
 
 func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	macStr := mac.String()
 
 	// Check if MAC already has a lease
-	if lease, exists := s.leases[macStr]; exists {
+	if val, ok := s.leases.Load(macStr); ok {
+		lease := val.(*DHCPLease)
 		if time.Now().Before(lease.ExpiresAt) {
 			return lease.IP, nil
 		}
@@ -311,7 +309,8 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 					ExpiresAt:   time.Now().Add(s.config.LeaseDuration),
 					Transaction: 0,
 				}
-				s.leases[macStr] = lease
+				s.leases.Store(macStr, lease)
+				s.leaseCount.Add(1)
 
 				// Save to persistent database
 				if s.leaseDB != nil {
@@ -324,39 +323,47 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 	}
 
 	// Fallback to legacy IP allocation
-	// Start from nextIP and find first available IP
-	startIP := s.nextIP
+	// Get nextIP atomically
+	nextIP := s.nextIP.Load().(net.IP)
+	startIP := nextIP
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -
 		binary.BigEndian.Uint32(s.config.FirstIP.To4()) + 1)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		currentIP := s.nextIP
+		currentIP := nextIP
 		ipStr := currentIP.String()
 
 		// Check if IP is reserved or already leased
 		available := true
-		if s.reserved[ipStr] {
+		if _, ok := s.reserved.Load(ipStr); ok {
 			available = false
 		}
 
 		// Check all active leases
 		if available {
-			for _, lease := range s.leases {
+			found := false
+			s.leases.Range(func(k, v any) bool {
+				lease := v.(*DHCPLease)
 				if lease.IP.Equal(currentIP) && time.Now().Before(lease.ExpiresAt) {
-					available = false
-					break
+					found = true
+					return false
 				}
+				return true
+			})
+			if found {
+				available = false
 			}
 		}
 
 		// Move to next IP for next iteration
-		s.nextIP = s.incrementIP(s.nextIP)
+		nextIP = s.incrementIP(nextIP)
+		s.nextIP.Store(nextIP)
 
 		// Reset to first IP if we've gone past the last IP in the pool
-		nextIPInt := binary.BigEndian.Uint32(s.nextIP.To4())
+		nextIPInt := binary.BigEndian.Uint32(nextIP.To4())
 		lastIPInt := binary.BigEndian.Uint32(s.config.LastIP.To4())
-		if !s.config.Network.Contains(s.nextIP) || nextIPInt > lastIPInt {
-			s.nextIP = s.config.FirstIP
+		if !s.config.Network.Contains(nextIP) || nextIPInt > lastIPInt {
+			s.nextIP.Store(s.config.FirstIP)
 		}
 
 		if available {
@@ -367,7 +374,8 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 				ExpiresAt:   time.Now().Add(s.config.LeaseDuration),
 				Transaction: 0,
 			}
-			s.leases[macStr] = lease
+			s.leases.Store(macStr, lease)
+			s.leaseCount.Add(1)
 
 			// Save to persistent database
 			if s.leaseDB != nil {
@@ -378,7 +386,7 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		}
 
 		// Prevent infinite loop
-		if s.nextIP.Equal(startIP) {
+		if nextIP.Equal(startIP) {
 			break
 		}
 	}
@@ -413,18 +421,20 @@ func (s *Server) cleanupLoop() {
 }
 
 func (s *Server) cleanupLeases() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	now := time.Now()
 	deleted := 0
-	for mac, lease := range s.leases {
+	now := time.Now()
+
+	s.leases.Range(func(k, v any) bool {
+		mac := k.(string)
+		lease := v.(*DHCPLease)
 		if now.After(lease.ExpiresAt) {
-			delete(s.leases, mac)
+			s.leases.Delete(mac)
+			s.leaseCount.Add(-1)
 			deleted++
 			slog.Debug("DHCP lease expired", "mac", mac, "ip", lease.IP.String())
 		}
-	}
+		return true
+	})
 
 	// Sync with persistent database
 	if deleted > 0 && s.leaseDB != nil {
@@ -467,11 +477,7 @@ func (s *Server) metricsLoop() {
 
 // logMetrics logs current server metrics
 func (s *Server) logMetrics() {
-	s.mu.RLock()
-	leaseCount := int64(len(s.leases))
-	s.mu.RUnlock()
-
-	s.metrics.UpdateActiveLeases(leaseCount)
+	s.metrics.UpdateActiveLeases(int64(s.leaseCount.Load()))
 	s.metrics.LogMetrics()
 }
 
@@ -481,15 +487,19 @@ func (s *Server) GetMetrics() *MetricsCollector {
 }
 
 // GetLeases returns current leases
+// Optimized with sync.Map Range for lock-free iteration
 func (s *Server) GetLeases() map[string]*DHCPLease {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	result := make(map[string]*DHCPLease)
-	for k, v := range s.leases {
-		result[k] = v
-	}
+	s.leases.Range(func(k, v any) bool {
+		result[k.(string)] = v.(*DHCPLease)
+		return true
+	})
 	return result
+}
+
+// GetLeaseCount returns the number of active leases
+func (s *Server) GetLeaseCount() int {
+	return int(s.leaseCount.Load())
 }
 
 // BuildDHCPRequestPacket builds an Ethernet+IP+UDP+DHCP packet for sending
