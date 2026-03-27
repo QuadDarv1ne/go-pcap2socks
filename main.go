@@ -143,6 +143,9 @@ func main() {
 		case "auto-config":
 			autoConfigure()
 			return
+		case "auto-start":
+			autoConfigureAndStart()
+			return
 		case "tray":
 			runTray()
 			return
@@ -1394,6 +1397,505 @@ func autoConfigure() {
 	slog.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }
 
+// autoConfigureAndStart выполняет auto-config и сразу запускает сервис
+func autoConfigureAndStart() {
+	slog.Info("══════════════════════════════════════════════════════════════════")
+	slog.Info("  АВТОМАТИЧЕСКИЙ ЗАПУСК - Конфигурация и запуск сервиса")
+	slog.Info("══════════════════════════════════════════════════════════════════")
+	
+	// Сначала выполняем auto-config (создаём конфиг)
+	slog.Info("Шаг 1/2: Автоматическая конфигурация сети...")
+	
+	// Find best interface
+	interfaceConfig := findBestInterface()
+	if interfaceConfig.Name == "" {
+		slog.Error("Не найдено подходящего сетевого интерфейса")
+		slog.Info("Убедитесь, что сетевой кабель подключен или Wi-Fi активен")
+		return
+	}
+
+	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC)
+
+	// Detect device type by MAC address
+	deviceProfile := auto.DetectByMAC(interfaceConfig.MAC)
+	if deviceProfile.Type != auto.DeviceUnknown {
+		slog.Info("Device detected",
+			"type", deviceProfile.Type,
+			"manufacturer", deviceProfile.Manufacturer,
+			"is_gaming", deviceProfile.IsGamingDevice())
+	}
+
+	// Check for Windows ICS conflict
+	checkWindowsICSConflict()
+
+	// Auto-select best engine for current system
+	engineSelector := auto.NewEngineSelector()
+	selectedEngine := engineSelector.SelectBestEngine()
+	slog.Info("Engine auto-selected",
+		"engine", selectedEngine,
+		"description", selectedEngine.GetDescription(),
+		"recommendation", engineSelector.GetEngineRecommendation(selectedEngine))
+
+	// Get system DNS servers
+	dnsServers := getSystemDNSServers(interfaceConfig.Name)
+	if len(dnsServers) == 0 {
+		dnsServers = []string{"8.8.8.8", "1.1.1.1"}
+		slog.Info("Системные DNS не найдены, используем публичные DNS", "servers", dnsServers)
+	} else {
+		slog.Info("Найдены системные DNS серверы", "servers", dnsServers)
+	}
+
+	// Get executable path
+	executable, err := os.Executable()
+	if err != nil {
+		slog.Error("get executable error", slog.Any("err", err))
+		return
+	}
+	cfgFile := path.Join(path.Dir(executable), "config.json")
+
+	// Build DNS servers JSON
+	dnsJSON := "["
+	for i, dns := range dnsServers {
+		if i > 0 {
+			dnsJSON += ","
+		}
+		dnsJSON += fmt.Sprintf(`{"address": "%s:53"}`, dns)
+	}
+	dnsJSON += "]"
+
+	// Calculate DHCP pool range
+	gatewayIPStr := interfaceConfig.IP
+	gatewayIP := net.ParseIP(gatewayIPStr)
+	_, network, _ := net.ParseCIDR(interfaceConfig.Network)
+
+	poolStart := calculatePoolStart(network, gatewayIP)
+	poolEnd := calculatePoolEnd(network, gatewayIP)
+
+	// Create config struct
+	config := &cfg.Config{
+		PCAP: cfg.PCAP{
+			InterfaceGateway: interfaceConfig.IP,
+			Network:          interfaceConfig.Network,
+			LocalIP:          interfaceConfig.IP,
+			LocalMAC:         interfaceConfig.MAC,
+			MTU:              interfaceConfig.RecommendedMTU,
+		},
+		DHCP: &cfg.DHCP{
+			Enabled:       true,
+			PoolStart:     poolStart,
+			PoolEnd:       poolEnd,
+			LeaseDuration: 86400,
+		},
+		DNS: cfg.DNS{
+			Servers: make([]cfg.DNSServer, 0, len(dnsServers)),
+		},
+		Routing: struct {
+			Rules []cfg.Rule `json:"rules"`
+		}{
+			Rules: []cfg.Rule{
+				{DstPort: "53", OutboundTag: "dns-out"},
+			},
+		},
+		Outbounds: []cfg.Outbound{
+			{Tag: "", Direct: &cfg.OutboundDirect{}},
+			{Tag: "dns-out", DNS: &cfg.OutboundDNS{}},
+		},
+		Hotkey: &cfg.Hotkey{
+			Enabled: true,
+			Toggle:  "Ctrl+Alt+P",
+		},
+		WinDivert: &cfg.WinDivert{
+			Enabled: true,
+		},
+		UPnP: &cfg.UPnP{
+			Enabled:       true,
+			AutoForward:   true,
+			LeaseDuration: 3600,
+			GamePresets: map[string][]int{
+				"ps4":    {3478, 3479, 3480},
+				"ps5":    {3478, 3479, 3480},
+				"xbox":   {3074, 3075, 3478, 3479, 3480},
+				"switch": {12400, 12401, 12402, 6657, 6667},
+			},
+		},
+		Language: "ru",
+	}
+
+	// Add DNS servers
+	for _, dns := range dnsServers {
+		config.DNS.Servers = append(config.DNS.Servers, cfg.DNSServer{Address: dns + ":53"})
+	}
+
+	// Apply device-specific optimizations
+	if deviceProfile.Type != auto.DeviceUnknown {
+		auto.AutoApplyProfile(deviceProfile, config)
+	}
+
+	// Marshal config to JSON
+	configData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		slog.Error("marshal config error", slog.Any("err", err))
+		return
+	}
+
+	// Write config file
+	err = os.WriteFile(cfgFile, []byte(configData), 0666)
+	if err != nil {
+		slog.Error("write config error", slog.Any("err", err))
+		return
+	}
+
+	slog.Info("✓ Конфигурация создана", "file", cfgFile)
+	slog.Info("")
+	
+	// Теперь запускаем сервис
+	slog.Info("Шаг 2/2: Запуск сервиса...")
+	slog.Info("══════════════════════════════════════════════════════════════════")
+	slog.Info("")
+	
+	// Загружаем конфиг и запускаем run
+	config, err = cfg.Load(cfgFile)
+	if err != nil {
+		slog.Error("load config error", slog.Any("file", cfgFile), slog.Any("err", err))
+		return
+	}
+	
+	localizer := i18n.NewLocalizer(i18n.Language(config.Language))
+	
+	err = run(config, localizer)
+	if err != nil {
+		slog.Error("run error", slog.Any("err", err))
+		return
+	}
+
+	// Mark as running
+	_running = true
+
+	// Initialize shutdown channel
+	_shutdownChan = make(chan struct{})
+
+	// Initialize hotkey manager if enabled
+	hotkeysEnabled := config.Hotkey != nil && config.Hotkey.Enabled
+	if hotkeysEnabled {
+		_hotkeyManager = hotkey.NewManager()
+		_hotkeyManager.RegisterDefaultHotkeys(
+			func() {
+				slog.Info("Hotkey: Toggle proxy")
+				notify.Show("Горячие клавиши", "Переключение прокси", notify.NotifyInfo)
+			},
+			func() {
+				slog.Info("Hotkey: Restart service")
+				notify.Show("Горячие клавиши", "Перезапуск сервиса", notify.NotifyInfo)
+			},
+			func() {
+				slog.Info("Hotkey: Stop service")
+				notify.Show("Горячие клавиши", "Остановка сервиса", notify.NotifyWarning)
+			},
+			func() {
+				slog.Info("Hotkey: Toggle logs")
+				notify.Show("Горячие клавиши", "Переключение логов", notify.NotifyInfo)
+			},
+		)
+	}
+
+	// Initialize profile manager
+	_profileManager, err = profiles.NewManager()
+	if err != nil {
+		slog.Warn("Profile manager initialization error", "err", err)
+	} else {
+		if err := _profileManager.CreateDefaultProfiles(); err != nil {
+			slog.Warn("Create default profiles error", "err", err)
+		}
+		slog.Info("Profile manager initialized")
+	}
+
+	// Initialize UPnP manager
+	if config.UPnP != nil && config.UPnP.Enabled {
+		_upnpManager = upnpmanager.NewManager(config.UPnP, config.PCAP.LocalIP)
+		if _upnpManager != nil {
+			if err := _upnpManager.Start(); err != nil {
+				slog.Warn("UPnP manager start failed", "err", err)
+			}
+		}
+	}
+
+	// Initialize statistics store
+	_statsStore = stats.NewStore()
+
+	// Initialize and start ARP monitor
+	_, netConfig, _ := net.ParseCIDR(config.PCAP.Network)
+	localIP := net.ParseIP(config.PCAP.LocalIP)
+	if netConfig != nil && localIP != nil {
+		_arpMonitor = stats.NewARPMonitor(netConfig, localIP)
+		_arpMonitor.Start(_statsStore)
+		slog.Info("ARP monitor started", "network", netConfig.String())
+	}
+
+	// Start hotkey manager if enabled
+	if _hotkeyManager != nil {
+		go _hotkeyManager.StartMessageLoop()
+		slog.Info("Hotkey message loop started")
+	}
+
+	// Setup HTTP server with graceful shutdown on port 8085
+	_httpServer = &http.Server{
+		Addr: ":8085",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("Привет мир!"))
+		}),
+	}
+
+	// Start HTTP server in goroutine
+	go func() {
+		slog.Info("HTTP server starting on :8085")
+		if err := _httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("HTTP server error", slog.Any("err", err))
+		}
+	}()
+
+	// Start web UI server on port 8080
+	go func() {
+		slog.Info("Starting web UI server on :8080")
+
+		// Set start time for API
+		api.SetStartTime(time.Now())
+
+		// Set running state checker for API
+		api.SetIsRunningFn(func() bool {
+			return _running
+		})
+
+		// Set DHCP leases getter for API
+		api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
+			if _dhcpServer == nil {
+				return nil
+			}
+
+			var leases []map[string]interface{}
+
+			// Check if it's WinDivert DHCP server (Windows only)
+			if isWinDivertServer(_dhcpServer) {
+				leasesData := getWinDivertLeases(_dhcpServer)
+				if leasesData != nil {
+					if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
+						leases = make([]map[string]interface{}, 0, len(leasesList))
+						for mac, lease := range leasesList {
+							if leaseMap, ok := lease.(struct {
+								IP        net.IP
+								ExpiresAt time.Time
+							}); ok {
+								leases = append(leases, map[string]interface{}{
+									"mac":        mac,
+									"ip":         leaseMap.IP.String(),
+									"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
+								})
+							}
+						}
+					}
+				}
+			}
+
+			// Check if it's standard DHCP server
+			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+				dhcpLeases := stdDHCP.GetLeases()
+				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+				for mac, lease := range dhcpLeases {
+					leases = append(leases, map[string]interface{}{
+						"mac":        mac,
+						"ip":         lease.IP.String(),
+						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+					})
+				}
+			}
+
+			// Check if it's simple DHCP server (npcap_dhcp)
+			if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+				dhcpLeases := simpleDHCP.GetLeases()
+				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+				for mac, lease := range dhcpLeases {
+					leaseMap := map[string]interface{}{
+						"mac":        mac,
+						"ip":         lease.IP.String(),
+						"hostname":   lease.Hostname,
+						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+					}
+					leases = append(leases, leaseMap)
+
+					// Update hostname in stats store
+					if _statsStore != nil && lease.Hostname != "" {
+						_statsStore.SetHostname(mac, lease.Hostname)
+					}
+				}
+			}
+
+			return leases
+		})
+
+		// Set DHCP metrics getter for API
+		api.SetGetDHCPMetricsFn(func() map[string]interface{} {
+			if _dhcpServer == nil {
+				return map[string]interface{}{
+					"available": false,
+					"message":   "DHCP server not running",
+				}
+			}
+
+			var metrics map[string]interface{}
+
+			// Check if it's standard DHCP server with metrics
+			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+				metricsCollector := stdDHCP.GetMetrics()
+				if metricsCollector != nil {
+					snapshot := metricsCollector.GetMetrics()
+					metrics = map[string]interface{}{
+						"available":         true,
+						"uptime_seconds":    snapshot.UptimeSeconds,
+						"active_leases":     snapshot.ActiveLeases,
+						"total_allocations": snapshot.TotalAllocations,
+						"total_renewals":    snapshot.TotalRenewals,
+						"discover_count":    snapshot.DiscoverCount,
+						"offer_count":       snapshot.OfferCount,
+						"request_count":     snapshot.RequestCount,
+						"ack_count":         snapshot.AckCount,
+						"nak_count":         snapshot.NakCount,
+						"release_count":     snapshot.ReleaseCount,
+						"decline_count":     snapshot.DeclineCount,
+						"error_count":       snapshot.ErrorCount,
+						"last_request_mac":  snapshot.LastRequestMAC,
+						"last_request_ip":   snapshot.LastRequestIP,
+						"start_time":        snapshot.StartTime.Format(time.RFC3339),
+					}
+				}
+			}
+
+			if metrics == nil {
+				metrics = map[string]interface{}{
+					"available": false,
+					"message":   "DHCP metrics not available",
+				}
+			}
+
+			return metrics
+		})
+
+		// Set service control callbacks for API
+		api.SetServiceCallbacks(
+			func() error {
+				if !_running {
+					_running = true
+					api.SetStartTime(time.Now())
+					slog.Info("Service started via API")
+					notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
+				}
+				return nil
+			},
+			func() error {
+				if _running {
+					_running = false
+					slog.Info("Service stopped via API")
+					notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
+				}
+				return nil
+			},
+		)
+
+		// Create API server with global stats store and profile manager
+		_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
+
+		// Set auth token from config if provided, otherwise use auto-generated token
+		if config.API != nil && config.API.Token != "" {
+			_apiServer.SetAuthToken(config.API.Token)
+			slog.Info("API authentication token loaded from config")
+		} else {
+			_apiServer.SetAuthToken(_apiServer.GetAuthToken())
+			slog.Info("API authentication token auto-generated", "token", _apiServer.GetAuthToken())
+		}
+
+		// Start real-time WebSocket updates (1 second interval)
+		_apiServer.StartRealTimeUpdates(1 * time.Second)
+
+		// Setup HTTPS if configured
+		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
+			httpsCfg := config.API.HTTPS
+
+			if httpsCfg.AutoTLS {
+				executable, _ := os.Executable()
+				certFile := httpsCfg.CertFile
+				keyFile := httpsCfg.KeyFile
+
+				if certFile == "" {
+					certFile = path.Join(path.Dir(executable), "server.crt")
+				}
+				if keyFile == "" {
+					keyFile = path.Join(path.Dir(executable), "server.key")
+				}
+
+				if !tlsutil.CertExists(certFile, keyFile) {
+					slog.Info("Generating self-signed TLS certificate",
+						"cert", certFile, "key", keyFile)
+					if err := tlsutil.GenerateSelfSignedCertToFile(certFile, keyFile, "localhost"); err != nil {
+						slog.Error("Failed to generate TLS certificate", slog.Any("err", err))
+					} else {
+						slog.Info("Self-signed TLS certificate generated successfully")
+					}
+				}
+
+				httpsCfg.CertFile = certFile
+				httpsCfg.KeyFile = keyFile
+			}
+
+			if httpsCfg.CertFile != "" && httpsCfg.KeyFile != "" {
+				slog.Info("Starting HTTPS server",
+					"port", config.API.Port,
+					"url", fmt.Sprintf("https://localhost:%d", config.API.Port))
+
+				if httpsCfg.ForceHTTPS {
+					go func() {
+						redirectMux := http.NewServeMux()
+						redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+							http.Redirect(w, r, fmt.Sprintf("https://%s%s", r.Host, r.URL.Path), http.StatusMovedPermanently)
+						})
+						slog.Info("Starting HTTP to HTTPS redirect server", "port", 80)
+						if err := http.ListenAndServe(":80", redirectMux); err != nil {
+							slog.Error("HTTP redirect server error", slog.Any("err", err))
+						}
+					}()
+				}
+
+				if err := http.ListenAndServeTLS(fmt.Sprintf(":%d", config.API.Port),
+					httpsCfg.CertFile, httpsCfg.KeyFile, _apiServer); err != nil {
+					slog.Error("HTTPS server error", slog.Any("err", err))
+				}
+			} else {
+				slog.Error("HTTPS enabled but certificate files not configured")
+			}
+		} else {
+			port := findAvailablePort(8080)
+			if config.API != nil && config.API.Port > 0 {
+				port = config.API.Port
+			}
+			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", port), _apiServer); err != nil {
+				slog.Error("HTTP server error", slog.Any("err", err))
+			}
+		}
+	}()
+
+	// Wait for shutdown signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case <-sigChan:
+		slog.Info("Received shutdown signal")
+	case <-_shutdownChan:
+		slog.Info("Shutdown channel closed")
+	}
+
+	// Perform graceful shutdown
+	Stop()
+}
+
 // calculatePoolStart calculates the first IP in the DHCP pool
 func calculatePoolStart(network *net.IPNet, gatewayIP net.IP) string {
 	gatewayInt := binary.BigEndian.Uint32(gatewayIP.To4())
@@ -1589,7 +2091,7 @@ func findAvailablePort(startPort int) int {
 		if err == nil {
 			ln.Close()
 			if port != startPort {
-				slog.Warn("Port %d is busy, using %d instead", startPort, port)
+				slog.Warn("Port is busy, using different port", "startPort", startPort, "port", port)
 			}
 			return port
 		}

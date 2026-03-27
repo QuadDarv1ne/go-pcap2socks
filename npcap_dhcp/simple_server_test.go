@@ -18,7 +18,7 @@ func TestSimpleDHCP_ServerLifecycle(t *testing.T) {
 		LeaseDuration: 3600 * time.Second,
 	}
 
-	server, err := npcap_dhcp.NewSimpleServer(config, nil)
+	server, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSimpleDHCP_IPAllocation(t *testing.T) {
 		LeaseDuration: 3600 * time.Second,
 	}
 
-	_, err := npcap_dhcp.NewSimpleServer(config, nil)
+	_, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestSimpleDHCP_LeaseStructure(t *testing.T) {
 		LeaseDuration: 86400 * time.Second,
 	}
 
-	server, err := npcap_dhcp.NewSimpleServer(config, nil)
+	server, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}

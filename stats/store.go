@@ -12,7 +12,8 @@ import (
 // Store holds traffic statistics
 type Store struct {
 	mu                sync.RWMutex
-	devices           map[string]*DeviceStats
+	devices           map[string]*DeviceStats      // IP -> DeviceStats
+	macIndex          sync.Map                     // MAC -> IP (for fast MAC lookup)
 	started           time.Time
 	inactivityTimeout time.Duration
 	cleanupInterval   time.Duration
@@ -178,6 +179,8 @@ func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
 				SessionStart: now,
 			}
 			s.devices[ip] = device
+			// Update MAC index for fast lookup
+			s.macIndex.Store(mac, ip)
 		}
 		s.mu.Unlock()
 	}
@@ -241,17 +244,36 @@ func (s *Store) SetDisconnected(ip string) {
 }
 
 // SetHostname sets the hostname for a device identified by MAC address
+// Optimized with MAC index for O(1) lookup instead of O(n) iteration
 func (s *Store) SetHostname(mac, hostname string) {
 	if hostname == "" {
 		return
 	}
-	
+
+	// Fast path: use MAC index for O(1) lookup
+	if ipVal, exists := s.macIndex.Load(mac); exists {
+		ip := ipVal.(string)
+		s.mu.RLock()
+		device, exists := s.devices[ip]
+		s.mu.RUnlock()
+
+		if exists {
+			device.mu.Lock()
+			device.Hostname = hostname
+			device.mu.Unlock()
+			return
+		}
+		// Stale index entry, clean it up
+		s.macIndex.Delete(mac)
+	}
+
+	// Fallback: search through devices if index miss (shouldn't happen normally)
 	s.mu.RLock()
 	for _, device := range s.devices {
 		device.RLock()
 		match := device.MAC == mac
 		device.RUnlock()
-		
+
 		if match {
 			device.mu.Lock()
 			device.Hostname = hostname
@@ -339,6 +361,11 @@ func (s *Store) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.devices = make(map[string]*DeviceStats)
+	// Clear MAC index
+	s.macIndex.Range(func(key, value any) bool {
+		s.macIndex.Delete(key)
+		return true
+	})
 	s.started = time.Now()
 }
 
@@ -406,7 +433,28 @@ func (c *TrafficCounter) AddReceived(bytes uint64) {
 }
 
 // SetCustomName sets a custom name for a device
+// Optimized with MAC index for O(1) lookup
 func (s *Store) SetCustomName(mac, name string) {
+	if name == "" {
+		return
+	}
+
+	// Fast path: use MAC index
+	if ipVal, exists := s.macIndex.Load(mac); exists {
+		ip := ipVal.(string)
+		s.mu.RLock()
+		device, exists := s.devices[ip]
+		s.mu.RUnlock()
+
+		if exists {
+			device.mu.Lock()
+			device.CustomName = name
+			device.mu.Unlock()
+			return
+		}
+	}
+
+	// Fallback: search through devices
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -422,7 +470,24 @@ func (s *Store) SetCustomName(mac, name string) {
 }
 
 // GetCustomName returns the custom name for a MAC address
+// Optimized with MAC index for O(1) lookup
 func (s *Store) GetCustomName(mac string) string {
+	// Fast path: use MAC index
+	if ipVal, exists := s.macIndex.Load(mac); exists {
+		ip := ipVal.(string)
+		s.mu.RLock()
+		device, exists := s.devices[ip]
+		s.mu.RUnlock()
+
+		if exists {
+			device.mu.RLock()
+			name := device.CustomName
+			device.mu.RUnlock()
+			return name
+		}
+	}
+
+	// Fallback: search through devices
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -439,7 +504,25 @@ func (s *Store) GetCustomName(mac string) string {
 }
 
 // SetRateLimit sets rate limits for a device
+// Optimized with MAC index for O(1) lookup
 func (s *Store) SetRateLimit(mac string, upload, download uint64) {
+	// Fast path: use MAC index
+	if ipVal, exists := s.macIndex.Load(mac); exists {
+		ip := ipVal.(string)
+		s.mu.RLock()
+		device, exists := s.devices[ip]
+		s.mu.RUnlock()
+
+		if exists {
+			device.mu.Lock()
+			device.RateLimitUpload = upload
+			device.RateLimitDownload = download
+			device.mu.Unlock()
+			return
+		}
+	}
+
+	// Fallback: search through devices
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -456,7 +539,25 @@ func (s *Store) SetRateLimit(mac string, upload, download uint64) {
 }
 
 // GetRateLimit returns rate limits for a device
+// Optimized with MAC index for O(1) lookup
 func (s *Store) GetRateLimit(mac string) (upload, download uint64) {
+	// Fast path: use MAC index
+	if ipVal, exists := s.macIndex.Load(mac); exists {
+		ip := ipVal.(string)
+		s.mu.RLock()
+		device, exists := s.devices[ip]
+		s.mu.RUnlock()
+
+		if exists {
+			device.mu.RLock()
+			upload = device.RateLimitUpload
+			download = device.RateLimitDownload
+			device.mu.RUnlock()
+			return
+		}
+	}
+
+	// Fallback: search through devices
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

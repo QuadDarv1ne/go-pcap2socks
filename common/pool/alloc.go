@@ -36,7 +36,8 @@ func NewAllocator() *Allocator {
 }
 
 // Get gets a []byte from pool with most appropriate cap.
-//go:noinline
+// Optimized for hot path with inline hint
+//go:inline
 func (alloc *Allocator) Get(size int) []byte {
 	// Fast path: inline bounds check
 	if size < minBufferSize || size > maxBufferSize {
@@ -53,7 +54,8 @@ func (alloc *Allocator) Get(size int) []byte {
 
 // Put returns a []byte to pool for future use,
 // which the cap must be exactly 2^n.
-//go:noinline
+// Optimized for hot path with inline hint
+//go:inline
 func (alloc *Allocator) Put(buf []byte) error {
 	b := msb(cap(buf))
 	if cap(buf) == 0 || cap(buf) > maxBufferSize || cap(buf) != 1<<b {

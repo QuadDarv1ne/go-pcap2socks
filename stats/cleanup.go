@@ -36,6 +36,8 @@ func (s *Store) CleanupInactive() int {
 	removed := 0
 	for ip, device := range s.devices {
 		if device.LastSeen.Before(cutoff) {
+			// Clean up MAC index before deleting device
+			s.macIndex.Delete(device.MAC)
 			delete(s.devices, ip)
 			removed++
 		}

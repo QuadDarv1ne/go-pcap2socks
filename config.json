@@ -1,73 +1,82 @@
 {
   "pcap": {
-    "interfaceGateway": "192.168.137.1",
-    "network": "192.168.137.0/24",
-    "localIP": "192.168.137.1",
-    "mtu": 1486
+    "interfaceGateway": "172.27.48.1",
+    "mtu": 1486,
+    "network": "172.27.48.0/20",
+    "localIP": "172.27.48.1",
+    "localMAC": "00:15:5d:d4:02:44"
   },
   "dhcp": {
     "enabled": true,
-    "poolStart": "192.168.137.100",
-    "poolEnd": "192.168.137.200",
+    "poolStart": "172.27.48.101",
+    "poolEnd": "172.27.48.201",
     "leaseDuration": 86400
   },
   "dns": {
     "servers": [
-      {"address": "8.8.8.8:53"},
-      {"address": "1.1.1.1:53"}
+      {
+        "address": "8.8.8.8:53"
+      },
+      {
+        "address": "1.1.1.1:53"
+      }
     ]
   },
   "routing": {
     "rules": [
-      {"dstPort": "53", "outboundTag": "dns-out"},
-      {"dstPort": "80,443,3478,3479,3480", "outboundTag": ""}
+      {
+        "dstPort": "53",
+        "outboundTag": "dns-out",
+        "SrcPortMatcher": null,
+        "DstPortMatcher": null,
+        "SrcIPs": null,
+        "DstIPs": null
+      }
     ]
   },
   "outbounds": [
-    {"tag": "", "direct": {}},
-    {"tag": "dns-out", "dns": {}}
+    {
+      "direct": {}
+    },
+    {
+      "dns": {},
+      "tag": "dns-out"
+    }
   ],
-  "telegram": {
-    "enabled": false
-  },
-  "discord": {
-    "webhook_url": ""
-  },
+  "capture": {},
+  "language": "ru",
   "hotkey": {
     "enabled": true,
     "toggle": "Ctrl+Alt+P"
-  },
-  "windivert": {
-    "enabled": false
   },
   "upnp": {
     "enabled": true,
     "autoForward": true,
     "leaseDuration": 3600,
     "gamePresets": {
-      "ps4": [3478, 3479, 3480],
-      "ps5": [3478, 3479, 3480],
-      "xbox": [3074, 3075, 3478, 3479, 3480],
-      "switch": [12400, 12401, 12402, 6657, 6667]
+      "ps4": [
+        3478,
+        3479,
+        3480
+      ],
+      "ps5": [
+        3478,
+        3479,
+        3480
+      ],
+      "switch": [
+        12400,
+        12401,
+        12402,
+        6657,
+        6667
+      ],
+      "xbox": [
+        3074
+      ]
     }
   },
-  "api": {
-    "enabled": true,
-    "port": 8080,
-    "token": "ps4-test-token-2026",
-    "https": {
-      "enabled": false,
-      "autotls": true,
-      "cert_file": "server.crt",
-      "key_file": "server.key",
-      "force_https": false
-    }
-  },
-  "logging": {
-    "level": "debug",
-    "file": "app.log",
-    "max_size_mb": 10,
-    "max_backups": 3
-  },
-  "language": "ru"
+  "windivert": {
+    "enabled": true
+  }
 }

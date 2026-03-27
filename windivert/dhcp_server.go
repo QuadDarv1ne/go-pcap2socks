@@ -37,8 +37,7 @@ type DHCPServer struct {
 	wg            sync.WaitGroup
 	localMAC      net.HardwareAddr
 	localIP       net.IP
-	lastRequest   map[string]time.Time // Rate limiting per MAC
-	requestMu     sync.Mutex           // Protect lastRequest map
+	lastRequest   sync.Map // Rate limiting per MAC: map[string]int64 (nanoseconds)
 }
 
 // NewDHCPServer creates a new DHCP server using WinDivert
@@ -64,7 +63,7 @@ func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableS
 		stopChan:    make(chan struct{}),
 		localMAC:    localMAC,
 		localIP:     config.ServerIP,
-		lastRequest: make(map[string]time.Time),
+		// lastRequest is sync.Map, no initialization needed
 	}
 
 	return s, nil
@@ -199,18 +198,22 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 		"dstIP", packet.DstIP.String())
 
 	// Rate limiting: prevent DHCP flood (max 1 request per 500ms per MAC)
+	// Optimized with sync.Map for lock-free reads in hot path
 	macStr := clientMAC.String()
-	now := time.Now()
-	s.requestMu.Lock()
-	if lastTime, exists := s.lastRequest[macStr]; exists {
-		if now.Sub(lastTime) < 500*time.Millisecond {
-			s.requestMu.Unlock()
+	now := time.Now().UnixNano()
+	
+	// Fast path: check with Load (lock-free)
+	if lastTimeVal, exists := s.lastRequest.Load(macStr); exists {
+		lastTime := lastTimeVal.(int64)
+		if now-lastTime < (500 * time.Millisecond).Nanoseconds() {
+			// Rate limited - reinject packet
 			s.handle.Send(packet)
 			return
 		}
 	}
-	s.lastRequest[macStr] = now
-	s.requestMu.Unlock()
+	
+	// Store new timestamp
+	s.lastRequest.Store(macStr, now)
 
 	// Check broadcast flag
 	broadcastFlag := false

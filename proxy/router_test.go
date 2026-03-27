@@ -300,7 +300,7 @@ func TestRouter_DialContext_Cache(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Check cache stats
-	hits, misses := router.routeCache.stats()
+	hits, misses, _ := router.routeCache.stats()
 	if hits == 0 {
 		t.Error("Expected cache hits > 0")
 	}
@@ -582,9 +582,7 @@ func TestRouteCache_MaxSize(t *testing.T) {
 	// Cache should have at most max size entries
 	// Note: due to simple eviction, it might have slightly more
 	// but should be close to max size
-	cache.mu.RLock()
-	size := len(cache.entries)
-	cache.mu.RUnlock()
+	size := int(cache.len())
 
 	if size > 15 { // Allow some buffer
 		t.Errorf("Cache size %d exceeds expected max with eviction", size)
