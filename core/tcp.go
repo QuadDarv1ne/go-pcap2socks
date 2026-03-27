@@ -1,3 +1,4 @@
+// Package core provides network stack implementation.
 package core
 
 import (
@@ -15,6 +16,7 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
+// TCP socket options constants
 const (
 	// defaultWndSize if set to zero, the default
 	// receive window buffer size is used instead.
