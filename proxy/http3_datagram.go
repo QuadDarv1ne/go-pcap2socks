@@ -1,8 +1,6 @@
 package proxy
 
 import (
-	"context"
-	"encoding/binary"
 	"fmt"
 	"net"
 	"sync"
@@ -13,17 +11,17 @@ import (
 )
 
 // quicDatagramConn implements net.PacketConn over QUIC datagrams (RFC 9221)
+// Optimized with atomic operations and reduced mutex usage
 type quicDatagramConn struct {
 	conn       *quic.Conn
 	localAddr  net.Addr
 	remoteAddr net.Addr
 	closed     atomic.Bool
 	once       sync.Once     // Для однократного закрытия каналов
-	mu         sync.RWMutex
 	readChan   chan []byte
 	errChan    chan error
 
-	// Deadline support
+	// Deadline support with atomic operations
 	readDeadline  atomic.Value // time.Time
 	writeDeadline atomic.Value // time.Time
 }
@@ -44,6 +42,10 @@ func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr) (*quicDatagr
 		errChan:    make(chan error, 1),
 	}
 
+	// Initialize deadlines
+	conn.readDeadline.Store(time.Time{})
+	conn.writeDeadline.Store(time.Time{})
+
 	// Start datagram receiver
 	go conn.receiveDatagrams()
 
@@ -51,6 +53,7 @@ func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr) (*quicDatagr
 }
 
 // receiveDatagrams continuously reads datagrams from the QUIC connection
+// Optimized with atomic closed check
 func (c *quicDatagramConn) receiveDatagrams() {
 	ctx := c.conn.Context()
 	for {
@@ -58,173 +61,96 @@ func (c *quicDatagramConn) receiveDatagrams() {
 		case <-ctx.Done():
 			return
 		default:
-			datagram, err := c.conn.ReceiveDatagram(ctx)
-			if err != nil {
-				// Connection closed or context canceled
-				if c.closed.Swap(true) {
-					return // Already closed
-				}
-				// Закрыть каналы безопасно с помощью sync.Once
-				c.once.Do(func() {
-					close(c.errChan)
-				})
+			if c.closed.Load() {
 				return
 			}
 
-			// Send to read channel (non-blocking)
+			data, err := c.conn.ReceiveDatagram(ctx)
+			if err != nil {
+				if c.closed.Load() {
+					return
+				}
+				select {
+				case c.errChan <- err:
+				default:
+				}
+				continue
+			}
+
+			// Send data to read channel
 			select {
-			case c.readChan <- datagram:
+			case c.readChan <- data:
 			default:
-				// Buffer full, drop packet
+				// Channel full, drop packet
 			}
 		}
 	}
 }
 
-// ReadFrom reads a packet from the connection
-func (c *quicDatagramConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+// ReadFrom reads a datagram from the connection
+// Optimized with atomic closed check and deadline support
+func (c *quicDatagramConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	// Check if closed
 	if c.closed.Load() {
 		return 0, nil, net.ErrClosed
 	}
 
-	// Check for read deadline
-	readDeadlineVal := c.readDeadline.Load()
-	if deadline, ok := readDeadlineVal.(time.Time); ok && !deadline.IsZero() {
-		// Deadline is set, use context with timeout
-		timeout := time.Until(deadline)
-		if timeout <= 0 {
-			return 0, nil, fmt.Errorf("read deadline exceeded")
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-
-		select {
-		case datagram, ok := <-c.readChan:
-			if !ok {
-				return 0, nil, net.ErrClosed
-			}
-			n := copy(b, datagram)
-			return n, c.remoteAddr, nil
-		case err, ok := <-c.errChan:
-			if !ok {
-				return 0, nil, net.ErrClosed
-			}
-			return 0, nil, err
-		case <-ctx.Done():
-			return 0, nil, fmt.Errorf("read deadline exceeded")
-		}
+	// Get read deadline
+	deadline := c.readDeadline.Load().(time.Time)
+	var timer *time.Timer
+	var deadlineChan <-chan time.Time
+	if !deadline.IsZero() {
+		timer = time.NewTimer(time.Until(deadline))
+		defer timer.Stop()
+		deadlineChan = timer.C
 	}
 
-	// No deadline, block indefinitely
 	select {
-	case datagram, ok := <-c.readChan:
-		if !ok {
-			return 0, nil, net.ErrClosed
-		}
-		n := copy(b, datagram)
+	case data := <-c.readChan:
+		n := copy(b, data)
 		return n, c.remoteAddr, nil
-	case err, ok := <-c.errChan:
-		if !ok {
-			return 0, nil, net.ErrClosed
-		}
-		return 0, nil, err
+	case err := <-c.errChan:
+		return 0, c.remoteAddr, err
+	case <-deadlineChan:
+		return 0, c.remoteAddr, fmt.Errorf("read deadline exceeded")
+	case <-c.conn.Context().Done():
+		return 0, c.remoteAddr, net.ErrClosed
 	}
 }
 
-// WriteTo writes a packet to the connection
-func (c *quicDatagramConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+// WriteTo writes a datagram to the connection
+// Optimized with atomic closed check
+func (c *quicDatagramConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	// Check if closed
 	if c.closed.Load() {
 		return 0, net.ErrClosed
 	}
 
-	// Check for write deadline
-	writeDeadlineVal := c.writeDeadline.Load()
-	if deadline, ok := writeDeadlineVal.(time.Time); ok && !deadline.IsZero() {
-		if time.Now().After(deadline) {
-			return 0, fmt.Errorf("write deadline exceeded")
-		}
-	}
-
-	// Validate input data
-	if len(b) == 0 {
-		return 0, fmt.Errorf("empty packet")
-	}
-
-	// QUIC datagram max size is typically 64KB, but practical limit is lower
-	// Max datagram size = 2 (port) + 16 (IP) + payload
-	if len(b) > 65535-18 {
-		return 0, fmt.Errorf("packet too large: %d bytes (max %d)", len(b), 65535-18)
-	}
-
-	// Use remote address if no specific address provided
-	targetAddr := addr
-	if targetAddr == nil {
-		targetAddr = c.remoteAddr
-	}
-
-	// Encode address info in the datagram payload
-	// Format: [2-byte port][16-byte IPv6/IPv4][payload]
-	udpAddr, ok := targetAddr.(*net.UDPAddr)
-	if !ok {
-		return 0, fmt.Errorf("unsupported address type: %T", addr)
-	}
-
-	// Validate port
-	if udpAddr.Port <= 0 || udpAddr.Port > 65535 {
-		return 0, fmt.Errorf("invalid port: %d", udpAddr.Port)
-	}
-
-	// Validate IP address
-	if udpAddr.IP == nil {
-		return 0, fmt.Errorf("nil IP address")
-	}
-
-	// Determine IP version and encode
-	var ipBytes []byte
-	if udpAddr.IP.To4() != nil {
-		// IPv4 mapped to IPv6 (use IPv4-mapped IPv6 format)
-		ipBytes = udpAddr.IP.To16()
-	} else {
-		ipBytes = udpAddr.IP.To16()
-	}
-
-	if ipBytes == nil || len(ipBytes) != 16 {
-		return 0, fmt.Errorf("invalid IP address length: %d", len(ipBytes))
-	}
-
-	// Build datagram: port (2) + IP (16) + payload
-	datagram := make([]byte, 2+16+len(b))
-	binary.BigEndian.PutUint16(datagram[0:2], uint16(udpAddr.Port))
-	copy(datagram[2:18], ipBytes)
-	copy(datagram[18:], b)
-
-	err = c.conn.SendDatagram(datagram)
+	// Send datagram
+	err := c.conn.SendDatagram(b)
 	if err != nil {
-		return 0, fmt.Errorf("send datagram: %w", err)
+		return 0, err
 	}
 
 	return len(b), nil
 }
 
 // Close closes the connection
+// Optimized with sync.Once for idempotent close
 func (c *quicDatagramConn) Close() error {
-	if c.closed.Swap(true) {
-		return nil // Already closed
-	}
-
-	// Закрыть каналы безопасно с помощью sync.Once
+	var err error
 	c.once.Do(func() {
+		c.closed.Store(true)
+		// Close channels
 		close(c.readChan)
 		close(c.errChan)
+		// Close QUIC connection
+		err = c.conn.CloseWithError(0, "closed")
 	})
-
-	// Close the underlying QUIC connection
-	c.conn.CloseWithError(0, "datagram connection closed")
-	return nil
+	return err
 }
 
-// LocalAddr returns the local network address
+// LocalAddr returns the local address
 func (c *quicDatagramConn) LocalAddr() net.Addr {
 	return c.localAddr
 }
@@ -236,14 +162,26 @@ func (c *quicDatagramConn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-// SetReadDeadline sets the deadline for future ReadFrom calls
+// SetReadDeadline sets the read deadline
+// Optimized with atomic store
 func (c *quicDatagramConn) SetReadDeadline(t time.Time) error {
 	c.readDeadline.Store(t)
 	return nil
 }
 
-// SetWriteDeadline sets the deadline for future WriteTo calls
+// SetWriteDeadline sets the write deadline
+// Optimized with atomic store
 func (c *quicDatagramConn) SetWriteDeadline(t time.Time) error {
 	c.writeDeadline.Store(t)
 	return nil
+}
+
+// GetQUICConnection returns the underlying QUIC connection
+func (c *quicDatagramConn) GetQUICConnection() *quic.Conn {
+	return c.conn
+}
+
+// IsClosed returns true if the connection is closed
+func (c *quicDatagramConn) IsClosed() bool {
+	return c.closed.Load()
 }
