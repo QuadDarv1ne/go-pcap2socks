@@ -1,0 +1,61 @@
+2026/03/27 22:30:14 INFO ══════════════════════════════════════════════════════════════════
+2026/03/27 22:30:14 INFO   АВТОМАТИЧЕСКИЙ ЗАПУСК - Конфигурация и запуск сервиса
+2026/03/27 22:30:14 INFO ══════════════════════════════════════════════════════════════════
+2026/03/27 22:30:14 INFO Шаг 1/2: Автоматическая конфигурация сети...
+2026/03/27 22:30:14 INFO Selecting best network interface...
+2026/03/27 22:30:14 INFO Selected interface name="Ethernet 2" ip=169.254.159.243 has_internet=true priority=130
+2026/03/27 22:30:14 INFO Найден интерфейс name="Ethernet 2" ip=169.254.159.243 mac=0a:00:27:00:00:15 has_internet=true
+2026/03/27 22:30:14 INFO Engine auto-selected engine=npcap description="Npcap (Windows packet capture library)" recommendation="Npcap selected: Good performance, no admin required"
+2026/03/27 22:30:14 INFO Системные DNS не найдены, используем публичные DNS servers="[8.8.8.8 1.1.1.1]"
+2026/03/27 22:30:14 INFO ✓ Конфигурация создана file=config.json
+2026/03/27 22:30:14 INFO 
+2026/03/27 22:30:14 INFO Шаг 2/2: Запуск сервиса...
+2026/03/27 22:30:14 INFO ══════════════════════════════════════════════════════════════════
+2026/03/27 22:30:14 INFO 
+2026/03/27 22:30:14 INFO Используется сетевой интерфейс interface="Ethernet 2" mac=0a:00:27:00:00:15
+2026/03/27 22:30:14 INFO Настройте ваше устройство со следующими параметрами:
+2026/03/27 22:30:14 INFO ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026/03/27 22:30:14 INFO   IP адрес:     169.254.0.1 - 169.254.255.254
+2026/03/27 22:30:14 INFO   Маска подсети:    255.255.0.0
+2026/03/27 22:30:14 INFO   Шлюз:        169.254.159.243
+2026/03/27 22:30:14 INFO   MTU:            1472 (or lower)
+2026/03/27 22:30:14 INFO ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026/03/27 22:30:14 INFO WinDivert handle opened filter="udp.DstPort == 67 or udp.SrcPort == 68" mode=network
+2026/03/27 22:30:14 INFO WINDIVERT DHCP SERVER STARTED pool=169.254.160.87-169.254.160.187 lease=86400s engine=WinDivert
+2026/03/27 22:30:14 INFO Profile manager initialized
+2026/03/27 22:30:17 WARN UPnP manager start failed err="no UPnP devices found"
+2026/03/27 22:30:17 INFO Starting ARP monitor network=169.254.0.0/16
+2026/03/27 22:30:17 INFO ARP monitor started network=169.254.0.0/16
+2026/03/27 22:30:17 INFO Hotkey message loop started
+2026/03/27 22:30:17 INFO Starting web UI server on :8080
+2026/03/27 22:30:17 INFO API server initialized with auto-generated authentication token token_length=44
+2026/03/27 22:30:17 INFO API authentication token auto-generated token="Id4fA5lPTYucx-lGSrAbKfcgYOYSZRi7HL-TIqQ3ug8="
+2026/03/27 22:30:17 INFO HTTP server starting on :8085
+2026/03/27 22:30:17 ERROR HTTP server error err="listen tcp :8085: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted."
+2026/03/27 22:30:17 WARN Port is busy, using different port startPort=8080 port=8081
+2026/03/27 22:30:17 INFO Starting HTTP server port=8081 url=http://localhost:8081
+2026/03/27 22:34:48 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:34:48 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:34:48 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:34:53 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:34:53 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:34:53 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:01 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:01 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:35:01 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:14 INFO DHCP Server Metrics uptime_seconds=300 active_leases=1 total_allocations=0 total_renewals=0 discover=3 offer=3 request=0 ack=0 nak=0 release=0 decline=0 errors=0 last_request_mac=0a:00:27:00:00:15 last_request_ip=""
+2026/03/27 22:35:17 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:17 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:35:17 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:48 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:48 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:35:48 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:53 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:35:53 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:35:53 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:36:01 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:36:01 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:36:01 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:36:18 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255
+2026/03/27 22:36:18 ERROR DHCP send error err="send DHCP response: The parameter is incorrect." mac=0a:00:27:00:00:15
+2026/03/27 22:36:18 INFO DHCP request received mac=0a:00:27:00:00:15 srcIP=0.0.0.0 dstIP=255.255.255.255

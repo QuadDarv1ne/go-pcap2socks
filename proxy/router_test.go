@@ -93,8 +93,8 @@ func TestNewRouter(t *testing.T) {
 	}
 	defer router.Stop()
 
-	if router.Rules == nil {
-		t.Error("Expected Rules to be initialized")
+	if router.routingTable == nil {
+		t.Error("Expected routingTable to be initialized")
 	}
 	if router.Proxies == nil {
 		t.Error("Expected Proxies to be initialized")
@@ -513,9 +513,9 @@ func TestMatch(t *testing.T) {
 				t.Fatalf("Failed to normalize rule: %v", err)
 			}
 
-			result := match(tt.metadata, tt.rule)
+			result := matchRule(tt.metadata, tt.rule)
 			if result != tt.expected {
-				t.Errorf("match() = %v, want %v", result, tt.expected)
+				t.Errorf("matchRule() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

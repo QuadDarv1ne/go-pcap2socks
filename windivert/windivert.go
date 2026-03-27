@@ -40,7 +40,8 @@ const (
 // Batch processing constants
 const (
 	// DefaultBatchSize is the default number of packets to process in a batch
-	DefaultBatchSize = 64
+	// Increased from 64 to 128 for better throughput on high-traffic networks
+	DefaultBatchSize = 128
 
 	// BatchTimeout is the timeout for batch processing
 	BatchTimeout = 100 * time.Microsecond
@@ -534,6 +535,9 @@ type QueueStats struct {
 	MaxQueueLength  int32 `json:"max_queue_length"`
 	AvgQueueLength  int32 `json:"avg_queue_length"`
 	Samples         int   `json:"samples"`
+	// Extended stats for better monitoring
+	PacketPoolInUse   int32 `json:"packet_pool_in_use"`
+	BatchChannelSize  int   `json:"batch_channel_size"`
 }
 
 // GetQueueStats returns queue statistics
@@ -546,14 +550,29 @@ func (h *Handle) GetQueueStats() QueueStats {
 	}
 }
 
-// IsQueueOverflowed returns true if queue overflow was detected
-func (h *Handle) IsQueueOverflowed() bool {
-	return h.queueOverflowed.Load()
+// GetExtendedQueueStats returns extended queue statistics including batch processor info
+func (h *Handle) GetExtendedQueueStats(bp *BatchProcessor) QueueStats {
+	stats := QueueStats{
+		QueueLength:   h.queueLength.Load(),
+		Overflowed:    h.queueOverflowed.Load(),
+		OverflowCount: h.overflowCount.Load(),
+		MaxQueueLength: MaxQueueLength,
+		PacketPoolInUse: h.packetPool.inUse.Load(),
+	}
+	if bp != nil {
+		stats.BatchChannelSize = len(bp.batchChan)
+	}
+	return stats
 }
 
 // GetQueueLength returns current queue length
 func (h *Handle) GetQueueLength() int32 {
 	return h.queueLength.Load()
+}
+
+// IsQueueOverflowed returns true if queue overflow was detected
+func (h *Handle) IsQueueOverflowed() bool {
+	return h.queueOverflowed.Load()
 }
 
 // ResetOverflowCounter resets the overflow counter

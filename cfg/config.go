@@ -83,6 +83,92 @@ type Config struct {
 	MTU       *MTU       `json:"mtu,omitempty"`
 	MACFilter *MACFilter `json:"macFilter,omitempty"`
 	WinDivert *WinDivert `json:"windivert,omitempty"`
+	RateLimit *RateLimit `json:"rateLimit,omitempty"`
+}
+
+// RateLimit holds bandwidth limiting configuration
+type RateLimit struct {
+	// Default limit for all clients (e.g., "10Mbps", "100Mbps", "1Gbps")
+	Default string `json:"default,omitempty"`
+	// Rules for specific clients by MAC or IP
+	Rules []RateLimitRule `json:"rules,omitempty"`
+}
+
+// RateLimitRule defines bandwidth limit for a specific client
+type RateLimitRule struct {
+	// MAC address to match (optional)
+	MAC string `json:"mac,omitempty"`
+	// IP address to match (optional)
+	IP string `json:"ip,omitempty"`
+	// Bandwidth limit (e.g., "50Mbps", "100Mbps")
+	Limit string `json:"limit"`
+	// Optional description
+	Description string `json:"description,omitempty"`
+}
+
+// ParseBandwidth parses bandwidth string to bytes per second
+// Supports: Kbps, Mbps, Gbps, KB/s, MB/s, GB/s, K, M, G (binary)
+func ParseBandwidth(bandwidth string) (uint64, error) {
+	bandwidth = strings.TrimSpace(bandwidth)
+	if bandwidth == "" {
+		return 0, fmt.Errorf("empty bandwidth value")
+	}
+	
+	// Extract number and unit
+	var numStr string
+	var unit string
+	
+	// Find where digits end
+	for i, r := range bandwidth {
+		if r < '0' || r > '9' {
+			numStr = bandwidth[:i]
+			unit = strings.TrimSpace(bandwidth[i:])
+			break
+		}
+	}
+	
+	// If no unit found, entire string is the number
+	if numStr == "" {
+		numStr = bandwidth
+		unit = ""
+	}
+	
+	if numStr == "" {
+		return 0, fmt.Errorf("invalid bandwidth format: no number found")
+	}
+	
+	num, err := strconv.ParseUint(numStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid bandwidth number: %w", err)
+	}
+	
+	unitLower := strings.ToLower(unit)
+	
+	// Convert to bytes per second
+	switch unitLower {
+	// Decimal (network) units - bits per second
+	case "kbps", "kb/s", "kbit/s":
+		return num * 1000 / 8, nil
+	case "mbps", "mb/s", "mbit/s":
+		return num * 1000000 / 8, nil
+	case "gbps", "gb/s", "gbit/s":
+		return num * 1000000000 / 8, nil
+	
+	// Binary units - bytes per second
+	case "k", "kb", "kib", "kib/s", "k/s":
+		return num * 1024, nil
+	case "m", "mb", "mib", "mib/s", "m/s":
+		return num * 1024 * 1024, nil
+	case "g", "gb", "gib", "gib/s", "g/s":
+		return num * 1024 * 1024 * 1024, nil
+	
+	// Plain bytes per second
+	case "bps", "b/s", "":
+		return num, nil
+	
+	default:
+		return 0, fmt.Errorf("unknown bandwidth unit: %s", unit)
+	}
 }
 
 // MTU holds Path MTU Discovery configuration

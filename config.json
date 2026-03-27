@@ -1,70 +1,31 @@
 {
   "pcap": {
-    "interfaceGateway": "192.168.137.1",
+    "interfaceGateway": "169.254.159.243",
     "mtu": 1486,
-    "network": "192.168.137.0/24",
-    "localIP": "192.168.137.1",
-    "localMAC": "b0:25:aa:65:67:bb"
-  },
-  "mtu": {
-    "enabled": true,
-    "autoDiscover": true,
-    "baseMTU": 1486,
-    "minMTU": 576,
-    "maxMTU": 9000,
-    "probeTimeout": 2000,
-    "cacheExpiry": 600,
-    "mssClamping": true,
-    "protocolOverheads": {
-      "direct": 0,
-      "socks5": 10,
-      "http": 20,
-      "wireguard": 60,
-      "pppoe": 8
-    }
+    "network": "169.254.0.0/16",
+    "localIP": "169.254.159.243",
+    "localMAC": "0a:00:27:00:00:15"
   },
   "dhcp": {
     "enabled": true,
-    "poolStart": "192.168.137.101",
-    "poolEnd": "192.168.137.201",
+    "poolStart": "169.254.160.87",
+    "poolEnd": "169.254.160.187",
     "leaseDuration": 86400
   },
   "dns": {
     "servers": [
       {
-        "address": "1.1.1.1:53"
-      },
-      {
-        "address": "1.0.0.1:53"
-      },
-      {
         "address": "8.8.8.8:53"
       },
       {
-        "address": "8.8.4.4:53"
+        "address": "1.1.1.1:53"
       }
     ],
-    "dohServers": [
-      "https://cloudflare-dns.com/dns-query",
-      "https://dns.google.com/dns-query"
-    ],
-    "dotServers": [
-      "1.1.1.1:853",
-      "8.8.8.8:853"
-    ],
-    "useSystemDNS": true,
-    "autoBench": true,
-    "benchInterval": 300,
-    "cacheSize": 1024,
-    "cacheTTL": 300,
-    "server": {
-      "enabled": true,
-      "listen": "0.0.0.0:8443",
-      "tls": true,
-      "autoTLS": true,
-      "domain": "localhost",
-      "allowPrivate": true
-    }
+    "useSystemDNS": false,
+    "autoBench": false,
+    "benchInterval": 0,
+    "cacheSize": 0,
+    "cacheTTL": 0
   },
   "routing": {
     "rules": [

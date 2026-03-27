@@ -114,12 +114,23 @@ func (s *DHCPServer) packetLoop() {
 	errorCount := 0
 	const maxErrors = 10
 	packetCount := 0
+	queueCheckTicker := time.NewTicker(QueueCheckInterval)
+	defer queueCheckTicker.Stop()
 
 	for {
 		select {
 		case <-s.stopChan:
 			slog.Info("WinDivert packet loop stopped", "total_packets", packetCount)
 			return
+		case <-queueCheckTicker.C:
+			// Monitor WinDivert queue to detect overflow early
+			stats := s.handle.GetQueueStats()
+			if stats.QueueLength > QueueOverflowThreshold {
+				slog.Warn("WinDivert queue length high",
+					"queue_length", stats.QueueLength,
+					"threshold", QueueOverflowThreshold,
+					"overflowed", stats.Overflowed)
+			}
 		default:
 			packet, err := s.handle.Recv()
 			if err != nil {
