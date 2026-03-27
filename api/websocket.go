@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -37,14 +38,15 @@ type WebSocketClient struct {
 }
 
 // WebSocketHub manages WebSocket connections
+// Optimized with sync.Map for lock-free client management
 type WebSocketHub struct {
-	mu       sync.RWMutex
-	clients  map[*WebSocketClient]bool
-	broadcast chan []byte
+	clients    sync.Map // map[*WebSocketClient]bool
+	broadcast  chan []byte
 	register   chan *WebSocketClient
 	unregister chan *WebSocketClient
 	stopChan   chan struct{}
 	stopOnce   sync.Once
+	clientCount atomic.Int32
 
 	// Pool for client slices to reduce allocations
 	clientSlicePool sync.Pool
@@ -53,7 +55,6 @@ type WebSocketHub struct {
 // NewWebSocketHub creates a new WebSocket hub
 func NewWebSocketHub() *WebSocketHub {
 	h := &WebSocketHub{
-		clients:    make(map[*WebSocketClient]bool),
 		broadcast:  make(chan []byte, 256),
 		register:   make(chan *WebSocketClient, 16),   // Buffered to prevent blocking
 		unregister: make(chan *WebSocketClient, 16),  // Buffered to prevent blocking
@@ -70,54 +71,49 @@ func (h *WebSocketHub) Run() {
 	for {
 		select {
 		case client := <-h.register:
-			h.mu.Lock()
-			h.clients[client] = true
-			h.mu.Unlock()
+			h.clients.Store(client, true)
+			h.clientCount.Add(1)
 
 		case client := <-h.unregister:
-			h.mu.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
-			}
-			h.mu.Unlock()
+			h.clients.Delete(client)
+			h.clientCount.Add(-1)
+			close(client.send)
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
 			// Get slice from pool to reduce allocations
 			clientsToClose := h.clientSlicePool.Get().([]*WebSocketClient)
 			clientsToClose = clientsToClose[:0]
-			for client := range h.clients {
+			
+			h.clients.Range(func(k, v any) bool {
+				client := k.(*WebSocketClient)
 				select {
 				case client.send <- message:
 				default:
 					// Client buffer full, mark for disconnect
 					clientsToClose = append(clientsToClose, client)
 				}
-			}
-			h.mu.RUnlock()
+				return true
+			})
 
 			// Close clients outside lock to prevent deadlock
 			if len(clientsToClose) > 0 {
-				h.mu.Lock()
 				for _, client := range clientsToClose {
-					if _, ok := h.clients[client]; ok {
-						delete(h.clients, client)
-						close(client.send)
-					}
+					h.clients.Delete(client)
+					h.clientCount.Add(-1)
+					close(client.send)
 				}
-				h.mu.Unlock()
 			}
 			// Return slice to pool after clearing
 			h.clientSlicePool.Put(clientsToClose[:0])
 
 		case <-h.stopChan:
-			h.mu.Lock()
-			for client := range h.clients {
+			h.clients.Range(func(k, v any) bool {
+				client := k.(*WebSocketClient)
 				close(client.send)
-			}
-			h.clients = make(map[*WebSocketClient]bool)
-			h.mu.Unlock()
+				return true
+			})
+			h.clients = sync.Map{}
+			h.clientCount.Store(0)
 			return
 		}
 	}
@@ -131,6 +127,7 @@ func (h *WebSocketHub) Stop() {
 }
 
 // Broadcast sends a message to all connected clients
+// Optimized with non-blocking send
 func (h *WebSocketHub) Broadcast(data interface{}) {
 	message, err := json.Marshal(data)
 	if err != nil {
@@ -141,8 +138,13 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 	select {
 	case h.broadcast <- message:
 	default:
-		// Broadcast channel full
+		// Broadcast channel full - skip this update
 	}
+}
+
+// GetClientCount returns the number of connected clients
+func (h *WebSocketHub) GetClientCount() int {
+	return int(h.clientCount.Load())
 }
 
 // HandleWebSocket handles WebSocket connections
