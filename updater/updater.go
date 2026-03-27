@@ -1,9 +1,11 @@
-// Package updater provides automatic update functionality
+// Package updater provides automatic update functionality for go-pcap2socks.
+// Checks GitHub releases and downloads updates for the current platform.
 package updater
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +17,16 @@ import (
 	"time"
 )
 
+// Pre-defined errors for updater operations
+var (
+	ErrUpdateCheckFailed  = errors.New("failed to check for updates")
+	ErrUpdateDownloadFailed = errors.New("failed to download update")
+	ErrUpdateApplyFailed  = errors.New("failed to apply update")
+	ErrInvalidVersion     = errors.New("invalid version format")
+	ErrNoAssetForPlatform = errors.New("no asset found for current platform")
+)
+
+// Updater constants
 const (
 	// GitHub API endpoint for releases
 	GitHubReleasesAPI = "https://api.github.com/repos/DaniilSokolyuk/go-pcap2socks/releases/latest"
@@ -73,14 +85,15 @@ func (u *Updater) SetOnUpdate(callback func(oldVersion, newVersion string)) {
 	u.onUpdate = callback
 }
 
-// CheckForUpdates checks if a new version is available
+// CheckForUpdates checks if a new version is available.
+// Returns the release info, whether it's newer, and any error.
 func (u *Updater) CheckForUpdates() (*Release, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GitHubReleasesAPI, nil)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to create request: %w", err)
+		return nil, false, fmt.Errorf("%w: failed to create request: %v", ErrUpdateCheckFailed, err)
 	}
 
 	// Set required headers for GitHub API
@@ -89,28 +102,28 @@ func (u *Updater) CheckForUpdates() (*Release, bool, error) {
 
 	resp, err := u.httpClient.Do(req)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to fetch releases: %w", err)
+		return nil, false, fmt.Errorf("%w: failed to fetch releases: %v", ErrUpdateCheckFailed, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, false, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return nil, false, fmt.Errorf("%w: GitHub API returned status %d", ErrUpdateCheckFailed, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to read response body: %w", err)
+		return nil, false, fmt.Errorf("%w: failed to read response body: %v", ErrUpdateCheckFailed, err)
 	}
 
 	var release Release
 	if err := json.Unmarshal(body, &release); err != nil {
-		return nil, false, fmt.Errorf("failed to parse release: %w", err)
+		return nil, false, fmt.Errorf("%w: failed to parse release: %v", ErrUpdateCheckFailed, err)
 	}
 
 	// Check if this is a newer version
 	isNewer, err := u.isNewerVersion(release.TagName)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to compare versions: %w", err)
+		return nil, false, fmt.Errorf("%w: failed to compare versions: %v", ErrInvalidVersion, err)
 	}
 
 	return &release, isNewer, nil

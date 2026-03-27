@@ -1,12 +1,21 @@
+// Package discord provides Discord webhook notifications for go-pcap2socks.
 package discord
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
+)
+
+// Pre-defined errors for Discord webhook operations
+var (
+	ErrWebhookDisabled  = errors.New("webhook disabled")
+	ErrWebhookSendFailed = errors.New("failed to send webhook")
+	ErrInvalidWebhookURL = errors.New("invalid webhook URL")
 )
 
 // WebhookClient represents a Discord webhook client
@@ -64,10 +73,11 @@ func NewWebhookClient(webhookURL string) *WebhookClient {
 	}
 }
 
-// Send sends a message to Discord webhook
+// Send sends a message to Discord webhook.
+// Returns ErrWebhookDisabled if webhook is not enabled.
 func (w *WebhookClient) Send(content string) error {
 	if !w.enabled {
-		return fmt.Errorf("webhook disabled")
+		return ErrWebhookDisabled
 	}
 
 	payload := Payload{
