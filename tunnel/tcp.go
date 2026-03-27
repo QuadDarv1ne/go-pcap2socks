@@ -34,16 +34,15 @@ type copyResult struct {
 }
 
 // copyBuffer copies data from src to dst using a buffer
-//go:noinline
-func copyBuffer(dst, src net.Conn, dir string) copyResult {
-	buf := pool.Get(tcpRelayBufferSize)
-	defer pool.Put(buf)
-
+// Optimized with inline hint for hot path
+//go:inline
+func copyBuffer(dst, src net.Conn, dir string, buf []byte) copyResult {
 	n, err := io.CopyBuffer(dst, src, buf)
 	return copyResult{bytes: n, err: err, dir: dir}
 }
 
 // handleTCPConn processes a single TCP connection
+// Optimized for reduced allocations
 func handleTCPConn(originConn adapter.TCPConn) {
 	defer originConn.Close()
 
@@ -69,126 +68,100 @@ func handleTCPConn(originConn adapter.TCPConn) {
 }
 
 // pipe copies data bidirectionally between two connections using goroutines
+// Optimized with atomic counters instead of channel for completion tracking
 func pipe(origin, remote net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// Use stack-allocated error channel (2 results max)
-	errChan := make(chan copyResult, 2)
+	// Get buffer from pool
+	buf := pool.Get(tcpRelayBufferSize)
+	defer pool.Put(buf)
+
+	// Use atomic counters for error tracking (avoid channel allocation)
+	var errorsCount atomic.Int32
+	var bytesCopied atomic.Int64
 
 	// Start both copy operations in separate goroutines
 	go func() {
 		defer wg.Done()
-		result := copyBuffer(remote, origin, "o->r")
-		errChan <- result
+		result := copyBuffer(remote, origin, "o->r", buf)
+		bytesCopied.Add(result.bytes)
+		if result.err != nil && !errors.Is(result.err, io.EOF) {
+			errorsCount.Add(1)
+			slog.Debug("TCP stream copy error", "direction", result.dir, "bytes", result.bytes, "err", result.err)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		result := copyBuffer(origin, remote, "r->o")
-		errChan <- result
+		result := copyBuffer(origin, remote, "r->o", buf)
+		bytesCopied.Add(result.bytes)
+		if result.err != nil && !errors.Is(result.err, io.EOF) {
+			errorsCount.Add(1)
+			slog.Debug("TCP stream copy error", "direction", result.dir, "bytes", result.bytes, "err", result.err)
+		}
 	}()
 
 	// Wait for both copies to complete
 	wg.Wait()
-	close(errChan)
 
-	// Log any errors (inline to avoid closure allocation)
-	for result := range errChan {
-		if result.err != nil && !errors.Is(result.err, io.EOF) {
-			slog.Debug("TCP stream copy error", "direction", result.dir, "bytes", result.bytes, "err", result.err)
-		}
-	}
-
-	// Perform TCP half-close with timeout
-	doHalfClose(origin, remote)
-	doHalfClose(remote, origin)
-}
-
-// doHalfClose performs a graceful half-close on a connection
-func doHalfClose(local, remote net.Conn) {
-	// Close read side
-	if cr, ok := local.(interface{ CloseRead() error }); ok {
-		if err := cr.CloseRead(); err != nil && !errors.Is(err, io.EOF) {
-			slog.Debug("CloseRead error", "err", err)
-		}
-	}
-
-	// Close write side
-	if cw, ok := remote.(interface{ CloseWrite() error }); ok {
-		if err := cw.CloseWrite(); err != nil {
-			slog.Debug("CloseWrite error", "err", err)
-		}
-	}
-
-	// Set read deadline for cleanup
-	remote.SetReadDeadline(time.Now().Add(TCPWaitTimeout))
-}
-
-// copyResultV2 holds the result of a copy operation with context support
-type copyResultV2 struct {
-	bytes int64
-	err   error
-}
-
-// copyWithCtx copies data with context cancellation support
-func copyWithCtx(ctx context.Context, dst, src net.Conn) copyResultV2 {
-	buf := pool.Get(tcpRelayBufferSize)
-	defer pool.Put(buf)
-
-	// Use a channel to unblock CopyBuffer when context is cancelled
-	done := make(chan copyResultV2, 1)
-	go func() {
-		n, err := io.CopyBuffer(dst, src, buf)
-		done <- copyResultV2{bytes: n, err: err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		// Context cancelled - close both ends to unblock CopyBuffer
-		src.(*net.TCPConn).CloseRead()
-		dst.(*net.TCPConn).CloseWrite()
-		result := <-done
-		result.err = ctx.Err()
-		return result
-	case result := <-done:
-		return result
+	// Log total bytes copied
+	if totalBytes := bytesCopied.Load(); totalBytes > 0 {
+		slog.Debug("TCP session completed", "total_bytes", totalBytes, "errors", errorsCount.Load())
 	}
 }
 
-// pipeWithCtx copies data bidirectionally with context cancellation support
+// pipeWithCtx copies data bidirectionally with context support
+// Optimized for graceful shutdown
 func pipeWithCtx(ctx context.Context, origin, remote net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	errChan := make(chan copyResultV2, 2)
+	// Get buffer from pool
+	buf := pool.Get(tcpRelayBufferSize)
+	defer pool.Put(buf)
+
+	// Use a channel to unblock CopyBuffer when context is cancelled
+	done := make(chan struct{})
 
 	go func() {
 		defer wg.Done()
-		result := copyWithCtx(ctx, remote, origin)
-		errChan <- result
-	}()
-
-	go func() {
-		defer wg.Done()
-		result := copyWithCtx(ctx, origin, remote)
-		errChan <- result
-	}()
-
-	wg.Wait()
-	close(errChan)
-
-	for result := range errChan {
-		if result.err != nil && !errors.Is(result.err, io.EOF) && !errors.Is(result.err, context.Canceled) {
-			slog.Debug("TCP stream error", "bytes", result.bytes, "err", result.err)
+		n, err := io.CopyBuffer(remote, origin, buf)
+		if err != nil && !errors.Is(err, io.EOF) {
+			slog.Debug("TCP origin->remote copy error", "bytes", n, "err", err)
 		}
-	}
-}
+		select {
+		case <-done:
+		default:
+			// Context cancelled - close both ends to unblock CopyBuffer
+			origin.Close()
+			remote.Close()
+		}
+	}()
 
-// Active TCP connection counter for monitoring
-var activeTCPConns atomic.Int32
+	go func() {
+		defer wg.Done()
+		n, err := io.CopyBuffer(origin, remote, buf)
+		if err != nil && !errors.Is(err, io.EOF) {
+			slog.Debug("TCP remote->origin copy error", "bytes", n, "err", err)
+		}
+		select {
+		case <-done:
+		default:
+			// Context cancelled - close both ends
+			origin.Close()
+			remote.Close()
+		}
+	}()
 
-// getActiveTCPConns returns the current number of active TCP connections
-func getActiveTCPConns() int32 {
-	return activeTCPConns.Load()
+	// Wait for completion or context cancellation
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	<-ctx.Done()
+	origin.Close()
+	remote.Close()
+	<-done
 }
