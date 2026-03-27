@@ -3,41 +3,44 @@ package dhcp
 import (
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // MetricsCollector collects DHCP server metrics
+// Optimized with atomic counters for lock-free updates in hot path
 type MetricsCollector struct {
-	mu                sync.RWMutex
 	startTime         time.Time
-	discoverCount     int64
-	offerCount        int64
-	requestCount      int64
-	ackCount          int64
-	nakCount          int64
-	releaseCount      int64
-	declineCount      int64
-	errorCount        int64
-	activeLeases      int64
-	totalAllocations  int64
-	totalRenewals     int64
-	lastAllocationAt  time.Time
-	lastRequestMAC    string
-	lastRequestIP     string
+	discoverCount     atomic.Int64
+	offerCount        atomic.Int64
+	requestCount      atomic.Int64
+	ackCount          atomic.Int64
+	nakCount          atomic.Int64
+	releaseCount      atomic.Int64
+	declineCount      atomic.Int64
+	errorCount        atomic.Int64
+	activeLeases      atomic.Int64
+	totalAllocations  atomic.Int64
+	totalRenewals     atomic.Int64
+	lastAllocationAt  atomic.Value // time.Time
+	lastRequestMAC    atomic.Value // string
+	lastRequestIP     atomic.Value // string
+	hourlyStatsMu     sync.RWMutex
 	hourlyStats       map[int64]*HourlyStats // hour timestamp -> stats
 }
 
 // HourlyStats holds per-hour statistics
+// Optimized with atomic counters for lock-free updates
 type HourlyStats struct {
-	mu            sync.RWMutex
-	discoverCount int64
-	offerCount    int64
-	requestCount  int64
-	ackCount      int64
-	nakCount      int64
-	allocations   int64
-	renewals      int64
-	errors        int64
+	discoverCount atomic.Int64
+	offerCount    atomic.Int64
+	requestCount  atomic.Int64
+	ackCount      atomic.Int64
+	nakCount      atomic.Int64
+	releaseCount  atomic.Int64
+	allocations   atomic.Int64
+	renewals      atomic.Int64
+	errors        atomic.Int64
 }
 
 // NewMetricsCollector creates a new metrics collector
@@ -55,9 +58,17 @@ func getHourKey(t time.Time) int64 {
 
 // getOrCreateHourlyStats gets or creates hourly stats for the given hour
 func (m *MetricsCollector) getOrCreateHourlyStats(hourKey int64) *HourlyStats {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.hourlyStatsMu.RLock()
+	if hs, exists := m.hourlyStats[hourKey]; exists {
+		m.hourlyStatsMu.RUnlock()
+		return hs
+	}
+	m.hourlyStatsMu.RUnlock()
 
+	m.hourlyStatsMu.Lock()
+	defer m.hourlyStatsMu.Unlock()
+	
+	// Double-check after acquiring write lock
 	if hs, exists := m.hourlyStats[hourKey]; exists {
 		return hs
 	}
@@ -68,140 +79,127 @@ func (m *MetricsCollector) getOrCreateHourlyStats(hourKey int64) *HourlyStats {
 }
 
 // RecordDiscover records a DHCP DISCOVER event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordDiscover() {
-	m.mu.Lock()
-	m.discoverCount++
-	m.mu.Unlock()
-
+	m.discoverCount.Add(1)
 	hs := m.getOrCreateHourlyStats(getHourKey(time.Now()))
-	hs.mu.Lock()
-	hs.discoverCount++
-	hs.mu.Unlock()
+	hs.discoverCount.Add(1)
 }
 
 // RecordOffer records a DHCP OFFER event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordOffer() {
-	m.mu.Lock()
-	m.offerCount++
-	m.mu.Unlock()
-
+	m.offerCount.Add(1)
 	hs := m.getOrCreateHourlyStats(getHourKey(time.Now()))
-	hs.mu.Lock()
-	hs.offerCount++
-	hs.mu.Unlock()
+	hs.offerCount.Add(1)
 }
 
 // RecordRequest records a DHCP REQUEST event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordRequest() {
-	m.mu.Lock()
-	m.requestCount++
-	m.mu.Unlock()
-
+	m.requestCount.Add(1)
 	hs := m.getOrCreateHourlyStats(getHourKey(time.Now()))
-	hs.mu.Lock()
-	hs.requestCount++
-	hs.mu.Unlock()
+	hs.requestCount.Add(1)
 }
 
 // RecordAck records a DHCP ACK event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordAck(mac, ip string, isRenewal bool) {
-	m.mu.Lock()
-	m.ackCount++
-	m.totalAllocations++
+	m.ackCount.Add(1)
+	m.totalAllocations.Add(1)
 	if isRenewal {
-		m.totalRenewals++
+		m.totalRenewals.Add(1)
 	}
-	m.lastAllocationAt = time.Now()
-	m.lastRequestMAC = mac
-	m.lastRequestIP = ip
-	m.mu.Unlock()
+	m.lastAllocationAt.Store(time.Now())
+	m.lastRequestMAC.Store(mac)
+	m.lastRequestIP.Store(ip)
 
 	hs := m.getOrCreateHourlyStats(getHourKey(time.Now()))
-	hs.mu.Lock()
-	hs.ackCount++
+	hs.ackCount.Add(1)
 	if isRenewal {
-		hs.renewals++
+		hs.renewals.Add(1)
 	} else {
-		hs.allocations++
+		hs.allocations.Add(1)
 	}
-	hs.mu.Unlock()
 }
 
 // RecordNak records a DHCP NAK event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordNak() {
-	m.mu.Lock()
-	m.nakCount++
-	m.mu.Unlock()
-
+	m.nakCount.Add(1)
 	hs := m.getOrCreateHourlyStats(getHourKey(time.Now()))
-	hs.mu.Lock()
-	hs.nakCount++
-	hs.mu.Unlock()
+	hs.nakCount.Add(1)
 }
 
 // RecordRelease records a DHCP RELEASE event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordRelease() {
-	m.mu.Lock()
-	m.releaseCount++
-	m.mu.Unlock()
+	m.releaseCount.Add(1)
+	hs := m.getOrCreateHourlyStats(getHourKey(time.Now()))
+	hs.releaseCount.Add(1)
 }
 
 // RecordDecline records a DHCP DECLINE event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordDecline() {
-	m.mu.Lock()
-	m.declineCount++
-	m.mu.Unlock()
+	m.declineCount.Add(1)
 }
 
 // RecordError records a DHCP error event
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordError() {
-	m.mu.Lock()
-	m.errorCount++
-	m.mu.Unlock()
-
+	m.errorCount.Add(1)
 	hs := m.getOrCreateHourlyStats(getHourKey(time.Now()))
-	hs.mu.Lock()
-	hs.errors++
-	hs.mu.Unlock()
+	hs.errors.Add(1)
 }
 
 // UpdateActiveLeases updates the active leases count
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) UpdateActiveLeases(count int64) {
-	m.mu.Lock()
-	m.activeLeases = count
-	m.mu.Unlock()
+	m.activeLeases.Store(count)
 }
 
 // RecordLastRequest records the last request info
+// Optimized with atomic operations for lock-free updates
 func (m *MetricsCollector) RecordLastRequest(mac, ip string) {
-	m.mu.Lock()
-	m.lastRequestMAC = mac
-	m.lastRequestIP = ip
-	m.mu.Unlock()
+	m.lastRequestMAC.Store(mac)
+	m.lastRequestIP.Store(ip)
 }
 
 // GetMetrics returns current metrics snapshot
+// Optimized with atomic loads for lock-free reads
 func (m *MetricsCollector) GetMetrics() MetricsSnapshot {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
+	// Handle nil values for atomic.Value fields
+	var lastAllocAt time.Time
+	var lastMac, lastIp string
+	
+	if v := m.lastAllocationAt.Load(); v != nil {
+		lastAllocAt = v.(time.Time)
+	}
+	if v := m.lastRequestMAC.Load(); v != nil {
+		lastMac = v.(string)
+	}
+	if v := m.lastRequestIP.Load(); v != nil {
+		lastIp = v.(string)
+	}
+	
 	return MetricsSnapshot{
 		StartTime:        m.startTime,
 		UptimeSeconds:    int64(time.Since(m.startTime).Seconds()),
-		DiscoverCount:    m.discoverCount,
-		OfferCount:       m.offerCount,
-		RequestCount:     m.requestCount,
-		AckCount:         m.ackCount,
-		NakCount:         m.nakCount,
-		ReleaseCount:     m.releaseCount,
-		DeclineCount:     m.declineCount,
-		ErrorCount:       m.errorCount,
-		ActiveLeases:     m.activeLeases,
-		TotalAllocations: m.totalAllocations,
-		TotalRenewals:    m.totalRenewals,
-		LastAllocationAt: m.lastAllocationAt,
-		LastRequestMAC:   m.lastRequestMAC,
-		LastRequestIP:    m.lastRequestIP,
+		DiscoverCount:    m.discoverCount.Load(),
+		OfferCount:       m.offerCount.Load(),
+		RequestCount:     m.requestCount.Load(),
+		AckCount:         m.ackCount.Load(),
+		NakCount:         m.nakCount.Load(),
+		ReleaseCount:     m.releaseCount.Load(),
+		DeclineCount:     m.declineCount.Load(),
+		ErrorCount:       m.errorCount.Load(),
+		ActiveLeases:     m.activeLeases.Load(),
+		TotalAllocations: m.totalAllocations.Load(),
+		TotalRenewals:    m.totalRenewals.Load(),
+		LastAllocationAt: lastAllocAt,
+		LastRequestMAC:   lastMac,
+		LastRequestIP:    lastIp,
 	}
 }
 
@@ -248,29 +246,33 @@ func (m *MetricsCollector) LogMetrics() {
 }
 
 // GetHourlyStats returns hourly statistics for the last N hours
+// Optimized with atomic loads for lock-free reads
 func (m *MetricsCollector) GetHourlyStats(hours int) []HourlyStatsSnapshot {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.hourlyStatsMu.RLock()
+	hourlyStatsCopy := make(map[int64]*HourlyStats, len(m.hourlyStats))
+	for k, v := range m.hourlyStats {
+		hourlyStatsCopy[k] = v
+	}
+	m.hourlyStatsMu.RUnlock()
 
 	now := time.Now()
 	result := make([]HourlyStatsSnapshot, 0, hours)
 
 	for i := 0; i < hours; i++ {
 		hourKey := getHourKey(now.Add(time.Duration(-i) * time.Hour))
-		if hs, exists := m.hourlyStats[hourKey]; exists {
-			hs.mu.RLock()
+		if hs, exists := hourlyStatsCopy[hourKey]; exists {
 			result = append(result, HourlyStatsSnapshot{
 				Hour:          time.Unix(hourKey, 0),
-				DiscoverCount: hs.discoverCount,
-				OfferCount:    hs.offerCount,
-				RequestCount:  hs.requestCount,
-				AckCount:      hs.ackCount,
-				NakCount:      hs.nakCount,
-				Allocations:   hs.allocations,
-				Renewals:      hs.renewals,
-				Errors:        hs.errors,
+				DiscoverCount: hs.discoverCount.Load(),
+				OfferCount:    hs.offerCount.Load(),
+				RequestCount:  hs.requestCount.Load(),
+				AckCount:      hs.ackCount.Load(),
+				NakCount:      hs.nakCount.Load(),
+				ReleaseCount:  hs.releaseCount.Load(),
+				Allocations:   hs.allocations.Load(),
+				Renewals:      hs.renewals.Load(),
+				Errors:        hs.errors.Load(),
 			})
-			hs.mu.RUnlock()
 		}
 	}
 
@@ -285,6 +287,7 @@ type HourlyStatsSnapshot struct {
 	RequestCount  int64     `json:"request_count"`
 	AckCount      int64     `json:"ack_count"`
 	NakCount      int64     `json:"nak_count"`
+	ReleaseCount  int64     `json:"release_count"`
 	Allocations   int64     `json:"allocations"`
 	Renewals      int64     `json:"renewals"`
 	Errors        int64     `json:"errors"`
