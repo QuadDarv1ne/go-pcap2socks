@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
@@ -71,8 +72,27 @@ func handleTCPConn(originConn adapter.TCPConn) {
 	}
 	metadata.MidIP, metadata.MidPort = parseAddr(remoteConn.LocalAddr())
 
+	// Apply MSS clamping based on MTU
+	applyMSSClamping(remoteConn, metadata.DstIP.To4() == nil)
+
 	defer remoteConn.Close()
 	pipe(originConn, remoteConn)
+}
+
+// applyMSSClamping applies MSS clamping to TCP connection
+func applyMSSClamping(conn net.Conn, isIPv6 bool) {
+	// Get optimal MTU for protocol
+	optimalMTU := mtu.GetOptimalMTU("direct", mtu.DefaultMTU)
+	
+	// Calculate MSS
+	mss := mtu.CalculateMSS(optimalMTU, isIPv6)
+	
+	// Apply clamping
+	if err := mtu.ApplyMSSClamping(conn, mss); err != nil {
+		slog.Debug("MSS clamping failed", "mss", mss, "err", err)
+	} else {
+		slog.Debug("MSS clamping applied", "mss", mss, "ipv6", isIPv6)
+	}
 }
 
 // pipe copies data bidirectionally between two connections using goroutines

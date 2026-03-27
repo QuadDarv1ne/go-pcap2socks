@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
+	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
@@ -29,7 +30,23 @@ func (d *Direct) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 	}
 	setKeepAlive(c)
 	setNoDelay(c)
+	
+	// Apply MTU-based optimizations
+	applyMTUOptimizations(c, metadata.DstIP.To4() == nil, "direct")
+	
 	return c, nil
+}
+
+// applyMTUOptimizations applies MTU-based optimizations to connection
+func applyMTUOptimizations(conn net.Conn, isIPv6 bool, protocol string) {
+	// Get optimal MTU for protocol
+	optimalMTU := mtu.GetOptimalMTU(protocol, mtu.DefaultMTU)
+	
+	// Calculate and apply MSS
+	mss := mtu.CalculateMSS(optimalMTU, isIPv6)
+	if err := mtu.ApplyMSSClamping(conn, mss); err != nil {
+		// Silently ignore - MSS clamping is optional
+	}
 }
 
 func (d *Direct) DialUDP(*M.Metadata) (net.PacketConn, error) {

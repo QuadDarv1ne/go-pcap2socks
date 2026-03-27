@@ -80,8 +80,22 @@ type Config struct {
 	Discord   *Discord   `json:"discord,omitempty"`
 	Hotkey    *Hotkey    `json:"hotkey,omitempty"`
 	UPnP      *UPnP      `json:"upnp,omitempty"`
+	MTU       *MTU       `json:"mtu,omitempty"`
 	MACFilter *MACFilter `json:"macFilter,omitempty"`
 	WinDivert *WinDivert `json:"windivert,omitempty"`
+}
+
+// MTU holds Path MTU Discovery configuration
+type MTU struct {
+	Enabled         bool           `json:"enabled"`
+	AutoDiscover    bool           `json:"autoDiscover"`
+	BaseMTU         uint32         `json:"baseMTU"`
+	MinMTU          uint32         `json:"minMTU"`
+	MaxMTU          uint32         `json:"maxMTU"`
+	ProbeTimeout    uint32         `json:"probeTimeout"` // milliseconds
+	CacheExpiry     uint32         `json:"cacheExpiry"`  // seconds
+	MSSClamping     bool           `json:"mssClamping"`
+	ProtocolOverheads map[string]uint32 `json:"protocolOverheads"`
 }
 
 type PCAP struct {
