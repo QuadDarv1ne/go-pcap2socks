@@ -6,13 +6,14 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var (
-	lastNotification = make(map[string]time.Time)
-	notifyMux        sync.Mutex
-	minInterval      = 30 * time.Second // Минимальный интервал между одинаковыми уведомлениями
+	lastNotification sync.Map // map[string]int64 (key -> timestamp nanoseconds)
+	minInterval      int64 = 30 * int64(time.Second) // Минимальный интервал между одинаковыми уведомлениями
+	notifyCount      atomic.Int64
 )
 
 // Notification types
@@ -24,22 +25,22 @@ const (
 )
 
 // Show отправляет уведомление пользователю
+// Optimized with sync.Map for lock-free rate limiting
 func Show(title, message, notifyType string) {
 	key := title + ":" + message
+	now := time.Now().UnixNano()
 
-	// Проверяем, не было ли такого же уведомления недавно
-	notifyMux.Lock()
-	lastTime, exists := lastNotification[key]
-	notifyMux.Unlock()
-
-	if exists && time.Since(lastTime) < minInterval {
-		return // Пропускаем дублирующееся уведомление
+	// Fast path: check if notification was sent recently (lock-free)
+	if lastTimeVal, exists := lastNotification.Load(key); exists {
+		lastTime := lastTimeVal.(int64)
+		if now-lastTime < minInterval {
+			return // Пропускаем дублирующееся уведомление
+		}
 	}
 
-	// Обновляем время последнего уведомления
-	notifyMux.Lock()
-	lastNotification[key] = time.Now()
-	notifyMux.Unlock()
+	// Update last notification time (lock-free)
+	lastNotification.Store(key, now)
+	notifyCount.Add(1)
 
 	// Логируем уведомление
 	logNotification(title, message, notifyType)
@@ -66,7 +67,7 @@ func showToastNotification(title, message, notifyType string) {
 	// Экранируем специальные XML символы
 	titleEsc := escapeXML(title)
 	messageEsc := escapeXML(message)
-	
+
 	script := `
 param($title, $message)
 
@@ -112,8 +113,13 @@ func escapeXML(s string) string {
 }
 
 // ClearHistory очищает историю уведомлений
+// Optimized with sync.Map for lock-free clear
 func ClearHistory() {
-	notifyMux.Lock()
-	defer notifyMux.Unlock()
-	lastNotification = make(map[string]time.Time)
+	lastNotification = sync.Map{}
+	notifyCount.Store(0)
+}
+
+// GetNotificationCount returns the total number of notifications sent
+func GetNotificationCount() int64 {
+	return notifyCount.Load()
 }
