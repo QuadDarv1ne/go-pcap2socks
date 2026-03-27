@@ -1,14 +1,37 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 27 марта 2026 г. (23:45)
-**Версия**: v3.19.29 (dev: proxy-improvements, main: eefc5cd)
-**Статус**: ✅ проект стабилен, все тесты проходят, улучшения proxy package внедрены
+**Последнее обновление**: 28 марта 2026 г. (00:15)
+**Версия**: v3.19.30 (dev: metadata-validation, main: ff7e02c)
+**Статус**: ✅ проект стабилен, все тесты проходят, улучшения metadata и core внедрены
 
 ### Статус веток
 ```
-main: eefc5cd Merge branch 'dev' into main - todo.md v3.19.28 updates ✅
-dev:  proxy-improvements Proxy package improvements (errors, docs, validation) ✅
+main: ff7e02c Merge branch 'dev' into main - v3.19.29 proxy package improvements ✅
+dev:  metadata-improvements Metadata and core improvements (validation, docs) ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 00:15) - v3.19.30 METADATA AND CORE IMPROVEMENTS
+
+### Улучшение metadata и core package (validation, documentation)
+
+#### Metadata Package Improvements (`md/metadata.go`)
+- [x] **Добавлено**: 2 предопределённые ошибки (`ErrInvalidNetwork`, `ErrNilIP`)
+- [x] **Добавлено**: Метод `Validate()` для проверки валидности metadata
+- [x] **Улучшено**: Документация для всех методов
+- [x] **Эффект**: Типобезопасная валидация, лучшая документация
+
+#### Core Package Improvements (`core/tcp.go`)
+- [x] **Добавлено**: Документация для пакета
+- [x] **Улучшено**: Документация для TCP socket options констант
+- [x] **Эффект**: Лучшая читаемость кода
+
+### Итоговый эффект v3.19.30
+- **Предопределённые ошибки**: +2 в md package
+- **Валидация**: Добавлен `Metadata.Validate()`
+- **Документация**: Улучшена в 2 файлах
+- **Качество**: Консистентный стиль, легче тестировать
 
 ---
 
