@@ -403,6 +403,29 @@ func main() {
 		}()
 	}
 
+	// Initialize DNS-over-HTTPS server
+	if config.DNS.Server != nil && config.DNS.Server.Enabled {
+		_dohServer = dns.NewDoHServer(&dns.DoHServerConfig{
+			Enabled:      config.DNS.Server.Enabled,
+			Listen:       config.DNS.Server.Listen,
+			TLSEnabled:   config.DNS.Server.TLS,
+			CertFile:     config.DNS.Server.CertFile,
+			KeyFile:      config.DNS.Server.KeyFile,
+			AutoTLS:      config.DNS.Server.AutoTLS,
+			Domain:       config.DNS.Server.Domain,
+			AllowPrivate: config.DNS.Server.AllowPrivate,
+		}, _dnsResolver)
+
+		if err := _dohServer.Start(); err != nil {
+			slog.Warn("DoH server start failed", "error", err)
+		} else {
+			slog.Info("DoH server started",
+				"listen", config.DNS.Server.Listen,
+				"tls", config.DNS.Server.TLS,
+				"endpoint", dns.DoHPath)
+		}
+	}
+
 	// Выполнение команд из executeOnStart с проверкой безопасности
 	if len(config.ExecuteOnStart) > 0 {
 		// Валидация команд для предотвращения Command Injection
@@ -847,6 +870,9 @@ var (
 
 	// _dnsResolver holds the DNS resolver with benchmarking and caching
 	_dnsResolver *dns.Resolver
+
+	// _dohServer holds the DNS-over-HTTPS server
+	_dohServer *dns.DoHServer
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}

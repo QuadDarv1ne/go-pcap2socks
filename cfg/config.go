@@ -296,14 +296,27 @@ type DNSServer struct {
 }
 
 type DNS struct {
-	Servers       []DNSServer `json:"servers"`
-	DoHServers    []string    `json:"dohServers,omitempty"`
-	DoTServers    []string    `json:"dotServers,omitempty"`
-	UseSystemDNS  bool        `json:"useSystemDNS"`
-	AutoBench     bool        `json:"autoBench"`
-	BenchInterval int         `json:"benchInterval"` // seconds
-	CacheSize     int         `json:"cacheSize"`
-	CacheTTL      int         `json:"cacheTTL"` // seconds
+	Servers       []DNSServer    `json:"servers"`
+	DoHServers    []string       `json:"dohServers,omitempty"`
+	DoTServers    []string       `json:"dotServers,omitempty"`
+	UseSystemDNS  bool           `json:"useSystemDNS"`
+	AutoBench     bool           `json:"autoBench"`
+	BenchInterval int            `json:"benchInterval"` // seconds
+	CacheSize     int            `json:"cacheSize"`
+	CacheTTL      int            `json:"cacheTTL"`     // seconds
+	Server        *DoHServer     `json:"server,omitempty"`
+}
+
+// DoHServer holds DNS-over-HTTPS server configuration
+type DoHServer struct {
+	Enabled      bool   `json:"enabled"`
+	Listen       string `json:"listen"`
+	TLS          bool   `json:"tls"`
+	CertFile     string `json:"certFile,omitempty"`
+	KeyFile      string `json:"keyFile,omitempty"`
+	AutoTLS      bool   `json:"autoTLS"`
+	Domain       string `json:"domain,omitempty"`
+	AllowPrivate bool   `json:"allowPrivate"`
 }
 
 type Capture struct {

@@ -56,7 +56,15 @@
     "autoBench": true,
     "benchInterval": 300,
     "cacheSize": 1024,
-    "cacheTTL": 300
+    "cacheTTL": 300,
+    "server": {
+      "enabled": true,
+      "listen": "0.0.0.0:8443",
+      "tls": true,
+      "autoTLS": true,
+      "domain": "localhost",
+      "allowPrivate": true
+    }
   },
   "routing": {
     "rules": [
