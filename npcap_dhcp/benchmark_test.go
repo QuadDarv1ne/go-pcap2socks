@@ -20,7 +20,7 @@ func BenchmarkSimpleDHCP_ServerCreation(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := npcap_dhcp.NewSimpleServer(config, nil)
+		_, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -36,7 +36,7 @@ func BenchmarkSimpleDHCP_GetLeases(b *testing.B) {
 		LeaseDuration: 3600 * time.Second,
 	}
 
-	server, _ := npcap_dhcp.NewSimpleServer(config, nil)
+	server, _ := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -53,7 +53,7 @@ func BenchmarkSimpleDHCP_GetHostname(b *testing.B) {
 		LeaseDuration: 3600 * time.Second,
 	}
 
-	server, _ := npcap_dhcp.NewSimpleServer(config, nil)
+	server, _ := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -65,7 +65,7 @@ func BenchmarkSimpleDHCP_GetHostname(b *testing.B) {
 func BenchmarkSimpleDHCP_MACNormalization(b *testing.B) {
 	testMACs := []string{
 		"78:c8:81:4e:55:15",
-		"78-c8-81-4e-55-15",
+		"78-c8-81-4e-55:15",
 		"78c8.814e.5515",
 		"78c8814e5515",
 	}
@@ -100,7 +100,7 @@ func BenchmarkSimpleDHCP_LeaseOperations(b *testing.B) {
 		LeaseDuration: 3600 * time.Second,
 	}
 
-	server, _ := npcap_dhcp.NewSimpleServer(config, nil)
+	server, _ := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -119,7 +119,7 @@ func BenchmarkSimpleDHCP_ConcurrentAccess(b *testing.B) {
 		LeaseDuration: 3600 * time.Second,
 	}
 
-	server, _ := npcap_dhcp.NewSimpleServer(config, nil)
+	server, _ := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -142,7 +142,7 @@ func BenchmarkSimpleDHCP_MemoryUsage(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		server, _ := npcap_dhcp.NewSimpleServer(config, nil)
+		server, _ := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 		_ = server.GetLeases()
 	}
 }
@@ -158,7 +158,7 @@ func BenchmarkSimpleDHCP_LargePool(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := npcap_dhcp.NewSimpleServer(config, nil)
+		_, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -176,7 +176,7 @@ func BenchmarkSimpleDHCP_ShortLease(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := npcap_dhcp.NewSimpleServer(config, nil)
+		_, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -194,7 +194,7 @@ func BenchmarkSimpleDHCP_LongLease(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := npcap_dhcp.NewSimpleServer(config, nil)
+		_, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
 		if err != nil {
 			b.Fatal(err)
 		}

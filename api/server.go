@@ -38,6 +38,12 @@ type Server struct {
 	mu            sync.RWMutex
 	enabled       bool
 	stopChan      chan struct{} // For stopping background goroutines
+	
+	// Status cache for frequently accessed /api/status endpoint
+	statusCache     Status
+	statusCacheMu   sync.RWMutex
+	statusCacheTime time.Time
+	statusCacheTTL  time.Duration
 }
 
 type APIResponse struct {
@@ -116,6 +122,7 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 		hotkeyManager: hotkeyMgr,
 		enabled:       true,
 		stopChan:      make(chan struct{}),
+		statusCacheTTL: 500 * time.Millisecond, // Cache status for 500ms
 	}
 
 	slog.Info("API server initialized with auto-generated authentication token", "token_length", len(s.authToken))
@@ -200,6 +207,18 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check cache first (500ms TTL)
+	s.statusCacheMu.RLock()
+	if time.Since(s.statusCacheTime) < s.statusCacheTTL {
+		// Cache hit - return cached status
+		status := s.statusCache
+		s.statusCacheMu.RUnlock()
+		s.sendSuccess(w, status)
+		return
+	}
+	s.statusCacheMu.RUnlock()
+
+	// Cache miss - build fresh status
 	// Get running state from global state if available
 	running := s.enabled
 	if getIsRunningFn != nil {
@@ -215,6 +234,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		StartTime:      startTime,
 		SocksAvailable: true,
 	}
+
+	// Update cache
+	s.statusCacheMu.Lock()
+	s.statusCache = status
+	s.statusCacheTime = time.Now()
+	s.statusCacheMu.Unlock()
 
 	s.sendSuccess(w, status)
 }
@@ -241,6 +266,10 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 			s.sendError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		// Invalidate status cache
+		s.statusCacheMu.Lock()
+		s.statusCacheTime = time.Time{}
+		s.statusCacheMu.Unlock()
 		s.sendSuccess(w, "Service started")
 		return
 	}
@@ -249,6 +278,10 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.enabled = true
 	s.mu.Unlock()
+	// Invalidate status cache
+	s.statusCacheMu.Lock()
+	s.statusCacheTime = time.Time{}
+	s.statusCacheMu.Unlock()
 
 	s.sendSuccess(w, "Service started")
 }
@@ -266,6 +299,10 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 			s.sendError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		// Invalidate status cache
+		s.statusCacheMu.Lock()
+		s.statusCacheTime = time.Time{}
+		s.statusCacheMu.Unlock()
 		s.sendSuccess(w, "Service stopped")
 		return
 	}
@@ -274,6 +311,10 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.enabled = false
 	s.mu.Unlock()
+	// Invalidate status cache
+	s.statusCacheMu.Lock()
+	s.statusCacheTime = time.Time{}
+	s.statusCacheMu.Unlock()
 
 	s.sendSuccess(w, "Service stopped")
 }
