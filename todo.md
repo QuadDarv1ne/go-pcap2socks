@@ -1,14 +1,37 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (00:30)
-**Версия**: v3.19.31 (dev: tunnel-improvements, main: 79ee4e5)
-**Статус**: ✅ проект стабилен, все тесты проходят, улучшения tunnel package внедрены
+**Последнее обновление**: 28 марта 2026 г. (00:45)
+**Версия**: v3.19.32 (dev: logger-env-improvements, main: c2ea4df)
+**Статус**: ✅ проект стабилен, все тесты проходят, улучшения asynclogger и env внедрены
 
 ### Статус веток
 ```
-main: 79ee4e5 Merge branch 'dev' into main - v3.19.30 metadata and core improvements ✅
-dev:  tunnel-improvements Tunnel package improvements (errors, docs) ✅
+main: c2ea4df Merge branch 'dev' into main - v3.19.31 tunnel package improvements ✅
+dev:  logger-env-improvements AsyncLogger and Env package improvements (errors, docs) ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 00:45) - v3.19.32 ASYNCLOGGER AND ENV IMPROVEMENTS
+
+### Улучшение asynclogger и env package (predefined errors, documentation)
+
+#### AsyncLogger Package Improvements (`asynclogger/async_handler.go`)
+- [x] **Добавлено**: 3 предопределённые ошибки (`ErrHandlerStopped`, `ErrQueueFull`, `ErrShutdownTimeout`)
+- [x] **Улучшено**: Документация для пакета и констант
+- [x] **Улучшено**: Handle() теперь возвращает ErrHandlerStopped/ErrQueueFull вместо nil
+- [x] **Улучшено**: Stop() теперь возвращает ErrShutdownTimeout вместо context.DeadlineExceeded
+- [x] **Эффект**: Типобезопасные ошибки для async logging операций
+
+#### Env Package Improvements (`env/resolver.go`)
+- [x] **Добавлено**: 1 предопределённая ошибка (`ErrMissingVar`)
+- [x] **Улучшено**: MissingVarError.Error() использует ErrMissingVar
+- [x] **Эффект**: Консистентные ошибки для missing variable
+
+### Итоговый эффект v3.19.32
+- **Предопределённые ошибки**: +4 в asynclogger и env
+- **Обработка ошибок**: Улучшена в Handle() и Stop()
+- **Качество**: Консистентный стиль, легче тестировать
 
 ---
 

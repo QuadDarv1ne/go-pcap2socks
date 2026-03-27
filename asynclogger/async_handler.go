@@ -1,14 +1,24 @@
-// Package asynclogger provides asynchronous logging wrapper for slog
+// Package asynclogger provides asynchronous logging wrapper for slog.
+// Uses buffered channel and background goroutine for non-blocking log writes.
 package asynclogger
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
+// Pre-defined errors for async logger operations
+var (
+	ErrHandlerStopped     = errors.New("async handler already stopped")
+	ErrQueueFull          = errors.New("log queue is full")
+	ErrShutdownTimeout    = errors.New("shutdown timeout exceeded")
+)
+
+// Async logger constants
 const (
 	// DefaultQueueSize is the default size of the log record queue
 	DefaultQueueSize = 1024
@@ -62,9 +72,10 @@ func (h *AsyncHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 // Handle implements slog.Handler - this is the hot path!
+// Non-blocking: drops records if queue is full to avoid blocking the caller.
 func (h *AsyncHandler) Handle(ctx context.Context, rec slog.Record) error {
 	if h.stopped.Load() {
-		return nil
+		return ErrHandlerStopped
 	}
 
 	// Clone record to avoid race conditions - only if queue is not full
@@ -75,7 +86,7 @@ func (h *AsyncHandler) Handle(ctx context.Context, rec slog.Record) error {
 	default:
 		// Queue is full - drop the record (non-blocking!)
 		h.dropped.Add(1)
-		return nil
+		return ErrQueueFull
 	}
 }
 
@@ -174,26 +185,27 @@ func (h *AsyncHandler) flush(records []slog.Record) {
 	}
 }
 
-// Stop gracefully stops the async handler
+// Stop gracefully stops the async handler with timeout.
+// Returns ErrShutdownTimeout if shutdown takes too long.
 func (h *AsyncHandler) Stop() error {
 	if h.stopped.Swap(true) {
 		return nil // Already stopped
 	}
-	
+
 	h.cancel()
-	
+
 	// Wait for goroutine to finish with timeout
 	done := make(chan struct{})
 	go func() {
 		h.wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		return nil
 	case <-time.After(DefaultShutdownTimeout):
-		return context.DeadlineExceeded
+		return ErrShutdownTimeout
 	}
 }
 
