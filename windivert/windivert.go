@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/threatwinds/godivert"
 )
@@ -17,6 +18,18 @@ var (
 	ErrWinDivertSend    = fmt.Errorf("WinDivert send error")
 	ErrInvalidPacket    = fmt.Errorf("invalid packet data")
 	ErrPacketTooShort   = fmt.Errorf("packet too short")
+)
+
+// Batch processing constants
+const (
+	// DefaultBatchSize is the default number of packets to process in a batch
+	DefaultBatchSize = 64
+
+	// BatchTimeout is the timeout for batch processing
+	BatchTimeout = 100 * time.Microsecond
+
+	// MaxBatchWait is the maximum time to wait for a batch to fill
+	MaxBatchWait = 1 * time.Millisecond
 )
 
 // UsePacketLayer enables full Ethernet frame capture/send
@@ -192,4 +205,157 @@ func directionToString(d godivert.Direction) string {
 		return "Outbound"
 	}
 	return "Inbound"
+}
+
+// BatchProcessor handles batch packet processing for improved throughput
+type BatchProcessor struct {
+	handle     *Handle
+	batchSize  int
+	packetPool sync.Pool
+	batchChan  chan []*Packet
+}
+
+// BatchResult holds the result of a batch operation
+type BatchResult struct {
+	Packets []*Packet
+	Count   int
+	Error   error
+}
+
+// NewBatchProcessor creates a new batch processor
+func NewBatchProcessor(handle *Handle, batchSize int) *BatchProcessor {
+	if batchSize <= 0 {
+		batchSize = DefaultBatchSize
+	}
+
+	return &BatchProcessor{
+		handle:    handle,
+		batchSize: batchSize,
+		batchChan: make(chan []*Packet, 4),
+		packetPool: sync.Pool{
+			New: func() interface{} {
+				return make([]*Packet, batchSize)
+			},
+		},
+	}
+}
+
+// GetBatch returns a batch of packets for processing
+func (bp *BatchProcessor) GetBatch() []*Packet {
+	return bp.packetPool.Get().([]*Packet)
+}
+
+// PutBatch returns a batch of packets to the pool
+func (bp *BatchProcessor) PutBatch(batch []*Packet) {
+	// Clear batch before returning to pool
+	for i := range batch {
+		batch[i] = nil
+	}
+	bp.packetPool.Put(batch)
+}
+
+// RecvBatch receives a batch of packets with improved throughput
+// Returns the number of packets received
+func (bp *BatchProcessor) RecvBatch(batch []*Packet) (int, error) {
+	count := 0
+	deadline := time.Now().Add(MaxBatchWait)
+
+	for count < len(batch) {
+		// Check timeout
+		if time.Now().After(deadline) && count > 0 {
+			break
+		}
+
+		// Receive packet
+		packet, err := bp.handle.Recv()
+		if err != nil {
+			if count > 0 {
+				break
+			}
+			return 0, err
+		}
+
+		batch[count] = packet
+		count++
+	}
+
+	return count, nil
+}
+
+// SendBatch sends a batch of packets with improved throughput
+func (bp *BatchProcessor) SendBatch(batch []*Packet, count int) error {
+	bp.handle.mu.Lock()
+	defer bp.handle.mu.Unlock()
+
+	for i := 0; i < count; i++ {
+		if batch[i] == nil {
+			continue
+		}
+
+		godivertPacket := &godivert.Packet{
+			Raw:       batch[i].Raw,
+			Addr:      batch[i].Addr,
+			PacketLen: batch[i].PacketLen,
+		}
+
+		_, err := bp.handle.handle.Send(godivertPacket)
+		if err != nil {
+			return fmt.Errorf("%w: packet %d: %w", ErrWinDivertSend, i, err)
+		}
+	}
+
+	return nil
+}
+
+// StartBatchReader starts a goroutine that reads packets in batches
+// and sends them to the batch channel
+func (bp *BatchProcessor) StartBatchReader() {
+	go func() {
+		for {
+			select {
+			case <-bp.handle.stopChan:
+				return
+			default:
+				batch := bp.GetBatch()
+				count, err := bp.RecvBatch(batch)
+
+				if err != nil {
+					slog.Debug("Batch receive error", "error", err)
+					bp.PutBatch(batch)
+					time.Sleep(BatchTimeout)
+					continue
+				}
+
+				if count > 0 {
+					bp.batchChan <- batch[:count]
+				} else {
+					bp.PutBatch(batch)
+				}
+			}
+		}
+	}()
+}
+
+// GetBatchChan returns the batch channel for reading
+func (bp *BatchProcessor) GetBatchChan() <-chan []*Packet {
+	return bp.batchChan
+}
+
+// Close closes the batch processor
+func (bp *BatchProcessor) Close() {
+	close(bp.batchChan)
+}
+
+// GetBatchStats returns batch processing statistics
+type BatchStats struct {
+	BatchSize   int
+	ChannelSize int
+}
+
+// GetStats returns batch processor statistics
+func (bp *BatchProcessor) GetStats() BatchStats {
+	return BatchStats{
+		BatchSize:   bp.batchSize,
+		ChannelSize: len(bp.batchChan),
+	}
 }
