@@ -261,3 +261,135 @@ type Lifecycle interface {
 	Stoppable
 	Closable
 }
+
+// DNSResolver handles DNS resolution operations.
+type DNSResolver interface {
+	// Resolve performs DNS resolution
+	Resolve(ctx context.Context, domain string) ([]net.IP, error)
+	// ResolveWithCache performs DNS resolution with caching
+	ResolveWithCache(ctx context.Context, domain string) ([]net.IP, error)
+	// ResolveReverse performs reverse DNS lookup
+	ResolveReverse(ctx context.Context, ip net.IP) (string, error)
+	// SetServers updates DNS servers
+	SetServers(servers []string) error
+	// FlushCache clears DNS cache
+	FlushCache()
+}
+
+// DNSCache provides DNS caching capabilities.
+type DNSCache interface {
+	// Get retrieves cached DNS entry
+	Get(domain string) ([]net.IP, bool)
+	// Set caches DNS entry with TTL
+	Set(domain string, ips []net.IP, ttl time.Duration)
+	// Delete removes cached entry
+	Delete(domain string)
+	// Clear clears all cache
+	Clear()
+	// Stats returns cache statistics
+	Stats() DNSCacheStats
+}
+
+// DNSCacheStats contains DNS cache statistics.
+type DNSCacheStats struct {
+	Entries  int
+	Hits     uint64
+	Misses   uint64
+	HitRatio float64
+}
+
+// DNSHandler handles DNS queries.
+type DNSHandler interface {
+	// HandleQuery processes DNS query and returns response
+	HandleQuery(ctx context.Context, query []byte) ([]byte, error)
+	// SetResolver sets the DNS resolver
+	SetResolver(resolver DNSResolver)
+	// SetRules sets DNS routing rules
+	SetRules(rules []DNSRule)
+}
+
+// DNSRule defines DNS routing behavior.
+type DNSRule struct {
+	Domains     []string
+	Servers     []string
+	OutboundTag string
+}
+
+// DHCPServer provides DHCP server functionality.
+type DHCPServer interface {
+	// Start starts the DHCP server
+	Start(ctx context.Context) error
+	// Stop stops the DHCP server
+	Stop() error
+	// Config returns current configuration
+	Config() DHCPConfig
+	// SetConfig updates configuration
+	SetConfig(config DHCPConfig) error
+	// Leases returns active leases
+	Leases() []DHCPLease
+	// LeaseForMAC finds lease by MAC address
+	LeaseForMAC(mac net.HardwareAddr) (*DHCPLease, error)
+	// Release releases a lease
+	Release(mac net.HardwareAddr) error
+	// Stats returns server statistics
+	Stats() DHCPStats
+}
+
+// DHCPConfig contains DHCP server configuration.
+type DHCPConfig struct {
+	ServerIP      net.IP
+	ServerMAC     net.HardwareAddr
+	Network       *net.IPNet
+	LeaseDuration time.Duration
+	PoolStart     net.IP
+	PoolEnd       net.IP
+	DNSServers    []net.IP
+	Gateway       net.IP
+}
+
+// DHCPLease represents an active DHCP lease.
+type DHCPLease struct {
+	IP          net.IP
+	MAC         net.HardwareAddr
+	Hostname    string
+	ExpiresAt   time.Time
+	AssignedAt  time.Time
+	Transaction uint32
+}
+
+// DHCPStats contains DHCP server statistics.
+type DHCPStats struct {
+	TotalLeases     int
+	AvailableIPs    int
+	TotalOffers     uint64
+	TotalAcks       uint64
+	TotalNaks       uint64
+	TotalDeclines   uint64
+	TotalReleases   uint64
+	PoolUtilization float64
+}
+
+// IPPool manages IP address allocation.
+type IPPool interface {
+	// Allocate allocates an IP for MAC
+	Allocate(mac net.HardwareAddr) (net.IP, error)
+	// AllocateSpecific allocates a specific IP for MAC
+	AllocateSpecific(ip net.IP, mac net.HardwareAddr) error
+	// Release releases an IP
+	Release(ip net.IP) error
+	// Reserve reserves an IP for MAC
+	Reserve(ip net.IP, mac net.HardwareAddr) error
+	// IsAvailable checks if IP is available
+	IsAvailable(ip net.IP) bool
+	// Stats returns pool statistics
+	Stats() IPPoolStats
+}
+
+// IPPoolStats contains IP pool statistics.
+type IPPoolStats struct {
+	Total       int
+	Used        int
+	Available   int
+	Reserved    int
+	Utilization float64
+}
