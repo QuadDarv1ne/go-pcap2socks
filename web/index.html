@@ -705,6 +705,7 @@
         let updateInterval = null;
 
         document.addEventListener('DOMContentLoaded', () => {
+            initDOM();
             loadTheme();
             loadConfig();
             refreshData();
@@ -713,13 +714,13 @@
 
         async function loadConfig() {
             try {
-                const response = await fetch('/api/config');
+                const response = await fetch(API.CONFIG);
                 const data = await response.json();
                 if (data.success) {
                     const config = data.data;
                     if (config.pcap) {
-                        document.getElementById('localIp').textContent = config.pcap.localIP || '192.168.137.1';
-                        document.getElementById('mtuValue').textContent = config.pcap.mtu || 1486;
+                        if (DOM.localIp) DOM.localIp.textContent = config.pcap.localIP || '192.168.137.1';
+                        if (DOM.mtuValue) DOM.mtuValue.textContent = config.pcap.mtu || 1486;
                     }
                 }
             } catch (error) {
@@ -779,23 +780,22 @@
         }
 
         function updateStatusUI(running) {
-            const badge = document.getElementById('statusBadge');
-            const text = document.getElementById('statusText');
-
+            if (!DOM.statusBadge || !DOM.statusText) return;
+            
             if (running) {
-                badge.className = 'status-badge status-running';
-                text.textContent = 'Запущен';
+                DOM.statusBadge.className = 'status-badge status-running';
+                DOM.statusText.textContent = 'Запущен';
             } else {
-                badge.className = 'status-badge status-stopped';
-                text.textContent = 'Остановлен';
+                DOM.statusBadge.className = 'status-badge status-stopped';
+                DOM.statusText.textContent = 'Остановлен';
                 startTime = null;
-                document.getElementById('uptime').textContent = '00:00:00';
-                document.getElementById('uptimeBar').style.width = '0%';
+                if (DOM.uptime) DOM.uptime.textContent = '00:00:00';
+                if (DOM.uptimeBar) DOM.uptimeBar.style.width = '0%';
             }
         }
 
         function updateUptime() {
-            if (!startTime) return;
+            if (!startTime || !DOM.uptime || !DOM.uptimeBar) return;
 
             const now = new Date();
             const diff = Math.floor((now - startTime) / 1000);
@@ -810,39 +810,39 @@
                 seconds.toString().padStart(2, '0')
             ].join(':');
 
-            document.getElementById('uptime').textContent = uptimeStr;
+            DOM.uptime.textContent = uptimeStr;
             const percentage = Math.min((diff / 86400) * 100, 100);
-            document.getElementById('uptimeBar').style.width = percentage + '%';
+            DOM.uptimeBar.style.width = percentage + '%';
         }
 
         async function fetchTraffic() {
-            const response = await fetch('/api/traffic');
+            const response = await fetch(API.TRAFFIC);
             const data = await response.json();
 
             if (data.success) {
                 const traffic = data.data;
-                document.getElementById('uploadStat').textContent = formatBytes(traffic.upload_bytes || 0);
-                document.getElementById('downloadStat').textContent = formatBytes(traffic.download_bytes || 0);
-                document.getElementById('totalStat').textContent = formatBytes(traffic.total_bytes || 0);
-                document.getElementById('packetsStat').textContent = (traffic.packets || 0).toLocaleString();
+                if (DOM.uploadStat) DOM.uploadStat.textContent = formatBytes(traffic.upload_bytes || 0);
+                if (DOM.downloadStat) DOM.downloadStat.textContent = formatBytes(traffic.download_bytes || 0);
+                if (DOM.totalStat) DOM.totalStat.textContent = formatBytes(traffic.total_bytes || 0);
+                if (DOM.packetsStat) DOM.packetsStat.textContent = (traffic.packets || 0).toLocaleString();
             }
         }
 
         async function fetchDevices() {
-            const response = await fetch('/api/devices');
+            const response = await fetch(API.DEVICES);
             const data = await response.json();
 
             if (data.success) {
                 const devices = data.data;
                 const activeCount = devices.filter(d => d.connected).length;
 
-                document.getElementById('activeDevices').textContent = activeCount;
-                document.getElementById('totalDevices').textContent = devices.length;
+                if (DOM.activeDevices) DOM.activeDevices.textContent = activeCount;
+                if (DOM.totalDevices) DOM.totalDevices.textContent = devices.length;
 
-                const list = document.getElementById('devicesList');
+                if (!DOM.devicesList) return;
 
                 if (devices.length === 0) {
-                    list.innerHTML = `
+                    DOM.devicesList.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">📭</div>
                             <p>Нет подключенных устройств</p>
@@ -851,7 +851,7 @@
                     return;
                 }
 
-                list.innerHTML = devices.map(device => `
+                DOM.devicesList.innerHTML = devices.map(device => `
                     <div class="device-item">
                         <div class="device-icon">🎮</div>
                         <div class="device-info">
@@ -867,16 +867,15 @@
         }
 
         async function fetchLogs() {
-            const response = await fetch('/api/logs');
+            const response = await fetch(API.LOGS);
             const data = await response.json();
 
             if (data.success) {
                 const logs = data.data.lines || [];
-                const container = document.getElementById('logsContainer');
-
+                if (!DOM.logsContainer) return;
                 if (logs.length === 0) return;
 
-                container.innerHTML = logs.map(line => {
+                DOM.logsContainer.innerHTML = logs.map(line => {
                     let level = 'log-info';
                     if (line.toLowerCase().includes('error')) level = 'log-error';
                     else if (line.toLowerCase().includes('warn')) level = 'log-warn';
@@ -889,32 +888,64 @@
                     </div>`;
                 }).join('');
 
-                container.scrollTop = container.scrollHeight;
+                DOM.logsContainer.scrollTop = DOM.logsContainer.scrollHeight;
             }
         }
 
         function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            
             const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-            let i = 0;
-            let num = bytes;
-
-            while (num >= 1024 && i < units.length - 1) {
-                num /= 1024;
-                i++;
-            }
-
-            return num.toFixed(2) + ' ' + units[i];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            const num = bytes / Math.pow(1024, i);
+            
+            return num.toFixed(i > 0 ? 2 : 0) + ' ' + units[i];
         }
 
         function escapeHtml(text) {
+            if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
+        // Constants for API endpoints
+        const API = {
+            STATUS: '/api/status',
+            TRAFFIC: '/api/traffic',
+            DEVICES: '/api/devices',
+            LOGS: '/api/logs',
+            START: '/api/start',
+            STOP: '/api/stop',
+            LOGS_EXPORT: '/api/logs/export',
+            CONFIG: '/api/config'
+        };
+
+        // Cache for avoiding repeated DOM queries
+        const DOM = {};
+
+        // Initialize DOM cache
+        function initDOM() {
+            DOM.uptime = document.getElementById('uptime');
+            DOM.uptimeBar = document.getElementById('uptimeBar');
+            DOM.uploadStat = document.getElementById('uploadStat');
+            DOM.downloadStat = document.getElementById('downloadStat');
+            DOM.totalStat = document.getElementById('totalStat');
+            DOM.packetsStat = document.getElementById('packetsStat');
+            DOM.activeDevices = document.getElementById('activeDevices');
+            DOM.totalDevices = document.getElementById('totalDevices');
+            DOM.devicesList = document.getElementById('devicesList');
+            DOM.logsContainer = document.getElementById('logsContainer');
+            DOM.statusBadge = document.getElementById('statusBadge');
+            DOM.statusText = document.getElementById('statusText');
+            DOM.localIp = document.getElementById('localIp');
+            DOM.mtuValue = document.getElementById('mtuValue');
+            DOM.connectionStatus = document.getElementById('connectionStatus');
+        }
+
         async function startService() {
             try {
-                const response = await fetch('/api/start', { method: 'POST' });
+                const response = await fetch(API.START, { method: 'POST' });
                 const result = await response.json();
                 if (result.success) {
                     alert('Сервис запущен!');
@@ -929,7 +960,7 @@
 
         async function stopService() {
             try {
-                const response = await fetch('/api/stop', { method: 'POST' });
+                const response = await fetch(API.STOP, { method: 'POST' });
                 const result = await response.json();
                 if (result.success) {
                     alert('Сервис остановлен!');
@@ -943,7 +974,7 @@
         }
 
         function exportLogs() {
-            window.open('/api/logs/export', '_blank');
+            window.open(API.LOGS_EXPORT, '_blank');
         }
 
         function clearLogs() {

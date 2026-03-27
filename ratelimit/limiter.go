@@ -1,4 +1,5 @@
-// Package ratelimit provides rate limiting utilities
+// Package ratelimit provides rate limiting utilities using token bucket algorithm.
+// Implements lock-free operations using atomic operations for high performance.
 package ratelimit
 
 import (
@@ -7,7 +8,13 @@ import (
 	"time"
 )
 
-// Limiter implements a lock-free token bucket rate limiter using atomic operations
+// Pre-defined errors for rate limiting
+var (
+	ErrRateLimitExceeded = "rate limit exceeded"
+)
+
+// Limiter implements a lock-free token bucket rate limiter using atomic operations.
+// Uses fixed-point arithmetic for precise token tracking.
 type Limiter struct {
 	tokens     atomic.Uint64 // Fixed-point tokens (lower 16 bits are fractional)
 	maxTokens  uint64        // Fixed-point max tokens

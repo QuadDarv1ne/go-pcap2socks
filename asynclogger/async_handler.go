@@ -164,10 +164,13 @@ func (h *AsyncHandler) processLoop(flushInterval time.Duration) {
 	}
 }
 
-// flush writes records to the underlying handler
+// flush writes records to the underlying handler with timeout
 func (h *AsyncHandler) flush(records []slog.Record) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultShutdownTimeout)
+	defer cancel()
+	
 	for i := range records {
-		_ = h.handler.Handle(context.Background(), records[i])
+		_ = h.handler.Handle(ctx, records[i])
 	}
 }
 

@@ -13,6 +13,15 @@ import (
 	socks5 "github.com/QuadDarv1ne/go-pcap2socks/transport"
 )
 
+// Pre-defined errors for SOCKS5 operations
+var (
+	ErrSocksConnect     = errors.New("failed to connect to SOCKS5 server")
+	ErrSocksHandshake   = errors.New("SOCKS5 handshake failed")
+	ErrSocksAuth        = errors.New("SOCKS5 authentication failed")
+	ErrSocksUDPAssociate = errors.New("SOCKS5 UDP associate failed")
+	ErrInvalidUDPBinding = errors.New("invalid UDP binding address")
+)
+
 var _ Proxy = (*Socks5)(nil)
 
 type Socks5 struct {

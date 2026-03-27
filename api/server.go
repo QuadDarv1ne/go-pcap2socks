@@ -24,6 +24,20 @@ import (
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 )
 
+// Pre-defined errors for API operations
+var (
+	ErrMethodNotAllowed     = fmt.Errorf("method not allowed")
+	ErrUnauthorized         = fmt.Errorf("unauthorized")
+	ErrRateLimitExceeded    = fmt.Errorf("rate limit exceeded")
+	ErrServiceNotRunning    = fmt.Errorf("service not running")
+	ErrConfigNotFound       = fmt.Errorf("config not found")
+	ErrConfigLoad           = fmt.Errorf("failed to load config")
+	ErrConfigSave           = fmt.Errorf("failed to save config")
+	ErrInvalidRequest       = fmt.Errorf("invalid request")
+	ErrInternalServer       = fmt.Errorf("internal server error")
+	ErrMetricsNotInitialized = fmt.Errorf("metrics not initialized")
+)
+
 type Server struct {
 	mux           *http.ServeMux
 	statsStore    *stats.Store
@@ -189,7 +203,7 @@ func (s *Server) Stop() {
 // handleMetrics exports Prometheus format metrics
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if s.metrics == nil {
-		http.Error(w, "Metrics not initialized", http.StatusInternalServerError)
+		http.Error(w, ErrMetricsNotInitialized.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -203,7 +217,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -253,16 +267,16 @@ func SetIsRunningFn(fn func() bool) {
 	getIsRunningFn = fn
 }
 
+// handleStart handles the /api/start endpoint to start the service
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Call start callback if available
 	if startServiceFn != nil {
-		err := startServiceFn()
-		if err != nil {
+		if err := startServiceFn(); err != nil {
 			s.sendError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -286,16 +300,16 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	s.sendSuccess(w, "Service started")
 }
 
+// handleStop handles the /api/stop endpoint to stop the service
 func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Call stop callback if available
 	if stopServiceFn != nil {
-		err := stopServiceFn()
-		if err != nil {
+		if err := stopServiceFn(); err != nil {
 			s.sendError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -917,21 +931,27 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filePath)
 }
 
+// sendSuccess sends a JSON success response
 func (s *Server) sendSuccess(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(APIResponse{
+	if err := json.NewEncoder(w).Encode(APIResponse{
 		Success: true,
 		Data:    data,
-	})
+	}); err != nil {
+		slog.Debug("Failed to encode success response", "err", err)
+	}
 }
 
+// sendError sends a JSON error response with HTTP status code
 func (s *Server) sendError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(APIResponse{
+	if err := json.NewEncoder(w).Encode(APIResponse{
 		Success: false,
 		Error:   message,
-	})
+	}); err != nil {
+		slog.Debug("Failed to encode error response", "err", err)
+	}
 }
 
 // SuccessResponse creates a success API response

@@ -10,6 +10,15 @@ import (
 	"github.com/threatwinds/godivert"
 )
 
+// Pre-defined errors for WinDivert operations
+var (
+	ErrWinDivertOpen    = fmt.Errorf("failed to open WinDivert handle")
+	ErrWinDivertRecv    = fmt.Errorf("WinDivert receive error")
+	ErrWinDivertSend    = fmt.Errorf("WinDivert send error")
+	ErrInvalidPacket    = fmt.Errorf("invalid packet data")
+	ErrPacketTooShort   = fmt.Errorf("packet too short")
+)
+
 // UsePacketLayer enables full Ethernet frame capture/send
 // This allows proper unicast delivery to specific MAC addresses
 // NOTE: WinDivert 2.2.x does not support packet layer with custom filters
@@ -27,7 +36,7 @@ const (
 	WINDIVERT_FLAG_LAYER_PACKET = 0x80
 )
 
-// Handle wraps the WinDivert handle
+// Handle wraps the WinDivert handle for thread-safe packet capture
 type Handle struct {
 	mu         sync.Mutex
 	handle     *godivert.WinDivertHandle
@@ -36,7 +45,7 @@ type Handle struct {
 	packetChan chan *godivert.Packet
 }
 
-// Packet represents a captured network packet
+// Packet represents a captured network packet with parsed metadata
 type Packet struct {
 	Raw       []byte
 	Addr      *godivert.WinDivertAddress
@@ -57,14 +66,9 @@ func NewHandle(filter string) (*Handle, error) {
 	}
 
 	// Use network layer (default) - packet layer not supported with custom filters
-	var h *godivert.WinDivertHandle
-	var err error
-
-	// Open WinDivert handle in network layer mode
-	h, err = godivert.NewWinDivertHandle(filter)
-
+	h, err := godivert.NewWinDivertHandle(filter)
 	if err != nil {
-		return nil, fmt.Errorf("windivert open: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrWinDivertOpen, err)
 	}
 
 	slog.Info("WinDivert handle opened", "filter", filter, "mode", "network")
@@ -80,13 +84,11 @@ func NewHandle(filter string) (*Handle, error) {
 func (h *Handle) Recv() (*Packet, error) {
 	packet, err := h.handle.Recv()
 	if err != nil {
-		return nil, fmt.Errorf("windivert recv: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrWinDivertRecv, err)
 	}
 
 	// Parse packet to extract MAC/IP/Port info
-	parsedPacket := h.parsePacket(packet)
-
-	return parsedPacket, nil
+	return h.parsePacket(packet), nil
 }
 
 // Send injects a packet back into the network
@@ -103,13 +105,13 @@ func (h *Handle) Send(packet *Packet) error {
 
 	_, err := h.handle.Send(godivertPacket)
 	if err != nil {
-		return fmt.Errorf("windivert send: %w", err)
+		return fmt.Errorf("%w: %w", ErrWinDivertSend, err)
 	}
 
 	return nil
 }
 
-// Close closes the WinDivert handle
+// Close closes the WinDivert handle and stops packet capture
 func (h *Handle) Close() error {
 	close(h.stopChan)
 	if h.handle != nil {
@@ -118,7 +120,7 @@ func (h *Handle) Close() error {
 	return nil
 }
 
-// Handle returns the underlying godivert handle
+// Handle returns the underlying godivert handle for direct access
 func (h *Handle) Handle() *godivert.WinDivertHandle {
 	return h.handle
 }
@@ -156,24 +158,24 @@ func (h *Handle) parsePacket(packet *godivert.Packet) *Packet {
 }
 
 // GetClientMAC extracts client MAC from DHCP packet payload
-// DHCP client hardware address is at offset 28-33 in DHCP message (after 4-byte opcode header)
+// DHCP message format:
+// [0] - op code
+// [1] - hardware type (1 = Ethernet)
+// [2] - hardware address length (6 for Ethernet)
+// [3] - hops
+// [4-7] - transaction ID
+// [8-9] - seconds elapsed
+// [10-11] - flags
+// [12-15] - client IP (ciaddr)
+// [16-19] - your IP (yiaddr)
+// [20-23] - server IP (siaddr)
+// [24-27] - gateway IP (giaddr)
+// [28-33] - client hardware address (16 bytes, first 6 are MAC)
+// Returns nil if packet is too short or invalid
 func GetClientMAC(dhcpData []byte) net.HardwareAddr {
 	if len(dhcpData) < 34 {
 		return nil
 	}
-	// DHCP message format:
-	// [0] - op code
-	// [1] - hardware type (1 = Ethernet)
-	// [2] - hardware address length (6 for Ethernet)
-	// [3] - hops
-	// [4-7] - transaction ID
-	// [8-9] - seconds elapsed
-	// [10-11] - flags
-	// [12-15] - client IP (ciaddr)
-	// [16-19] - your IP (yiaddr)
-	// [20-23] - server IP (siaddr)
-	// [24-27] - gateway IP (giaddr)
-	// [28-33] - client hardware address (16 bytes, first 6 are MAC)
 	hwType := dhcpData[1]
 	hwLen := dhcpData[2]
 	if hwType != 1 || hwLen != 6 {

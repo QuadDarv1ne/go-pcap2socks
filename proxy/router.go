@@ -126,7 +126,13 @@ func (c *routeCache) stats() (hits, misses uint64, hitRatio float64) {
 	if total > 0 {
 		hitRatio = float64(hits) / float64(total) * 100
 	}
-	return hits, misses, hitRatio
+	return
+}
+
+// GetStats returns cache statistics for monitoring
+func (c *routeCache) GetStats() (hits, misses uint64, hitRatio float64, size int32) {
+	hits, misses, hitRatio = c.stats()
+	return hits, misses, hitRatio, c.size.Load()
 }
 
 func (c *routeCache) len() int32 {
@@ -135,10 +141,10 @@ func (c *routeCache) len() int32 {
 
 // buildKey creates a cache key for routing decision
 // Optimized for minimal allocations using pre-sized buffer and string builder
+// Format: proto:srcIP:srcPort:dstIP:dstPort
+// Max size: 4 + 16 + 1 + 5 + 1 + 16 + 1 + 5 = 49 bytes for IPv6
 func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dstPort uint16) string {
 	// Pre-allocate buffer with known size to avoid reallocations
-	// Format: proto:srcIP:srcPort:dstIP:dstPort
-	// Max size: 4 + 16 + 1 + 5 + 1 + 16 + 1 + 5 = 49 bytes for IPv6
 	// Using byte slice with exact capacity to avoid string builder overhead
 	buf := make([]byte, 0, 50)
 
@@ -219,6 +225,11 @@ func (r *Router) Stop() {
 	close(r.stopCleanup)
 }
 
+// GetCacheStats returns routing cache statistics for monitoring
+func (r *Router) GetCacheStats() (hits, misses uint64, hitRatio float64, size int32) {
+	return r.routeCache.GetStats()
+}
+
 // SetMACFilter sets the MAC filter for the router
 func (r *Router) SetMACFilter(filter *cfg.MACFilter) {
 	r.macFilter = filter
@@ -232,21 +243,12 @@ func (r *Router) isMACAllowed(mac string) bool {
 	return r.macFilter.IsAllowed(mac)
 }
 
-func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
-	// Check MAC filter first
-	if !d.isMACAllowed(metadata.SrcIP.String()) {
-		slog.Debug("Connection blocked by MAC filter", "srcIP", metadata.SrcIP)
-		return nil, ErrBlockedByMACFilter
-	}
-
-	// Build cache key
-	cacheKey := d.routeCache.buildKey("tcp:", metadata.SrcIP, metadata.DstIP, metadata.SrcPort, metadata.DstPort)
-
+// route performs routing logic and returns the selected proxy tag
+// This is a shared function for both TCP and UDP routing
+func (d *Router) route(cacheKey string, metadata *M.Metadata) (string, error) {
 	// Check cache first
 	if outboundTag, found := d.routeCache.get(cacheKey); found {
-		if proxy, ok := d.Proxies[outboundTag]; ok && proxy != nil {
-			return proxy.DialContext(ctx, metadata)
-		}
+		return outboundTag, nil
 	}
 
 	// Cache miss - perform routing
@@ -258,13 +260,26 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 		}
 	}
 
-	// If no rule matched, use default proxy
-	if selectedTag == "" {
-		selectedTag = ""
-	}
-
+	// If no rule matched, use default proxy (empty tag)
 	// Store in cache
 	d.routeCache.set(cacheKey, selectedTag)
+
+	return selectedTag, nil
+}
+
+func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
+	// Check MAC filter first
+	if !d.isMACAllowed(metadata.SrcIP.String()) {
+		slog.Debug("Connection blocked by MAC filter", "srcIP", metadata.SrcIP)
+		return nil, ErrBlockedByMACFilter
+	}
+
+	// Build cache key and perform routing
+	cacheKey := d.routeCache.buildKey("tcp:", metadata.SrcIP, metadata.DstIP, metadata.SrcPort, metadata.DstPort)
+	selectedTag, err := d.route(cacheKey, metadata)
+	if err != nil {
+		return nil, err
+	}
 
 	// Dial using selected proxy
 	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
@@ -281,32 +296,12 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, ErrBlockedByMACFilter
 	}
 
-	// Build cache key
+	// Build cache key and perform routing
 	cacheKey := d.routeCache.buildKey("udp:", metadata.SrcIP, metadata.DstIP, metadata.SrcPort, metadata.DstPort)
-
-	// Check cache first
-	if outboundTag, found := d.routeCache.get(cacheKey); found {
-		if proxy, ok := d.Proxies[outboundTag]; ok && proxy != nil {
-			return proxy.DialUDP(metadata)
-		}
+	selectedTag, err := d.route(cacheKey, metadata)
+	if err != nil {
+		return nil, err
 	}
-
-	// Cache miss - perform routing
-	var selectedTag string
-	for _, rule := range d.Rules {
-		if match(metadata, rule) {
-			selectedTag = rule.OutboundTag
-			break
-		}
-	}
-
-	// If no rule matched, use default proxy
-	if selectedTag == "" {
-		selectedTag = ""
-	}
-
-	// Store in cache
-	d.routeCache.set(cacheKey, selectedTag)
 
 	// Dial using selected proxy
 	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {

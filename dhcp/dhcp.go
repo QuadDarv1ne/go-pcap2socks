@@ -103,22 +103,26 @@ func (m *DHCPMessage) Marshal() []byte {
 		buf[i] = 0
 	}
 
-	// Fixed header
+	// Fixed header (240 bytes)
+	// Bytes 0-3: OpCode, HardwareType, HardwareLength, Hops
 	buf[0] = m.OpCode
 	buf[1] = m.HardwareType
 	buf[2] = m.HardwareLength
 	buf[3] = m.Hops
+	// Bytes 4-7: TransactionID
 	binary.BigEndian.PutUint32(buf[4:8], m.TransactionID)
+	// Bytes 8-9: Seconds
 	binary.BigEndian.PutUint16(buf[8:10], m.Seconds)
+	// Bytes 10-11: Flags
 	binary.BigEndian.PutUint16(buf[10:12], m.Flags)
 
-	// IP addresses
+	// IP addresses (12-27)
 	copy(buf[12:16], m.ClientIP.To4())
 	copy(buf[16:20], m.YourIP.To4())
 	copy(buf[20:24], m.ServerIP.To4())
 	copy(buf[24:28], m.GatewayIP.To4())
 
-	// Client hardware address (first 6 bytes)
+	// Client hardware address (28-33)
 	copy(buf[28:34], m.ClientHardware)
 
 	// Server hostname (64 bytes starting at 44)
@@ -131,7 +135,7 @@ func (m *DHCPMessage) Marshal() []byte {
 		copy(buf[108:], []byte(m.BootFileName))
 	}
 
-	// Magic cookie (mandatory for DHCP)
+	// Magic cookie (mandatory for DHCP, bytes 236-239)
 	buf[236] = 99
 	buf[237] = 130
 	buf[238] = 83
@@ -141,77 +145,42 @@ func (m *DHCPMessage) Marshal() []byte {
 	optionPos := 240
 
 	// Add options in deterministic order for reliability
-	// First: DHCP Message Type (mandatory)
+	// Order: Message Type → Server ID → Subnet Mask → Router → DNS → Lease Time → Requested IP → Others
+	
+	// Helper function to add an option
+	addOption := func(code uint8, value []byte) {
+		buf[optionPos] = code
+		optionPos++
+		buf[optionPos] = byte(len(value))
+		optionPos++
+		copy(buf[optionPos:optionPos+len(value)], value)
+		optionPos += len(value)
+	}
+	
+	// Add mandatory and common options in fixed order
 	if msgType, ok := m.Options[OptionDHCPMessageType]; ok {
-		buf[optionPos] = OptionDHCPMessageType
-		optionPos++
-		buf[optionPos] = byte(len(msgType))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(msgType)], msgType)
-		optionPos += len(msgType)
+		addOption(OptionDHCPMessageType, msgType)
 	}
-
-	// Then: Server Identifier (important for DHCP)
 	if serverID, ok := m.Options[OptionServerIdentifier]; ok {
-		buf[optionPos] = OptionServerIdentifier
-		optionPos++
-		buf[optionPos] = byte(len(serverID))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(serverID)], serverID)
-		optionPos += len(serverID)
+		addOption(OptionServerIdentifier, serverID)
 	}
-
-	// Then: Subnet Mask
 	if subnetMask, ok := m.Options[OptionSubnetMask]; ok {
-		buf[optionPos] = OptionSubnetMask
-		optionPos++
-		buf[optionPos] = byte(len(subnetMask))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(subnetMask)], subnetMask)
-		optionPos += len(subnetMask)
+		addOption(OptionSubnetMask, subnetMask)
 	}
-
-	// Then: Router/Gateway
 	if router, ok := m.Options[OptionRouter]; ok {
-		buf[optionPos] = OptionRouter
-		optionPos++
-		buf[optionPos] = byte(len(router))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(router)], router)
-		optionPos += len(router)
+		addOption(OptionRouter, router)
 	}
-
-	// Then: DNS Servers
 	if dnsServers, ok := m.Options[OptionDNSServer]; ok {
-		buf[optionPos] = OptionDNSServer
-		optionPos++
-		buf[optionPos] = byte(len(dnsServers))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(dnsServers)], dnsServers)
-		optionPos += len(dnsServers)
+		addOption(OptionDNSServer, dnsServers)
 	}
-
-	// Then: Lease Time
 	if leaseTime, ok := m.Options[OptionLeaseTime]; ok {
-		buf[optionPos] = OptionLeaseTime
-		optionPos++
-		buf[optionPos] = byte(len(leaseTime))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(leaseTime)], leaseTime)
-		optionPos += len(leaseTime)
+		addOption(OptionLeaseTime, leaseTime)
 	}
-
-	// Then: Requested IP
 	if requestedIP, ok := m.Options[OptionRequestedIP]; ok {
-		buf[optionPos] = OptionRequestedIP
-		optionPos++
-		buf[optionPos] = byte(len(requestedIP))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(requestedIP)], requestedIP)
-		optionPos += len(requestedIP)
+		addOption(OptionRequestedIP, requestedIP)
 	}
 
-	// Add any remaining options not handled above
+	// Track handled options to avoid duplicates
 	handledOptions := map[uint8]bool{
 		OptionDHCPMessageType:  true,
 		OptionServerIdentifier: true,
@@ -222,16 +191,12 @@ func (m *DHCPMessage) Marshal() []byte {
 		OptionRequestedIP:      true,
 	}
 
+	// Add any remaining options not handled above
 	for code, value := range m.Options {
 		if handledOptions[code] || code == OptionEnd {
 			continue
 		}
-		buf[optionPos] = code
-		optionPos++
-		buf[optionPos] = byte(len(value))
-		optionPos++
-		copy(buf[optionPos:optionPos+len(value)], value)
-		optionPos += len(value)
+		addOption(code, value)
 	}
 
 	// End option

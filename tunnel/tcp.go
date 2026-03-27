@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -109,59 +108,4 @@ func pipe(origin, remote net.Conn) {
 	if totalBytes := bytesCopied.Load(); totalBytes > 0 {
 		slog.Debug("TCP session completed", "total_bytes", totalBytes, "errors", errorsCount.Load())
 	}
-}
-
-// pipeWithCtx copies data bidirectionally with context support
-// Optimized for graceful shutdown
-func pipeWithCtx(ctx context.Context, origin, remote net.Conn) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// Get buffer from pool
-	buf := pool.Get(tcpRelayBufferSize)
-	defer pool.Put(buf)
-
-	// Use a channel to unblock CopyBuffer when context is cancelled
-	done := make(chan struct{})
-
-	go func() {
-		defer wg.Done()
-		n, err := io.CopyBuffer(remote, origin, buf)
-		if err != nil && !errors.Is(err, io.EOF) {
-			slog.Debug("TCP origin->remote copy error", "bytes", n, "err", err)
-		}
-		select {
-		case <-done:
-		default:
-			// Context cancelled - close both ends to unblock CopyBuffer
-			origin.Close()
-			remote.Close()
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		n, err := io.CopyBuffer(origin, remote, buf)
-		if err != nil && !errors.Is(err, io.EOF) {
-			slog.Debug("TCP remote->origin copy error", "bytes", n, "err", err)
-		}
-		select {
-		case <-done:
-		default:
-			// Context cancelled - close both ends
-			origin.Close()
-			remote.Close()
-		}
-	}()
-
-	// Wait for completion or context cancellation
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	<-ctx.Done()
-	origin.Close()
-	remote.Close()
-	<-done
 }

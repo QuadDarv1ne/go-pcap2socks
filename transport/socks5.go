@@ -1,4 +1,5 @@
 // Package socks5 provides SOCKS5 client functionalities.
+// Implements RFC 1928 (SOCKS Protocol Version 5) and RFC 1929 (Username/Password Authentication).
 package socks5
 
 import (
@@ -9,6 +10,19 @@ import (
 	"io"
 	"net"
 	"strconv"
+)
+
+// Pre-defined errors for SOCKS5 operations
+var (
+	ErrVersionMismatch     = errors.New("socks version mismatched")
+	ErrAuthRequired        = errors.New("auth required")
+	ErrAuthTooLong         = errors.New("auth username/password too long")
+	ErrAuthRejected        = errors.New("rejected username/password")
+	ErrUnsupportedMethod   = errors.New("unsupported method")
+	ErrInvalidAddressType  = errors.New("invalid address type")
+	ErrInsufficientBuffer  = errors.New("insufficient buffer")
+	ErrFragmentedPayload   = errors.New("discarding fragmented payload")
+	ErrAddressNil          = errors.New("socks5 addr is nil")
 )
 
 // AuthMethod is the authentication method as defined in RFC 1928 section 3.
@@ -188,12 +202,12 @@ func ClientHandshake(rw io.ReadWriter, addr Addr, command Command, user *User) (
 	}
 
 	if buf[0] != Version {
-		return nil, errors.New("socks version mismatched")
+		return nil, ErrVersionMismatch
 	}
 
 	if buf[1] == MethodUserPass /* USERNAME/PASSWORD */ {
 		if user == nil {
-			return nil, errors.New("auth required")
+			return nil, ErrAuthRequired
 		}
 
 		uLen := len(user.Username)
@@ -201,9 +215,9 @@ func ClientHandshake(rw io.ReadWriter, addr Addr, command Command, user *User) (
 
 		// Both ULEN and PLEN are limited to the range [1, 255].
 		if uLen == 0 || pLen == 0 {
-			return nil, errors.New("auth username/password empty")
+			return nil, ErrAuthTooLong
 		} else if uLen > MaxAuthLen || pLen > MaxAuthLen {
-			return nil, errors.New("auth username/password too long")
+			return nil, ErrAuthTooLong
 		}
 
 		authMsgLen := 1 + 1 + uLen + 1 + pLen
@@ -225,11 +239,11 @@ func ClientHandshake(rw io.ReadWriter, addr Addr, command Command, user *User) (
 		}
 
 		if buf[1] != 0x00 /* STATUS of SUCCESS */ {
-			return nil, errors.New("rejected username/password")
+			return nil, ErrAuthRejected
 		}
 
 	} else if buf[1] != MethodNoAuth /* NO AUTHENTICATION REQUIRED */ {
-		return nil, errors.New("unsupported method")
+		return nil, ErrUnsupportedMethod
 	}
 
 	// VER, CMD, RSV, ADDR
@@ -275,7 +289,7 @@ func ReadAddr(r io.Reader, b []byte) (Addr, error) {
 		_, err := io.ReadFull(r, b[1:1+net.IPv6len+2])
 		return b[:1+net.IPv6len+2], err
 	default:
-		return nil, errors.New("invalid address type")
+		return nil, ErrInvalidAddressType
 	}
 }
 
@@ -372,13 +386,13 @@ func ParseAddrString(s string) Addr {
 // DecodeUDPPacket split `packet` to addr payload, and this function is mutable with `packet`
 func DecodeUDPPacket(packet []byte) (addr Addr, payload []byte, err error) {
 	if len(packet) < 5 {
-		err = errors.New("insufficient length of packet")
+		err = ErrInsufficientBuffer
 		return
 	}
 
 	// packet[0] and packet[1] are reserved
 	if !bytes.Equal(packet[:2], []byte{0x00, 0x00}) {
-		err = errors.New("reserved fields should be zero")
+		err = ErrVersionMismatch
 		return
 	}
 
@@ -398,13 +412,13 @@ func DecodeUDPPacket(packet []byte) (addr Addr, payload []byte, err error) {
 	//
 	// Ref: https://datatracker.ietf.org/doc/html/rfc1928#section-7
 	if packet[2] != 0x00 /* fragments */ {
-		err = errors.New("discarding fragmented payload")
+		err = ErrFragmentedPayload
 		return
 	}
 
 	addr = SplitAddr(packet[3:])
 	if addr == nil {
-		err = errors.New("socks5 UDP addr is nil")
+		err = ErrAddressNil
 	}
 
 	payload = packet[3+len(addr):]
@@ -415,38 +429,38 @@ func DecodeUDPPacket(packet []byte) (addr Addr, payload []byte, err error) {
 // This is a zero-copy version that doesn't allocate separate payload slice
 func DecodeUDPPacketInPlace(packet []byte) (addr Addr, payloadLen int, err error) {
 	if len(packet) < 5 {
-		err = errors.New("insufficient length of packet")
+		err = ErrInsufficientBuffer
 		return
 	}
 
 	// packet[0] and packet[1] are reserved
 	if !bytes.Equal(packet[:2], []byte{0x00, 0x00}) {
-		err = errors.New("reserved fields should be zero")
+		err = ErrVersionMismatch
 		return
 	}
 
 	// Check fragment field
 	if packet[2] != 0x00 {
-		err = errors.New("discarding fragmented payload")
+		err = ErrFragmentedPayload
 		return
 	}
 
 	addr = SplitAddr(packet[3:])
 	if addr == nil {
-		err = errors.New("socks5 UDP addr is nil")
+		err = ErrAddressNil
 		return
 	}
 
 	// Calculate payload length
 	headerLen := 3 + len(addr)
 	payloadLen = len(packet) - headerLen
-	
+
 	return
 }
 
 func EncodeUDPPacket(addr Addr, payload []byte) (packet []byte, err error) {
 	if addr == nil {
-		return nil, errors.New("address is invalid")
+		return nil, ErrAddressNil
 	}
 	// RSV(2) + FRSAG(1) + addr + payload
 	headerLen := 3 + len(addr)

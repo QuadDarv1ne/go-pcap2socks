@@ -3,12 +3,21 @@ package dns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/miekg/dns"
+)
+
+// Pre-defined errors for DNS pool operations
+var (
+	ErrPoolClosed       = errors.New("connection pool is closed")
+	ErrNoAvailableConns = errors.New("no available connections in pool")
+	ErrConnectTimeout   = errors.New("connection timeout")
+	ErrInvalidResponse  = errors.New("invalid DNS response")
 )
 
 const (
@@ -73,7 +82,7 @@ func (p *ConnPool) Exchange(msg *dns.Msg) (*dns.Msg, error) {
 
 	conn, err := p.getConn(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get connection: %w", err)
 	}
 
 	// Set deadline for exchange
@@ -95,7 +104,7 @@ func (p *ConnPool) Exchange(msg *dns.Msg) (*dns.Msg, error) {
 	// Check if response matches request
 	if response.Id != msg.Id {
 		p.putConn(conn, false)
-		return nil, fmt.Errorf("id mismatch: got %d, want %d", response.Id, msg.Id)
+		return nil, fmt.Errorf("%w: id mismatch: got %d, want %d", ErrInvalidResponse, response.Id, msg.Id)
 	}
 
 	p.putConn(conn, true)
@@ -123,7 +132,7 @@ func (p *ConnPool) getConn(ctx context.Context) (*pooledConn, error) {
 	// Create new connection
 	conn, err := p.dialConn(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dial: %w", err)
 	}
 
 	pc := p.connPool.Get().(*pooledConn)

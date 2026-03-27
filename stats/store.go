@@ -288,6 +288,39 @@ func (s *Store) SetDisconnected(ip string) {
 	}
 }
 
+// getDeviceByMAC finds a device by MAC address using the MAC index for O(1) lookup
+// Returns the device and its IP, or nil if not found
+func (s *Store) getDeviceByMAC(mac string) (*DeviceStats, string, bool) {
+	if ipVal, exists := s.macIndex.Load(mac); exists {
+		ip := ipVal.(string)
+		if val, ok := s.devices.Load(ip); ok {
+			return val.(*DeviceStats), ip, true
+		}
+		// Stale index entry, clean it up
+		s.macIndex.Delete(mac)
+	}
+	return nil, "", false
+}
+
+// forEachDeviceByMAC executes fn for device(s) matching the MAC address
+// Uses MAC index for fast lookup, falls back to full scan if index miss
+func (s *Store) forEachDeviceByMAC(mac string, fn func(*DeviceStats) bool) {
+	// Fast path: use MAC index for O(1) lookup
+	if device, _, found := s.getDeviceByMAC(mac); found {
+		fn(device)
+		return
+	}
+
+	// Fallback: search through devices if index miss (shouldn't happen normally)
+	s.devices.Range(func(k, v any) bool {
+		device := v.(*DeviceStats)
+		if device.MAC == mac {
+			return fn(device)
+		}
+		return true
+	})
+}
+
 // SetHostname sets the hostname for a device identified by MAC address
 // Optimized with MAC index for O(1) lookup instead of O(n) iteration
 func (s *Store) SetHostname(mac, hostname string) {
@@ -295,26 +328,9 @@ func (s *Store) SetHostname(mac, hostname string) {
 		return
 	}
 
-	// Fast path: use MAC index for O(1) lookup
-	if ipVal, exists := s.macIndex.Load(mac); exists {
-		ip := ipVal.(string)
-		if val, ok := s.devices.Load(ip); ok {
-			device := val.(*DeviceStats)
-			device.Hostname = hostname
-			return
-		}
-		// Stale index entry, clean it up
-		s.macIndex.Delete(mac)
-	}
-
-	// Fallback: search through devices if index miss (shouldn't happen normally)
-	s.devices.Range(func(k, v any) bool {
-		device := v.(*DeviceStats)
-		if device.MAC == mac {
-			device.Hostname = hostname
-			return false // Stop iteration
-		}
-		return true
+	s.forEachDeviceByMAC(mac, func(device *DeviceStats) bool {
+		device.Hostname = hostname
+		return false
 	})
 }
 
@@ -454,48 +470,19 @@ func (s *Store) SetCustomName(mac, name string) {
 		return
 	}
 
-	// Fast path: use MAC index
-	if ipVal, exists := s.macIndex.Load(mac); exists {
-		ip := ipVal.(string)
-		if val, ok := s.devices.Load(ip); ok {
-			device := val.(*DeviceStats)
-			device.CustomName = name
-			return
-		}
-	}
-
-	// Fallback: search through devices
-	s.devices.Range(func(k, v any) bool {
-		device := v.(*DeviceStats)
-		if device.MAC == mac {
-			device.CustomName = name
-			return false
-		}
-		return true
+	s.forEachDeviceByMAC(mac, func(device *DeviceStats) bool {
+		device.CustomName = name
+		return false
 	})
 }
 
 // GetCustomName returns the custom name for a MAC address
 // Optimized with MAC index for O(1) lookup
 func (s *Store) GetCustomName(mac string) string {
-	// Fast path: use MAC index
-	if ipVal, exists := s.macIndex.Load(mac); exists {
-		ip := ipVal.(string)
-		if val, ok := s.devices.Load(ip); ok {
-			device := val.(*DeviceStats)
-			return device.CustomName
-		}
-	}
-
-	// Fallback: search through devices
 	var name string
-	s.devices.Range(func(k, v any) bool {
-		device := v.(*DeviceStats)
-		if device.MAC == mac {
-			name = device.CustomName
-			return false
-		}
-		return true
+	s.forEachDeviceByMAC(mac, func(device *DeviceStats) bool {
+		name = device.CustomName
+		return false
 	})
 	return name
 }
@@ -503,56 +490,26 @@ func (s *Store) GetCustomName(mac string) string {
 // SetRateLimit sets rate limits for a device
 // Optimized with MAC index for O(1) lookup
 func (s *Store) SetRateLimit(mac string, upload, download uint64) {
-	// Fast path: use MAC index
-	if ipVal, exists := s.macIndex.Load(mac); exists {
-		ip := ipVal.(string)
-		if val, ok := s.devices.Load(ip); ok {
-			device := val.(*DeviceStats)
-			device.RateLimitUpload = upload
-			device.RateLimitDownload = download
-			return
-		}
-	}
-
-	// Fallback: search through devices
-	s.devices.Range(func(k, v any) bool {
-		device := v.(*DeviceStats)
-		if device.MAC == mac {
-			device.RateLimitUpload = upload
-			device.RateLimitDownload = download
-			return false
-		}
-		return true
+	s.forEachDeviceByMAC(mac, func(device *DeviceStats) bool {
+		device.RateLimitUpload = upload
+		device.RateLimitDownload = download
+		return false
 	})
 }
 
 // GetRateLimit returns rate limits for a device
 // Optimized with MAC index for O(1) lookup
 func (s *Store) GetRateLimit(mac string) (upload, download uint64) {
-	// Fast path: use MAC index
-	if ipVal, exists := s.macIndex.Load(mac); exists {
-		ip := ipVal.(string)
-		if val, ok := s.devices.Load(ip); ok {
-			device := val.(*DeviceStats)
-			return device.RateLimitUpload, device.RateLimitDownload
-		}
-	}
-
-	// Fallback: search through devices
-	s.devices.Range(func(k, v any) bool {
-		device := v.(*DeviceStats)
-		if device.MAC == mac {
-			upload = device.RateLimitUpload
-			download = device.RateLimitDownload
-			return false
-		}
-		return true
+	s.forEachDeviceByMAC(mac, func(device *DeviceStats) bool {
+		upload = device.RateLimitUpload
+		download = device.RateLimitDownload
+		return false
 	})
-	return 0, 0
+	return
 }
 
 // GetAllDeviceNames returns all device names (custom or hostname)
-// Optimized with sync.Map Range
+// Returns a map of MAC -> display name (custom name > hostname > MAC)
 func (s *Store) GetAllDeviceNames() map[string]string {
 	names := make(map[string]string)
 	s.devices.Range(func(k, v any) bool {
@@ -568,6 +525,26 @@ func (s *Store) GetAllDeviceNames() map[string]string {
 		return true
 	})
 	return names
+}
+
+// GetStats returns comprehensive statistics summary
+func (s *Store) GetStats() (total, upload, download, packets uint64, deviceCount, activeDevices int) {
+	total, upload, download, packets = s.GetTotalTraffic()
+	deviceCount = s.GetDeviceCount()
+	activeDevices = s.GetActiveDeviceCount()
+	return
+}
+
+// HasDevice checks if a device exists by IP
+func (s *Store) HasDevice(ip string) bool {
+	_, ok := s.devices.Load(ip)
+	return ok
+}
+
+// HasDeviceByMAC checks if a device exists by MAC address
+func (s *Store) HasDeviceByMAC(mac string) bool {
+	_, _, found := s.getDeviceByMAC(mac)
+	return found
 }
 
 func (c *TrafficCounter) GetTotal() (sent, received uint64) {
