@@ -3,9 +3,15 @@
 package env
 
 import (
+	"errors"
 	"os"
 	"regexp"
 	"strings"
+)
+
+// Pre-defined errors for environment variable resolution
+var (
+	ErrMissingVar = errors.New("required environment variable not set")
 )
 
 // envPattern matches ${VAR_NAME} patterns
@@ -64,9 +70,9 @@ type MissingVarError struct {
 
 func (e *MissingVarError) Error() string {
 	if len(e.Variables) == 1 {
-		return "required environment variable not set: " + e.Variables[0]
+		return ErrMissingVar.Error() + ": " + e.Variables[0]
 	}
-	return "required environment variables not set: " + strings.Join(e.Variables, ", ")
+	return ErrMissingVar.Error() + "s: " + strings.Join(e.Variables, ", ")
 }
 
 // HasEnvPattern checks if a string contains ${VAR_NAME} patterns
