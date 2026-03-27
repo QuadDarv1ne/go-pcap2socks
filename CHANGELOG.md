@@ -5,6 +5,46 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.19.19+] - 2026-03-27
+
+### Добавлено
+- **deps/README.md** - полная документация по зависимостям (Npcap, WinDivert)
+- **deps/.gitignore** - игнорирование бинарных файлов драйверов
+- **windivert/dhcp_server.go** - Smart DHCP поддержка через WithSmartDHCP()
+- **dhcp/server.go** - Smart DHCP Manager с определением устройств по MAC
+- **auto/smart_dhcp.go** - распределение IP по типам устройств (PS4/PS5/Xbox/Switch)
+- **npcap_dhcp/simple_server.go** - расширенные логи DHCP (payload, options, message types)
+- **main.go** - checkWindowsICSConflict() для обнаружения конфликта с Windows ICS
+- **main.go** - findAvailablePort() для авто-выбора свободного порта
+
+### Исправлено
+- **dhcp_server_windows.go** - переключено на WinDivert DHCP сервер (вместо Npcap)
+- **npcap_dhcp/simple_server.go** - парсинг DHCP опций с проверкой magic cookie
+- **npcap_dhcp/simple_server.go** - обработка messageType=0 (без Option 53)
+- **npcap_dhcp/simple_server.go** - отправка DHCP OFFER на unicast IP (вместо broadcast)
+- **main.go** - порт 8080 теперь проверяется на занятость
+
+### Изменено
+- **dhcp/server.go** - добавлен smartDHCP и deviceProfiles в структуру Server
+- **dhcp/server.go** - allocateIP() использует Smart DHCP для определения IP по типу устройства
+- **windivert/dhcp_server.go** - NewDHCPServer() с параметром enableSmartDHCP
+- **.gitignore** - игнорирование deps/*.exe, deps/*.zip, deps/*/WinDivert*.sys
+
+### Улучшения DHCP
+- ✅ Определение устройства по MAC (OUI база: Sony PS4/PS5, Microsoft Xbox, Nintendo Switch)
+- ✅ Smart DHCP: PS4/PS5 (.100-.119), Xbox (.120-.139), Switch (.140-.149), PC (.150-.199)
+- ✅ Расширенное логирование: messageType, vendorClass, hostname, options
+- ✅ WinDivert для отправки пакетов (уровень ядра, максимальная совместимость)
+- ✅ Проверка Windows ICS и рекомендации по отключению
+
+### Технические детали
+- **WinDivert**: Отправка DHCP пакетов через ядро (вместо Npcap userspace)
+- **Smart DHCP**: Авто-распределение IP по типам устройств
+- **Logging**: Детальная трассировка DHCP (payload, options, send/receive)
+- **Port selection**: Авто-выбор порта если 8080 занят
+
+---
+
 ## [3.19.12+] - 2026-03-26
 
 ### Исправлено

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/auto"
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
@@ -14,14 +15,16 @@ import (
 
 // Server represents a DHCP server
 type Server struct {
-	mu       sync.RWMutex
-	config   *ServerConfig
-	leases   map[string]*DHCPLease // MAC -> Lease
-	nextIP   net.IP
-	stopChan chan struct{}
-	reserved map[string]bool // Track reserved IPs to prevent conflicts
-	leaseDB  *LeaseDB        // Persistent lease database
-	metrics  *MetricsCollector
+	mu             sync.RWMutex
+	config         *ServerConfig
+	leases         map[string]*DHCPLease      // MAC -> Lease
+	nextIP         net.IP
+	stopChan       chan struct{}
+	reserved       map[string]bool            // Track reserved IPs to prevent conflicts
+	leaseDB        *LeaseDB                   // Persistent lease database
+	metrics        *MetricsCollector
+	smartDHCP      *auto.SmartDHCPManager     // Smart DHCP with device-based IP allocation
+	deviceProfiles map[string]auto.DeviceProfile // MAC -> Device Profile
 }
 
 // ServerOption is a function that configures the server
@@ -38,6 +41,14 @@ func WithLeaseDB(db *LeaseDB) ServerOption {
 func WithMetrics(m *MetricsCollector) ServerOption {
 	return func(s *Server) {
 		s.metrics = m
+	}
+}
+
+// WithSmartDHCP enables Smart DHCP with device-based IP allocation
+func WithSmartDHCP(poolStart, poolEnd string) ServerOption {
+	return func(s *Server) {
+		s.smartDHCP = auto.NewSmartDHCPManager(poolStart, poolEnd)
+		s.deviceProfiles = make(map[string]auto.DeviceProfile)
 	}
 }
 
@@ -112,12 +123,25 @@ func (s *Server) handleDiscover(msg *DHCPMessage) ([]byte, error) {
 	s.metrics.RecordDiscover()
 	s.metrics.RecordLastRequest(macStr, "")
 
-	// Allocate IP
+	// Allocate IP using Smart DHCP if enabled
 	ip, err := s.allocateIP(msg.ClientHardware)
 	if err != nil {
 		slog.Error("DHCP IP allocation failed", "err", err)
 		s.metrics.RecordError()
 		return nil, err
+	}
+
+	// Detect device type and apply profile
+	if s.smartDHCP != nil {
+		profile := auto.DetectByMAC(macStr)
+		if profile.Type != auto.DeviceUnknown {
+			s.deviceProfiles[macStr] = profile
+			slog.Info("DHCP: Device detected",
+				"mac", macStr,
+				"type", profile.Type,
+				"manufacturer", profile.Manufacturer,
+				"assigned_ip", ip)
+		}
 	}
 
 	// Build DHCPOFFER
@@ -267,6 +291,39 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		}
 	}
 
+	// Use Smart DHCP if enabled
+	if s.smartDHCP != nil {
+		// Detect device profile
+		profile := auto.DetectByMAC(macStr)
+		if profile.Type == auto.DeviceUnknown {
+			profile = auto.GetDefaultProfile()
+		}
+
+		// Get IP from Smart DHCP
+		ipStr := s.smartDHCP.GetIPForDevice(macStr, profile)
+		if ipStr != "" {
+			ip := net.ParseIP(ipStr)
+			if ip != nil {
+				// Create lease
+				lease := &DHCPLease{
+					IP:          ip,
+					MAC:         mac,
+					ExpiresAt:   time.Now().Add(s.config.LeaseDuration),
+					Transaction: 0,
+				}
+				s.leases[macStr] = lease
+
+				// Save to persistent database
+				if s.leaseDB != nil {
+					s.leaseDB.SetLease(lease)
+				}
+
+				return ip, nil
+			}
+		}
+	}
+
+	// Fallback to legacy IP allocation
 	// Start from nextIP and find first available IP
 	startIP := s.nextIP
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -

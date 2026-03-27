@@ -42,9 +42,14 @@ type DHCPServer struct {
 }
 
 // NewDHCPServer creates a new DHCP server using WinDivert
-func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr) (*DHCPServer, error) {
-	// Create internal DHCP server
-	dhcpServer := dhcp.NewServer(config)
+func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableSmartDHCP bool, poolStart, poolEnd string) (*DHCPServer, error) {
+	// Create internal DHCP server with options
+	var dhcpServer *dhcp.Server
+	if enableSmartDHCP && poolStart != "" && poolEnd != "" {
+		dhcpServer = dhcp.NewServer(config, dhcp.WithSmartDHCP(poolStart, poolEnd))
+	} else {
+		dhcpServer = dhcp.NewServer(config)
+	}
 
 	// Open WinDivert handle for DHCP packets
 	handle, err := NewHandle(DHCPFilter)
