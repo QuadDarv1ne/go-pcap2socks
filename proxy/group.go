@@ -177,10 +177,9 @@ func randInt(min, max int) int {
 }
 
 // checkAllProxies checks health of all proxies in the group
+// Optimized: removed RLock since healthStatus and activeConns are atomic
 func (g *ProxyGroup) checkAllProxies() {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
+	// No lock needed - healthStatus and activeConns are atomic
 	for i, proxy := range g.proxies {
 		healthy := g.checkProxyHealth(proxy)
 		g.healthStatus[i].Store(healthy)
@@ -243,9 +242,10 @@ func (g *ProxyGroup) updateActiveIndex() {
 }
 
 // selectProxy selects a proxy based on the load balancing policy
+// Optimized: removed RLock since healthStatus and activeConns are atomic
 func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	// No lock needed - healthStatus and activeConns are atomic
+	// g.proxies is read-only after initialization
 
 	if len(g.proxies) == 0 {
 		return nil, -1, fmt.Errorf("no proxies in group")
@@ -305,6 +305,7 @@ func (c *trackedConn) Close() error {
 }
 
 // DialContext dials a TCP connection through the proxy group
+// Optimized: removed RLock in Failover path since g.proxies is read-only
 func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
 	if g.policy == Failover {
 		// For failover policy, try each proxy until one succeeds
@@ -316,9 +317,8 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 				continue // Skip unhealthy proxies
 			}
 
-			g.mu.RLock()
+			// No lock needed - g.proxies is read-only after initialization
 			proxy := g.proxies[idx]
-			g.mu.RUnlock()
 
 			conn, err := proxy.DialContext(ctx, metadata)
 			if err == nil {

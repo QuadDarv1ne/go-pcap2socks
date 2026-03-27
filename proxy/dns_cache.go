@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -14,86 +15,94 @@ type dnsCacheEntry struct {
 }
 
 // dnsCache provides thread-safe caching for DNS responses
+// Optimized with sync.Map for lock-free reads in hot path
 type dnsCache struct {
-	mu      sync.RWMutex
-	entries map[string]*dnsCacheEntry
-	maxSize int
-	hits    uint64
-	misses  uint64
+	entries sync.Map // map[string]*dnsCacheEntry
+	maxSize int32
+	size    atomic.Int32
+	hits    atomic.Uint64
+	misses  atomic.Uint64
 }
 
 // newDNSCache creates a new DNS cache
 func newDNSCache(maxSize int) *dnsCache {
 	return &dnsCache{
-		entries: make(map[string]*dnsCacheEntry, maxSize/4),
-		maxSize: maxSize,
+		maxSize: int32(maxSize),
 	}
 }
 
 // get retrieves a cached DNS response if valid
 // Returns a copy to prevent concurrent modification of cached data
+// Optimized with sync.Map Load for lock-free reads
 func (c *dnsCache) get(key string) (*dns.Msg, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	entry, exists := c.entries[key]
+	val, exists := c.entries.Load(key)
 	if !exists {
-		c.misses++
+		c.misses.Add(1)
 		return nil, false
 	}
 
+	entry := val.(*dnsCacheEntry)
 	if time.Now().After(entry.expiresAt) {
-		c.misses++
+		// Lazy deletion on read
+		c.entries.Delete(key)
+		c.size.Add(-1)
+		c.misses.Add(1)
 		return nil, false
 	}
 
-	c.hits++
+	c.hits.Add(1)
 	// Return a copy to avoid concurrent modification
 	return entry.response.Copy(), true
 }
 
 // set stores a DNS response in cache with TTL
+// Optimized with simple eviction when cache is full
 func (c *dnsCache) set(key string, response *dns.Msg, ttl time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Simple eviction: if cache is full, clear 25% of entries
-	if len(c.entries) >= c.maxSize {
-		count := 0
+	// Check if we need eviction before adding
+	if c.size.Load() >= c.maxSize {
+		// Evict ~25% of entries when full
+		evicted := int32(0)
 		target := c.maxSize / 4
-		for k := range c.entries {
-			delete(c.entries, k)
-			count++
-			if count >= target {
-				break
+		c.entries.Range(func(k, v any) bool {
+			if evicted >= target {
+				return false
 			}
-		}
+			c.entries.Delete(k)
+			evicted++
+			return true
+		})
+		c.size.Add(-evicted)
 	}
 
-	c.entries[key] = &dnsCacheEntry{
+	c.entries.Store(key, &dnsCacheEntry{
 		response:  response.Copy(),
 		expiresAt: time.Now().Add(ttl),
-	}
+	})
+	c.size.Add(1)
 }
 
 // cleanup removes expired entries
+// Optimized with sync.Map Range for lock-free iteration
 func (c *dnsCache) cleanup() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	evicted := int32(0)
 	now := time.Now()
-	for key, entry := range c.entries {
+	c.entries.Range(func(k, v any) bool {
+		entry := v.(*dnsCacheEntry)
 		if now.After(entry.expiresAt) {
-			delete(c.entries, key)
+			c.entries.Delete(k)
+			evicted++
 		}
+		return true
+	})
+	if evicted > 0 {
+		c.size.Add(-evicted)
 	}
 }
 
 // stats returns cache statistics
+// Optimized with atomic loads for lock-free reads
 func (c *dnsCache) stats() (hits, misses uint64) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.hits, c.misses
+	return c.hits.Load(), c.misses.Load()
 }
 
 // getCacheKey generates a cache key from DNS message
