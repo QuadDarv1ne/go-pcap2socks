@@ -436,6 +436,26 @@ func main() {
 			return _running
 		})
 
+		// Set interface list getter for API
+		api.SetInterfaceListFn(func() []interface{} {
+			interfaces := auto.GetInterfaceList()
+			result := make([]interface{}, len(interfaces))
+			for i, iface := range interfaces {
+				result[i] = map[string]interface{}{
+					"name":            iface.Name,
+					"ip":              iface.IP,
+					"mac":             iface.MAC,
+					"network":         iface.Network,
+					"netmask":         iface.Netmask,
+					"network_start":   iface.NetworkStart,
+					"recommended_mtu": iface.RecommendedMTU,
+					"has_internet":    iface.HasInternet,
+					"is_virtual":      iface.IsVirtual,
+				}
+			}
+			return result
+		})
+
 		// Set DHCP leases getter for API
 		api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
 			if _dhcpServer == nil {
@@ -1096,15 +1116,16 @@ func autoConfigure() {
 	slog.Info("Автоматическая конфигурация сети...")
 	slog.Info("Поиск лучшего сетевого интерфейса для раздачи интернета")
 
-	// Find best interface
-	interfaceConfig := findBestInterface()
+	// Use advanced interface selector with internet check and virtual interface filtering
+	selector := auto.NewInterfaceSelector()
+	interfaceConfig := selector.SelectBestInterface()
 	if interfaceConfig.Name == "" {
 		slog.Error("Не найдено подходящего сетевого интерфейса")
 		slog.Info("Убедитесь, что сетевой кабель подключен или Wi-Fi активен")
 		return
 	}
 
-	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC)
+	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC, "has_internet", interfaceConfig.HasInternet)
 
 	// Detect device type by MAC address
 	deviceProfile := auto.DetectByMAC(interfaceConfig.MAC)
@@ -1276,19 +1297,20 @@ func autoConfigureAndStart() {
 	slog.Info("══════════════════════════════════════════════════════════════════")
 	slog.Info("  АВТОМАТИЧЕСКИЙ ЗАПУСК - Конфигурация и запуск сервиса")
 	slog.Info("══════════════════════════════════════════════════════════════════")
-	
+
 	// Сначала выполняем auto-config (создаём конфиг)
 	slog.Info("Шаг 1/2: Автоматическая конфигурация сети...")
-	
-	// Find best interface
-	interfaceConfig := findBestInterface()
+
+	// Use advanced interface selector with internet check and virtual interface filtering
+	selector := auto.NewInterfaceSelector()
+	interfaceConfig := selector.SelectBestInterface()
 	if interfaceConfig.Name == "" {
 		slog.Error("Не найдено подходящего сетевого интерфейса")
 		slog.Info("Убедитесь, что сетевой кабель подключен или Wi-Fi активен")
 		return
 	}
 
-	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC)
+	slog.Info("Найден интерфейс", "name", interfaceConfig.Name, "ip", interfaceConfig.IP, "mac", interfaceConfig.MAC, "has_internet", interfaceConfig.HasInternet)
 
 	// Detect device type by MAC address
 	deviceProfile := auto.DetectByMAC(interfaceConfig.MAC)
@@ -1806,107 +1828,10 @@ func calculateBroadcast(network *net.IPNet) string {
 	return ip.String()
 }
 
-type InterfaceConfig struct {
-	Name           string
-	IP             string
-	MAC            string
-	Network        string
-	Netmask        string
-	NetworkStart   string
-	RecommendedMTU uint32
-}
-
-func findBestInterface() InterfaceConfig {
-	// Priority 1: Look for interface with 192.168.137.1 (Windows ICS default)
-	// Priority 2: Look for Ethernet interface with private IP
-	// Priority 3: Use gateway interface
-
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return InterfaceConfig{}
-	}
-
-	var icsInterface InterfaceConfig
-	var ethernetInterface InterfaceConfig
-	var gatewayInterface InterfaceConfig
-
-	for _, iface := range ifaces {
-		// Skip loopback and inactive interfaces
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-
-		for _, addr := range addrs {
-			ipnet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-
-			ip4 := ipnet.IP.To4()
-			if ip4 == nil {
-				continue
-			}
-
-			ipStr := ip4.String()
-			ones, _ := ipnet.Mask.Size()
-			netmask := fmt.Sprintf("%d.%d.%d.%d", ipnet.Mask[0], ipnet.Mask[1], ipnet.Mask[2], ipnet.Mask[3])
-
-			// Calculate network range
-			networkIP := make(net.IP, 4)
-			binary.BigEndian.PutUint32(networkIP, binary.BigEndian.Uint32(ip4)&binary.BigEndian.Uint32(net.ParseIP(netmask).To4()))
-			networkStart := make(net.IP, 4)
-			binary.BigEndian.PutUint32(networkStart, binary.BigEndian.Uint32(networkIP)+1)
-
-			// Calculate recommended MTU
-			recommendedMTU := uint32(iface.MTU) - 14
-
-			ifaceConfig := InterfaceConfig{
-				Name:           iface.Name,
-				IP:             ipStr,
-				MAC:            iface.HardwareAddr.String(),
-				Network:        fmt.Sprintf("%s/%d", networkIP.String(), ones),
-				Netmask:        netmask,
-				NetworkStart:   networkStart.String(),
-				RecommendedMTU: recommendedMTU,
-			}
-
-			// Priority 1: ICS interface (192.168.137.1)
-			if ipStr == "192.168.137.1" {
-				icsInterface = ifaceConfig
-			}
-
-			// Priority 2: Ethernet interface with private IP
-			if strings.Contains(strings.ToLower(iface.Name), "ethernet") && isPrivateIP(ip4) {
-				ethernetInterface = ifaceConfig
-			}
-
-			// Priority 3: Gateway interface
-			if gatewayInterface.Name == "" {
-				gwIP, err := gateway.DiscoverInterface()
-				if err == nil && bytes.Equal(ip4, gwIP.To4()) {
-					gatewayInterface = ifaceConfig
-				}
-			}
-		}
-	}
-
-	// Return in priority order
-	if icsInterface.Name != "" {
-		return icsInterface
-	}
-	if ethernetInterface.Name != "" {
-		return ethernetInterface
-	}
-	if gatewayInterface.Name != "" {
-		return gatewayInterface
-	}
-
-	return InterfaceConfig{}
+// findBestInterface использует новый InterfaceSelector для обратной совместимости
+func findBestInterface() auto.InterfaceConfig {
+	selector := auto.NewInterfaceSelector()
+	return selector.SelectBestInterface()
 }
 
 // checkWindowsICSConflict checks if Windows ICS (Internet Connection Sharing) is enabled
