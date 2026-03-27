@@ -1,5 +1,4 @@
 // Package di provides dependency injection container for go-pcap2socks.
-// This package offers a lightweight DI container with support for different lifecycles.
 package di
 
 import (
@@ -13,29 +12,12 @@ import (
 type Lifecycle int
 
 const (
-	// Singleton: One shared instance for the entire application lifetime
 	Singleton Lifecycle = iota
-	// Transient: New instance every time Resolve is called
 	Transient
-	// Scoped: One instance per scope (not yet implemented, behaves as Singleton)
 	Scoped
 )
 
-func (l Lifecycle) String() string {
-	switch l {
-	case Singleton:
-		return "singleton"
-	case Transient:
-		return "transient"
-	case Scoped:
-		return "scoped"
-	default:
-		return "unknown"
-	}
-}
-
 // Container is the dependency injection container.
-// It is safe for concurrent use.
 type Container struct {
 	mu         sync.RWMutex
 	services   map[reflect.Type]*serviceDescriptor
@@ -62,13 +44,11 @@ func NewContainer() *Container {
 }
 
 // RegisterSingleton registers a singleton service.
-// The same instance will be returned for all Resolve calls.
 func (c *Container) RegisterSingleton(serviceType interface{}, constructor interface{}) error {
 	return c.Register(serviceType, constructor, Singleton)
 }
 
 // RegisterTransient registers a transient service.
-// A new instance will be created for each Resolve call.
 func (c *Container) RegisterTransient(serviceType interface{}, constructor interface{}) error {
 	return c.Register(serviceType, constructor, Transient)
 }
@@ -91,10 +71,6 @@ func (c *Container) Register(serviceType interface{}, constructor interface{}, l
 		typ = typ.Elem()
 	}
 
-	if typ.Kind() != reflect.Struct && typ.Kind() != reflect.Interface {
-		return fmt.Errorf("serviceType must be a pointer to struct or interface, got %v", typ.Kind())
-	}
-
 	ctorType := reflect.TypeOf(constructor)
 	if ctorType == nil || ctorType.Kind() != reflect.Func {
 		return fmt.Errorf("constructor must be a function")
@@ -110,7 +86,6 @@ func (c *Container) Register(serviceType interface{}, constructor interface{}, l
 }
 
 // RegisterInstance registers an existing instance as a singleton.
-// Useful for registering external dependencies or pre-created objects.
 func (c *Container) RegisterInstance(serviceType interface{}, instance interface{}) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -144,7 +119,7 @@ func (c *Container) Resolve(serviceType interface{}) (interface{}, error) {
 	return c.ResolveContext(context.Background(), serviceType)
 }
 
-// ResolveContext retrieves a service instance with context support.
+// ResolveContext retrieves a service instance with context.
 func (c *Container) ResolveContext(ctx context.Context, serviceType interface{}) (interface{}, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -163,22 +138,6 @@ func (c *Container) ResolveContext(ctx context.Context, serviceType interface{})
 	}
 
 	return c.resolveType(ctx, typ)
-}
-
-// MustResolve resolves a service and panics if not found.
-// Useful for initialization code where missing dependencies are fatal.
-func (c *Container) MustResolve(serviceType interface{}) interface{} {
-	instance, err := c.Resolve(serviceType)
-	if err != nil {
-		panic(fmt.Sprintf("DI resolve error: %v", err))
-	}
-	return instance
-}
-
-// ResolveTyped is a convenience method that returns a typed result.
-// Usage: router, err := container.ResolveTyped((*Router)(nil))
-func (c *Container) ResolveTyped(serviceType interface{}) (interface{}, error) {
-	return c.Resolve(serviceType)
 }
 
 func (c *Container) resolveType(ctx context.Context, typ reflect.Type) (interface{}, error) {
@@ -216,19 +175,16 @@ func (c *Container) createInstance(ctx context.Context, desc *serviceDescriptor)
 	ctorValue := reflect.ValueOf(desc.constructor)
 	ctorType := ctorValue.Type()
 
-	// Check if constructor requires context
 	args := make([]reflect.Value, 0, ctorType.NumIn())
 
 	for i := 0; i < ctorType.NumIn(); i++ {
 		paramType := ctorType.In(i)
 
-		// Handle context.Context parameter
 		if paramType == reflect.TypeOf((*context.Context)(nil)).Elem() {
 			args = append(args, reflect.ValueOf(ctx))
 			continue
 		}
 
-		// Resolve dependency
 		dep, err := c.resolveType(ctx, paramType)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve dependency %v: %w", paramType, err)
@@ -244,7 +200,6 @@ func (c *Container) createInstance(ctx context.Context, desc *serviceDescriptor)
 
 	instance := results[0].Interface()
 
-	// Handle error return value
 	if len(results) > 1 {
 		if err, ok := results[1].Interface().(error); ok && err != nil {
 			return nil, err
@@ -254,8 +209,16 @@ func (c *Container) createInstance(ctx context.Context, desc *serviceDescriptor)
 	return instance, nil
 }
 
+// MustResolve resolves a service and panics on error.
+func (c *Container) MustResolve(serviceType interface{}) interface{} {
+	instance, err := c.Resolve(serviceType)
+	if err != nil {
+		panic(err)
+	}
+	return instance
+}
+
 // Dispose disposes the container and all disposable services.
-// Services implementing Disposable interface will have their Dispose method called.
 func (c *Container) Dispose() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -265,16 +228,6 @@ func (c *Container) Dispose() error {
 	}
 
 	c.isDisposed = true
-
-	// Dispose all singleton instances that implement Disposable
-	for typ, instance := range c.instances {
-		if disposable, ok := instance.(Disposable); ok {
-			if err := disposable.Dispose(); err != nil {
-				return fmt.Errorf("failed to dispose service %v: %w", typ, err)
-			}
-		}
-	}
-
 	c.services = nil
 	c.instances = nil
 	c.resolving = nil
@@ -336,32 +289,7 @@ func (b *ContainerBuilder) Build() (*Container, error) {
 func (b *ContainerBuilder) MustBuild() *Container {
 	c, err := b.Build()
 	if err != nil {
-		panic(fmt.Sprintf("DI container build error: %v", err))
+		panic(err)
 	}
 	return c
-}
-
-// GetServiceCount returns the number of registered services.
-func (c *Container) GetServiceCount() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.services)
-}
-
-// IsRegistered checks if a service is registered.
-func (c *Container) IsRegistered(serviceType interface{}) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	typ := reflect.TypeOf(serviceType)
-	if typ == nil {
-		return false
-	}
-
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-
-	_, exists := c.services[typ]
-	return exists
 }
