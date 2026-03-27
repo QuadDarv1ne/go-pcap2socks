@@ -4,6 +4,7 @@ package auto
 import (
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,33 +14,31 @@ type StaticLease struct {
 	IP         string
 	DeviceName string
 	DeviceType DeviceType
-	LastSeen   time.Time
-	ExpiresAt  time.Time
+	LastSeen   atomic.Value // time.Time
+	ExpiresAt  atomic.Value // time.Time
 }
 
 // SmartDHCPManager manages smart DHCP with static IP assignment
+// Optimized with sync.Map for lock-free reads
 type SmartDHCPManager struct {
-	mu           sync.RWMutex
-	staticLeases map[string]*StaticLease
-	dynamicPool  *IPPool
-	leaseHistory map[string][]time.Time
-	deviceProfiles map[string]DeviceProfile
+	staticLeases   sync.Map // map[string]*StaticLease
+	dynamicPool    *IPPool
+	leaseHistory   sync.Map // map[string][]time.Time
+	deviceProfiles sync.Map // map[string]DeviceProfile
+	size           atomic.Int32
 }
 
 // IPPool represents a pool of IP addresses
 type IPPool struct {
 	Start     net.IP
 	End       net.IP
-	Allocated map[string]bool
+	Allocated sync.Map // map[string]bool
 }
 
 // NewSmartDHCPManager creates a new Smart DHCP manager
 func NewSmartDHCPManager(poolStart, poolEnd string) *SmartDHCPManager {
 	m := &SmartDHCPManager{
-		staticLeases:   make(map[string]*StaticLease),
-		dynamicPool:    NewIPPool(poolStart, poolEnd),
-		leaseHistory:   make(map[string][]time.Time),
-		deviceProfiles: make(map[string]DeviceProfile),
+		dynamicPool: NewIPPool(poolStart, poolEnd),
 	}
 
 	// Pre-configure static leases for common devices
@@ -61,22 +60,21 @@ func (m *SmartDHCPManager) initializeDefaultLeases() {
 
 // NewIPPool creates a new IP pool
 func NewIPPool(startStr, endStr string) *IPPool {
-	pool := &IPPool{
+	return &IPPool{
 		Start:     net.ParseIP(startStr),
 		End:       net.ParseIP(endStr),
-		Allocated: make(map[string]bool),
+		Allocated: sync.Map{},
 	}
-	return pool
 }
 
 // GetIPForDevice returns an IP address for a device based on its profile
+// Optimized with sync.Map for lock-free reads
 func (m *SmartDHCPManager) GetIPForDevice(mac string, profile DeviceProfile) string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Check if we already have a lease for this MAC
-	if lease, ok := m.staticLeases[mac]; ok {
-		lease.LastSeen = time.Now()
+	// Check if we already have a lease for this MAC (fast path)
+	if val, ok := m.staticLeases.Load(mac); ok {
+		lease := val.(*StaticLease)
+		// Update LastSeen atomically
+		lease.LastSeen.Store(time.Now())
 		return lease.IP
 	}
 
@@ -89,12 +87,15 @@ func (m *SmartDHCPManager) GetIPForDevice(mac string, profile DeviceProfile) str
 		IP:         ip,
 		DeviceType: profile.Type,
 		DeviceName: GenerateDeviceName(profile, mac),
-		LastSeen:   time.Now(),
-		ExpiresAt:  time.Now().Add(24 * time.Hour),
 	}
+	lease.LastSeen.Store(time.Now())
+	lease.ExpiresAt.Store(time.Now().Add(24 * time.Hour))
 
-	m.staticLeases[mac] = lease
-	m.deviceProfiles[mac] = profile
+	// Check if this is a new lease (increment size only for new)
+	if _, loaded := m.staticLeases.LoadOrStore(mac, lease); !loaded {
+		m.deviceProfiles.Store(mac, profile)
+		m.size.Add(1)
+	}
 
 	return ip
 }
@@ -179,20 +180,24 @@ func ipInt(ip net.IP) uint32 {
 }
 
 // IsAllocated checks if an IP is allocated
+// Optimized with sync.Map Load for lock-free read
 func (p *IPPool) IsAllocated(ip string) bool {
-	return p.Allocated[ip]
+	if val, ok := p.Allocated.Load(ip); ok {
+		return val.(bool)
+	}
+	return false
 }
 
 // Allocate marks an IP as allocated
+// Optimized with sync.Map Store and LoadOrStore
 func (p *IPPool) Allocate(ip string) bool {
-	if p.Allocated[ip] {
-		return false
-	}
-	p.Allocated[ip] = true
-	return true
+	// LoadOrStore returns existing value if key exists, stores new if not
+	_, loaded := p.Allocated.LoadOrStore(ip, true)
+	return !loaded // Return true if we successfully allocated (not loaded)
 }
 
 // AllocateAny allocates any available IP from the pool
+// Optimized with sync.Map Range for lock-free iteration
 func (p *IPPool) AllocateAny() string {
 	startInt := ipInt(p.Start)
 	endInt := ipInt(p.End)
@@ -200,8 +205,8 @@ func (p *IPPool) AllocateAny() string {
 	for i := startInt; i <= endInt; i++ {
 		ip := intToIP(i)
 		ipStr := ip.String()
-		if !p.Allocated[ipStr] {
-			p.Allocated[ipStr] = true
+		// Try to allocate this IP
+		if p.Allocate(ipStr) {
 			return ipStr
 		}
 	}
@@ -220,67 +225,69 @@ func intToIP(i uint32) net.IP {
 }
 
 // GetStaticLeases returns all static leases
+// Optimized with sync.Map Range for lock-free iteration
 func (m *SmartDHCPManager) GetStaticLeases() map[string]*StaticLease {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	result := make(map[string]*StaticLease)
-	for k, v := range m.staticLeases {
-		result[k] = v
-	}
+	m.staticLeases.Range(func(k, v any) bool {
+		result[k.(string)] = v.(*StaticLease)
+		return true
+	})
 	return result
 }
 
 // GetLeaseByMAC returns a lease for a specific MAC
+// Optimized with sync.Map Load for lock-free read
 func (m *SmartDHCPManager) GetLeaseByMAC(mac string) *StaticLease {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.staticLeases[mac]
+	if val, ok := m.staticLeases.Load(mac); ok {
+		return val.(*StaticLease)
+	}
+	return nil
 }
 
 // RemoveLease removes a lease for a MAC
+// Optimized with sync.Map Delete
 func (m *SmartDHCPManager) RemoveLease(mac string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if lease, ok := m.staticLeases[mac]; ok {
-		m.dynamicPool.Allocated[lease.IP] = false
-		delete(m.staticLeases, mac)
+	if val, ok := m.staticLeases.LoadAndDelete(mac); ok {
+		lease := val.(*StaticLease)
+		m.dynamicPool.Allocated.Delete(lease.IP)
+		m.size.Add(-1)
 	}
 }
 
 // GetDeviceCount returns the number of known devices
+// Optimized with atomic load
 func (m *SmartDHCPManager) GetDeviceCount() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.staticLeases)
+	return int(m.size.Load())
 }
 
 // GetDeviceByType returns devices of a specific type
+// Optimized with sync.Map Range for lock-free iteration
 func (m *SmartDHCPManager) GetDeviceByType(deviceType DeviceType) []*StaticLease {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	var result []*StaticLease
-	for _, lease := range m.staticLeases {
+	m.staticLeases.Range(func(k, v any) bool {
+		lease := v.(*StaticLease)
 		if lease.DeviceType == deviceType {
 			result = append(result, lease)
 		}
-	}
+		return true
+	})
 	return result
 }
 
 // RecordConnection records a connection event for rate limiting
+// Optimized with sync.Map for lock-free updates
 func (m *SmartDHCPManager) RecordConnection(mac string) int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	now := time.Now()
-	history := m.leaseHistory[mac]
-
-	// Remove old entries (older than 1 minute)
 	cutoff := now.Add(-1 * time.Minute)
-	newHistory := []time.Time{}
+
+	// Load existing history
+	var history []time.Time
+	if val, ok := m.leaseHistory.Load(mac); ok {
+		history = val.([]time.Time)
+	}
+
+	// Filter old entries
+	newHistory := make([]time.Time, 0, len(history)+1)
 	for _, t := range history {
 		if t.After(cutoff) {
 			newHistory = append(newHistory, t)
@@ -288,33 +295,49 @@ func (m *SmartDHCPManager) RecordConnection(mac string) int {
 	}
 
 	newHistory = append(newHistory, now)
-	m.leaseHistory[mac] = newHistory
+	m.leaseHistory.Store(mac, newHistory)
 
 	return len(newHistory)
 }
 
 // GetStats returns statistics about DHCP usage
+// Optimized with atomic loads and sync.Map Range
 func (m *SmartDHCPManager) GetStats() map[string]interface{} {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	stats := make(map[string]interface{})
-	stats["total_devices"] = len(m.staticLeases)
-	stats["allocated_ips"] = len(m.dynamicPool.Allocated)
+	stats["total_devices"] = int(m.size.Load())
+	
+	// Count allocated IPs
+	allocatedCount := 0
+	m.dynamicPool.Allocated.Range(func(k, v any) bool {
+		if v.(bool) {
+			allocatedCount++
+		}
+		return true
+	})
+	stats["allocated_ips"] = allocatedCount
 
 	// Count by device type
 	typeCount := make(map[string]int)
-	for _, lease := range m.staticLeases {
+	m.staticLeases.Range(func(k, v any) bool {
+		lease := v.(*StaticLease)
 		typeCount[string(lease.DeviceType)]++
-	}
+		return true
+	})
 	stats["by_type"] = typeCount
 
 	// Pool usage
 	totalPool := ipInt(m.dynamicPool.End) - ipInt(m.dynamicPool.Start) + 1
+	poolAllocatedCount := 0
+	m.dynamicPool.Allocated.Range(func(k, v any) bool {
+		if v.(bool) {
+			poolAllocatedCount++
+		}
+		return true
+	})
 	stats["pool_usage"] = map[string]interface{}{
-		"allocated": len(m.dynamicPool.Allocated),
+		"allocated": poolAllocatedCount,
 		"total":     totalPool,
-		"available": totalPool - uint32(len(m.dynamicPool.Allocated)),
+		"available": totalPool - uint32(poolAllocatedCount),
 	}
 
 	return stats

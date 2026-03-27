@@ -13,8 +13,8 @@ func TestSmartDHCPManager_NewSmartDHCPManager(t *testing.T) {
 		t.Fatal("NewSmartDHCPManager() returned nil")
 	}
 
-	if len(m.staticLeases) != 0 {
-		t.Errorf("staticLeases len = %d, want 0", len(m.staticLeases))
+	if m.size.Load() != 0 {
+		t.Errorf("staticLeases size = %d, want 0", m.size.Load())
 	}
 
 	if m.dynamicPool == nil {
@@ -226,8 +226,15 @@ func TestIPPool_NewIPPool(t *testing.T) {
 	if pool.End == nil {
 		t.Error("End IP should not be nil")
 	}
-	if len(pool.Allocated) != 0 {
-		t.Errorf("Allocated len = %d, want 0", len(pool.Allocated))
+	
+	// Count allocated using Range
+	allocatedCount := 0
+	pool.Allocated.Range(func(k, v any) bool {
+		allocatedCount++
+		return true
+	})
+	if allocatedCount != 0 {
+		t.Errorf("Allocated count = %d, want 0", allocatedCount)
 	}
 }
 
