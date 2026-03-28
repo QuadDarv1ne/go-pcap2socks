@@ -705,7 +705,7 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [ ] API документация (Swagger/OpenAPI)
 
 ### Функции
-- [ ] MAC filtering UI (добавление/удаление правил)
+- [x] ✅ MAC filtering UI (добавление/удаление правил) — api/mac_filter.go, api/mac_filter_test.go
 - [ ] Multi-WAN балансировка
 
 ---

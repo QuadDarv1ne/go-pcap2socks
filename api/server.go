@@ -49,6 +49,7 @@ type Server struct {
 	rateLimiter   *rateLimiter
 	wsHub         *WebSocketHub
 	hotkeyManager *hotkey.Manager
+	macFilterAPI  *MACFilterAPI
 	mu            sync.RWMutex
 	enabled       bool
 	stopChan      chan struct{} // For stopping background goroutines
@@ -133,6 +134,9 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 		statusCacheTTL: 500 * time.Millisecond, // Cache status for 500ms
 	}
 
+	// Initialize MAC filter API
+	s.macFilterAPI = NewMACFilterAPI(nil, cfgFile, s.updateMACFilter)
+
 	slog.Info("API server initialized with auto-generated authentication token", "token_length", len(s.authToken))
 
 	s.setupRoutes()
@@ -170,8 +174,11 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/upnp/preset", s.rateLimitMiddleware(s.authMiddleware(s.handleUPnPApplyPreset)))
 	s.mux.HandleFunc("/api/hotkey", s.rateLimitMiddleware(s.authMiddleware(s.handleHotkey)))
 	s.mux.HandleFunc("/api/hotkey/toggle", s.rateLimitMiddleware(s.authMiddleware(s.handleHotkeyToggle)))
+	// MAC filter endpoints
 	s.mux.HandleFunc("/api/macfilter", s.rateLimitMiddleware(s.authMiddleware(s.handleMACFilter)))
-	s.mux.HandleFunc("/api/macfilter/update", s.rateLimitMiddleware(s.authMiddleware(s.handleMACFilterUpdate)))
+	s.mux.HandleFunc("/api/macfilter/check", s.rateLimitMiddleware(s.authMiddleware(s.macFilterAPI.HandleCheck)))
+	s.mux.HandleFunc("/api/macfilter/mode", s.rateLimitMiddleware(s.authMiddleware(s.macFilterAPI.HandleMode)))
+	s.mux.HandleFunc("/api/macfilter/clear", s.rateLimitMiddleware(s.authMiddleware(s.macFilterAPI.HandleClear)))
 	s.mux.HandleFunc("/api/devices/names", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceNames)))
 	s.mux.HandleFunc("/api/devices/ratelimit", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceRateLimit)))
 	s.mux.HandleFunc("/api/interfaces", s.rateLimitMiddleware(s.authMiddleware(s.handleInterfaces)))
@@ -1020,77 +1027,43 @@ func GetStartTime() time.Time {
 	return startTime
 }
 
-// handleMACFilter returns MAC filter configuration
+// handleMACFilter dispatches MAC filter requests based on HTTP method
 func (s *Server) handleMACFilter(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		s.macFilterAPI.HandleGet(w, r)
+	case http.MethodPost:
+		s.macFilterAPI.HandlePost(w, r)
+	case http.MethodDelete:
+		s.macFilterAPI.HandleDelete(w, r)
+	default:
 		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
-
-	// Get config to access MAC filter
-	config, err := cfg.Load(s.configPath)
-	if err != nil {
-		s.sendError(w, "Failed to load config: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	filter := config.MACFilter
-	if filter == nil {
-		filter = &cfg.MACFilter{
-			Mode: cfg.MACFilterDisabled,
-			List: []string{},
-		}
-	}
-
-	s.sendSuccess(w, map[string]interface{}{
-		"mode": filter.Mode,
-		"list": filter.List,
-	})
 }
 
-// handleMACFilterUpdate updates MAC filter configuration
-func (s *Server) handleMACFilterUpdate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Mode string   `json:"mode"`
-		List []string `json:"list"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.sendError(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
+// updateMACFilter is the callback for MACFilterAPI to save config
+func (s *Server) updateMACFilter(filter *cfg.MACFilter) error {
 	// Load current config
 	config, err := cfg.Load(s.configPath)
 	if err != nil {
-		s.sendError(w, "Failed to load config: "+err.Error(), http.StatusInternalServerError)
-		return
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Update MAC filter
-	config.MACFilter = &cfg.MACFilter{
-		Mode: cfg.MACFilterMode(req.Mode),
-		List: req.List,
-	}
+	config.MACFilter = filter
 
 	// Save config
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		s.sendError(w, "Failed to marshal config: "+err.Error(), http.StatusInternalServerError)
-		return
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
-		s.sendError(w, "Failed to save config: "+err.Error(), http.StatusInternalServerError)
-		return
+		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	s.sendSuccess(w, "MAC filter updated")
+	slog.Info("MAC filter configuration updated", "mode", filter.Mode, "count", len(filter.List))
+	return nil
 }
 
 // handleDeviceNames returns all device names
