@@ -416,34 +416,72 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 }
 
 // queryDNS queries a DNS server via UDP for a specific record type
+// Implements retry logic with exponential backoff for reliability
 func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string, qtype uint16) ([]net.IP, error) {
-	conn, err := net.DialTimeout("udp", server, DefaultDNSTimeout)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
+	var lastErr error
+	
+	// Retry up to 3 times with exponential backoff
+	for attempt := 0; attempt < 3; attempt++ {
+		conn, err := net.DialTimeout("udp", server, DefaultDNSTimeout)
+		if err != nil {
+			lastErr = err
+			if attempt < 2 {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(time.Duration(1<<uint(attempt)) * 100 * time.Millisecond):
+				}
+				continue
+			}
+			return nil, err
+		}
+		
+		// Build DNS query for specific type
+		query, err := buildDNSQuery(hostname, qtype)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
 
-	// Build DNS query for specific type
-	query, err := buildDNSQuery(hostname, qtype)
-	if err != nil {
-		return nil, err
-	}
+		// Send query
+		conn.SetDeadline(time.Now().Add(DefaultDNSTimeout))
+		if _, err := conn.Write(query); err != nil {
+			conn.Close()
+			lastErr = err
+			if attempt < 2 {
+				select {
+				case <-ctx.Done():
+					conn.Close()
+					return nil, ctx.Err()
+				case <-time.After(time.Duration(1<<uint(attempt)) * 100 * time.Millisecond):
+				}
+				continue
+			}
+			return nil, err
+		}
 
-	// Send query
-	conn.SetDeadline(time.Now().Add(DefaultDNSTimeout))
-	if _, err := conn.Write(query); err != nil {
-		return nil, err
-	}
+		// Read response
+		buf := make([]byte, 512)
+		n, err := conn.Read(buf)
+		conn.Close()
+		if err != nil {
+			lastErr = err
+			if attempt < 2 {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(time.Duration(1<<uint(attempt)) * 100 * time.Millisecond):
+				}
+				continue
+			}
+			return nil, err
+		}
 
-	// Read response
-	buf := make([]byte, 512)
-	n, err := conn.Read(buf)
-	if err != nil {
-		return nil, err
+		// Parse response
+		return parseDNSResponse(buf[:n], qtype)
 	}
-
-	// Parse response
-	return parseDNSResponse(buf[:n], qtype)
+	
+	return nil, lastErr
 }
 
 // queryDoH queries a DNS-over-HTTPS server (queries both A and AAAA)
