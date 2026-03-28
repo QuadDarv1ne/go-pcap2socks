@@ -31,6 +31,9 @@ var runningIcon embed.FS
 //go:embed icons/stopped.ico
 var stoppedIcon embed.FS
 
+//go:embed icons/amber.ico
+var amberIcon embed.FS
+
 // wsUpgrader creates WebSocket connections
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -138,20 +141,14 @@ func (c *WebSocketStatusClient) connectAndListen(ctx context.Context, mStatus, m
 
 // updateUI updates tray UI with status
 func (c *WebSocketStatusClient) updateUI(status *APIStatus, mStatus, mDevices, mStart, mStop *systray.MenuItem) {
-	// Update icon based on status
+	// Update icon based on status with animation
 	if status.Running {
-		iconData, err := runningIcon.ReadFile("icons/running.ico")
-		if err == nil {
-			systray.SetIcon(iconData)
-		}
+		c.animateIconChange(runningIcon, "icons/running.ico")
 		mStatus.SetTitle(fmt.Sprintf("Статус: Запущено (%s)", status.Uptime))
 		mStart.Hide()
 		mStop.Show()
 	} else {
-		iconData, err := stoppedIcon.ReadFile("icons/stopped.ico")
-		if err == nil {
-			systray.SetIcon(iconData)
-		}
+		c.animateIconChange(stoppedIcon, "icons/stopped.ico")
 		mStatus.SetTitle("Статус: Остановлено")
 		mStart.Show()
 		mStop.Hide()
@@ -165,6 +162,24 @@ func (c *WebSocketStatusClient) updateUI(status *APIStatus, mStatus, mDevices, m
 		status.Devices,
 		status.Uptime)
 	systray.SetTooltip(tooltip)
+}
+
+// animateIconChange animates icon change with fade effect
+func (c *WebSocketStatusClient) animateIconChange(iconFS embed.FS, iconPath string) {
+	// Show transition icon first
+	transitionData, err := amberIcon.ReadFile("icons/amber.ico")
+	if err == nil {
+		systray.SetIcon(transitionData)
+	}
+
+	// Small delay for transition effect
+	time.Sleep(100 * time.Millisecond)
+
+	// Set final icon
+	iconData, err := iconFS.ReadFile(iconPath)
+	if err == nil {
+		systray.SetIcon(iconData)
+	}
 }
 
 // Stop closes WebSocket connection
