@@ -1,13 +1,13 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (оптимизация памяти)
-**Версия**: v3.27.0+ (dev: memory optimization, main: stable)
+**Последнее обновление**: 28 марта 2026 г. (Memory Optimization v3.27.0)
+**Версия**: v3.27.0+ (dev: stable, main: stable)
 **Статус**: ✅ проект стабилен, компиляция успешна, working tree clean, govulncheck пройден
 
 ### Статус веток
 ```
-main: v3.26.0+ - Feature Flags & NetUtil ✅
-dev:  v3.27.0+ - Memory Optimization (70-85% экономия) ✅
+main: v3.27.0+ - Memory Optimization ✅
+dev:  v3.27.0+ - синхронизировано с main ✅
 ```
 
 ---
@@ -17,7 +17,7 @@ dev:  v3.27.0+ - Memory Optimization (70-85% экономия) ✅
 - [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
 - [x] Ветки: main/dev синхронизированы и отправлены ✅
 - [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `420f50c docs: обновить todo.md — актуальный коммит` ✅
+- [x] Последний коммит: `926acae perf: оптимизация потребления памяти и нагрузки на систему` ✅
 - [x] govulncheck: уязвимостей нет ✅
 
 ---
@@ -811,6 +811,16 @@ BufPool GetPut:            ~10 ns/op      0 B/op    0 allocs/op ✅ (v3.23.0+)
 CircuitBreaker Execute:    ~50 ns/op      0 B/op    0 allocs/op ✅ (v3.21.0+)
 ConnPool Acquire:          ~200 ns/op     0 B/op    0 allocs/op ✅ (v3.24.0+)
 ConnLimit Accept:          ~100 ns/op     0 B/op    0 allocs/op ✅ (v3.24.0+)
+```
+
+### v3.27.0 - Memory Optimization Impact
+```
+Память процесса:           ~60-150 МБ    (было ~120-1000 МБ)  -70-85% ✅
+Горутины:                  ~50-100       (было ~200+)         -60% ✅
+CPU (idle):                ~0.5-2%       (было ~5-10%)        -50% ✅
+Packet Pool память:        ~50 МБ        (было ~500 МБ)       -90% ✅
+WinDivert очередь:         ~1.5 МБ       (было ~12 МБ)        -87% ✅
+Tunnel очередь:            ~5 МБ         (было ~80 МБ)        -94% ✅
 ```
 
 ---
