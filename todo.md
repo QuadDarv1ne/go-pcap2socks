@@ -245,6 +245,20 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.53) - BANDWIDTH LIMITER OPTIMIZATION
+
+### v3.19.53 - Bandwidth Limiter Performance
+- **bandwidth/limiter.go**: runtime.Gosched() при CAS retry
+  - Yield processor при конфликте
+  - Снижение contention при высокой конкуренции
+  - Предотвращение spinlock
+
+**Эффект**:
+- Меньше CPU waste при CAS conflicts
+- Лучшая производительность при высокой нагрузке
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
