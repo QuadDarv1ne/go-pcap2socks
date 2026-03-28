@@ -47,6 +47,7 @@ type WebSocketHub struct {
 	stopChan   chan struct{}
 	stopOnce   sync.Once
 	clientCount atomic.Int32
+	wg         sync.WaitGroup // WaitGroup for goroutine cleanup
 
 	// Pool for client slices to reduce allocations
 	clientSlicePool sync.Pool
@@ -119,11 +120,13 @@ func (h *WebSocketHub) Run() {
 	}
 }
 
-// Stop stops the hub
+// Stop stops the hub and waits for all goroutines to finish
 func (h *WebSocketHub) Stop() {
 	h.stopOnce.Do(func() {
 		close(h.stopChan)
 	})
+	// Wait for all goroutines to finish
+	h.wg.Wait()
 }
 
 // Broadcast sends a message to all connected clients
@@ -164,16 +167,21 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.wsHub.register <- client
 
 	// Start ping/pong heartbeat
+	s.wsHub.wg.Add(1)
 	go s.wsHub.runPingPong(client)
 
 	// Start write pump
+	s.wsHub.wg.Add(1)
 	go s.wsHub.writePump(client)
 
 	// Start read pump (handle client messages)
+	s.wsHub.wg.Add(1)
 	go s.wsHub.readPump(client)
 }
 
 func (h *WebSocketHub) runPingPong(client *WebSocketClient) {
+	defer h.wg.Done()
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -192,6 +200,7 @@ func (h *WebSocketHub) runPingPong(client *WebSocketClient) {
 
 func (h *WebSocketHub) writePump(client *WebSocketClient) {
 	defer func() {
+		h.wg.Done()
 		client.conn.Close()
 	}()
 
@@ -215,6 +224,7 @@ func (h *WebSocketHub) writePump(client *WebSocketClient) {
 
 func (h *WebSocketHub) readPump(client *WebSocketClient) {
 	defer func() {
+		h.wg.Done()
 		h.unregister <- client
 		client.conn.Close()
 	}()
