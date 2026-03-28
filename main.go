@@ -746,8 +746,8 @@ func main() {
 		slog.Info("API authentication token auto-generated. Set 'token' in config.json to use a custom token.", "token", _apiServer.GetAuthToken())
 	}
 
-	// Start real-time WebSocket updates (1 second interval)
-	_apiServer.StartRealTimeUpdates(1 * time.Second)
+	// Start real-time WebSocket updates (5 second interval for reduced CPU usage)
+	_apiServer.StartRealTimeUpdates(5 * time.Second)
 
 	// Start API server in goroutine
 	goroutine.SafeGo(func() {
@@ -2073,8 +2073,8 @@ func autoConfigureAndStart() {
 		slog.Info("API authentication token auto-generated", "token", _apiServer.GetAuthToken())
 	}
 
-	// Start real-time WebSocket updates (1 second interval)
-	_apiServer.StartRealTimeUpdates(1 * time.Second)
+	// Start real-time WebSocket updates (5 second interval for reduced CPU usage)
+	_apiServer.StartRealTimeUpdates(5 * time.Second)
 
 	// Start API server in goroutine
 	goroutine.SafeGo(func() {

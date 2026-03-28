@@ -87,14 +87,24 @@ func WithSmartDHCP(poolStart, poolEnd string) ServerOption {
 
 // NewServer creates a new DHCP server
 func NewServer(config *ServerConfig, options ...ServerOption) *Server {
+	// Memory optimization: Limit worker count to prevent excessive goroutine creation.
+	// DHCP is not CPU-intensive, 4 workers is sufficient for most networks.
+	workerCount := runtime.NumCPU()
+	if workerCount < 2 {
+		workerCount = 2
+	}
+	if workerCount > 4 {
+		workerCount = 4
+	}
+
 	s := &Server{
 		config:          config,
 		stopChan:        make(chan struct{}),
 		metrics:         NewMetricsCollector(),
 		rateLimit:       defaultRateLimit,
 		rateLimitWindow: defaultRateLimitWindow,
-		workerCount:     runtime.NumCPU(), // Use all CPU cores for DHCP processing
-		requestQueue:    make(chan *dhcpRequest, 256), // Buffer for burst requests
+		workerCount:     workerCount,
+		requestQueue:    make(chan *dhcpRequest, 64), // Reduced from 256 to save memory
 	}
 	s.nextIP.Store(config.FirstIP)
 

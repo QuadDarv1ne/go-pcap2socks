@@ -8,12 +8,14 @@ import (
 )
 
 // Size classes for buffer allocation (powers of 2)
+// Memory optimization: Reduced max size from 64KB to 16KB to prevent memory bloat.
+// Most network packets fit within 4KB (MTU), 16KB is sufficient for jumbo frames.
 const (
 	SizeSmall  = 256      // 256B - small packets, headers
 	SizeMedium = 1024     // 1KB - DNS, small payloads
 	SizeLarge  = 4096     // 4KB - typical MTU
 	SizeHuge   = 16384    // 16KB - jumbo frames
-	SizeMax    = 65536    // 64KB - max UDP
+	SizeMax    = 16384    // 16KB - max (reduced from 64KB to save memory)
 )
 
 // PoolStats holds statistics for buffer pool
@@ -59,14 +61,15 @@ func NewMultiPool() *MultiPool {
 		huge:   newBufferPool(SizeHuge),
 		max:    newBufferPool(SizeMax),
 	}
-	
-	// Enable all pools
-	mp.small.enable()
-	mp.medium.enable()
-	mp.large.enable()
-	mp.huge.enable()
-	mp.max.enable()
-	
+
+	// Disable statistics by default to reduce atomic operation overhead.
+	// Enable via EnableStats() if monitoring is needed.
+	// mp.small.enable()
+	// mp.medium.enable()
+	// mp.large.enable()
+	// mp.huge.enable()
+	// mp.max.enable()
+
 	return mp
 }
 

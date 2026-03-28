@@ -60,10 +60,15 @@ type Config struct {
 }
 
 // DefaultConfig returns optimized default configuration
+// Memory optimization: Reduced workers and queue sizes to prevent memory bloat.
 func DefaultConfig() Config {
+	workers := runtime.NumCPU()
+	if workers > 4 {
+		workers = 4
+	}
 	return Config{
-		Workers:   runtime.NumCPU(), // Use all CPU cores
-		QueueSize: 2048,             // Larger queue for burst traffic
+		Workers:   workers,              // Limited to 4 max
+		QueueSize: 256,                  // Reduced from 2048 to save memory
 		Timeout:   100 * time.Millisecond,
 	}
 }
@@ -73,8 +78,16 @@ func NewProcessor(handler PacketHandler, cfg Config) *Processor {
 	if cfg.Workers <= 0 {
 		cfg.Workers = runtime.NumCPU()
 	}
+	// Limit workers to prevent excessive goroutines
+	if cfg.Workers > 8 {
+		cfg.Workers = 8
+	}
 	if cfg.QueueSize <= 0 {
-		cfg.QueueSize = 2048
+		cfg.QueueSize = 256
+	}
+	// Limit queue size to prevent memory bloat
+	if cfg.QueueSize > 1024 {
+		cfg.QueueSize = 1024
 	}
 
 	p := &Processor{

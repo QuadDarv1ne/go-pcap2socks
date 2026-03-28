@@ -20,29 +20,29 @@ const (
 	minWorkerPoolSize = 8
 
 	// maxWorkerPoolSize is the maximum number of worker goroutines
-	maxWorkerPoolSize = 256 // Increased from 128 for better scalability
+	maxWorkerPoolSize = 128 // Reduced from 256 to save memory
 
 	// workerScaleUpThreshold is the queue depth that triggers scaling up
-	workerScaleUpThreshold = 50 // Lower threshold for faster response
+	workerScaleUpThreshold = 50
 
 	// workerScaleDownThreshold is the queue depth that allows scaling down
-	workerScaleDownThreshold = 5 // More aggressive scale-down
+	workerScaleDownThreshold = 5
 
 	// workerScaleCheckInterval is how often to check if scaling is needed
-	workerScaleCheckInterval = 200 * time.Millisecond // Faster response to load changes
+	workerScaleCheckInterval = 500 * time.Millisecond // Reduced from 200ms to save CPU
 
 	// workerScaleUpRatio is the queue depth per worker that triggers scale-up
-	workerScaleUpRatio = 10 // Add worker if queue > workers * 10
+	workerScaleUpRatio = 10
 
 	// workerIdleTimeout is how long a worker waits before exiting on scale-down
 	workerIdleTimeout = 30 * time.Second
 
-	// tcpQueueBufferSize increased for better burst traffic handling
-	// Larger buffer reduces blocking during traffic spikes
-	tcpQueueBufferSize = 20000
+	// tcpQueueBufferSize reduced to prevent memory bloat.
+	// 1024 is sufficient for most networks. Large buffers cause OOM issues.
+	tcpQueueBufferSize = 1024  // Reduced from 20000
 
 	// connectionPoolSize is the size of the connection pool
-	connectionPoolSize = 128
+	connectionPoolSize = 64  // Reduced from 128 to save memory
 
 	// connectionIdleTimeout is the timeout for idle connections in the pool
 	connectionIdleTimeout = 90 * time.Second

@@ -20,8 +20,11 @@ import (
 //   - Get buffer for packet: buf := PacketPool.Get(1500)
 //   - Use buffer for packet data
 //   - Return buffer to pool: PacketPool.Put(buf)
+//
+// Memory optimization: Limited to 12 size classes (max 64 KB) to prevent memory bloat.
+// Buffers >64 KB are rare in network processing and should be handled by GC.
 var PacketPool = &packetPool{
-	pools: [16]sync.Pool{
+	pools: [12]sync.Pool{
 		{New: func() any { return make([]byte, 0, 64) }},      // 64 B
 		{New: func() any { return make([]byte, 0, 128) }},     // 128 B
 		{New: func() any { return make([]byte, 0, 256) }},     // 256 B
@@ -33,26 +36,22 @@ var PacketPool = &packetPool{
 		{New: func() any { return make([]byte, 0, 16384) }},   // 16 KB
 		{New: func() any { return make([]byte, 0, 32768) }},   // 32 KB
 		{New: func() any { return make([]byte, 0, 65536) }},   // 64 KB (max Ethernet Jumbo)
-		{New: func() any { return make([]byte, 0, 131072) }},  // 128 KB
-		{New: func() any { return make([]byte, 0, 262144) }},  // 256 KB
-		{New: func() any { return make([]byte, 0, 524288) }},  // 512 KB
-		{New: func() any { return make([]byte, 0, 1048576) }}, // 1 MB
-		{New: func() any { return make([]byte, 0, 2097152) }}, // 2 MB
+		{New: func() any { return make([]byte, 0, 131072) }},  // 128 KB (for large payloads)
 	},
 }
 
 // packetPool manages size-classified packet buffers
 type packetPool struct {
-	pools [16]sync.Pool
+	pools [12]sync.Pool
 	// Statistics for monitoring (atomic counters)
 	allocs atomic.Uint64
 	frees  atomic.Uint64
 }
 
-// sizeClasses defines buffer size classes in bytes
-var sizeClasses = [16]int{
+// sizeClasses defines buffer size classes in bytes (12 classes, max 128 KB)
+var sizeClasses = [12]int{
 	64, 128, 256, 512, 1024, 2048, 4096, 8192,
-	16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152,
+	16384, 32768, 65536, 131072,
 }
 
 // GetPacket returns a packet buffer from the pool.
@@ -89,12 +88,15 @@ func (pp *packetPool) PutPacket(buf []byte) {
 
 // sizeIndex returns the pool index for a given size
 // Uses O(1) bit manipulation instead of linear search for better performance
+// Max buffer size is 128 KB (index 11). Larger buffers are not pooled.
 func (pp *packetPool) sizeIndex(size int) int {
 	if size <= 64 {
 		return 0
 	}
-	if size > 2097152 {
-		return 15 // Use largest pool
+	if size > 131072 {
+		// Buffer too large for pooling, use largest pool and let GC handle it
+		// This prevents memory bloat from rare large allocations
+		return 11
 	}
 	// Use bits.Len to find the smallest power of 2 that fits the size
 	// sizeClasses are roughly powers of 2, so we can use bit position
@@ -104,8 +106,8 @@ func (pp *packetPool) sizeIndex(size int) int {
 	if idx < 0 {
 		idx = 0
 	}
-	if idx > 15 {
-		idx = 15
+	if idx > 11 {
+		idx = 11
 	}
 	return idx
 }

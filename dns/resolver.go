@@ -154,6 +154,16 @@ type ResolverConfig struct {
 
 // NewResolver creates a new DNS resolver
 func NewResolver(config *ResolverConfig) *Resolver {
+	// Memory optimization: Limit DNS query workers to prevent excessive goroutines.
+	// DNS queries are I/O-bound, 2-4 workers is sufficient.
+	queryWorkers := runtime.NumCPU()
+	if queryWorkers < 2 {
+		queryWorkers = 2
+	}
+	if queryWorkers > 4 {
+		queryWorkers = 4
+	}
+
 	r := &Resolver{
 		cache:         make(map[string]*CacheEntry),
 		cacheSize:     DefaultDNSCacheSize,
@@ -162,11 +172,11 @@ func NewResolver(config *ResolverConfig) *Resolver {
 		useSystemDNS:  true,
 		autoBench:     true,
 		benchInterval: 10 * time.Minute,
-		prefetchChan:  make(chan string, 100),
+		prefetchChan:  make(chan string, 16), // Reduced from 100 to save memory
 		stopPrefetch:  make(chan struct{}),
 		// Multi-threaded query processing
-		queryWorkers:  runtime.NumCPU(), // Use all CPU cores
-		queryQueue:    make(chan *dnsQuery, 256),
+		queryWorkers:  queryWorkers,
+		queryQueue:    make(chan *dnsQuery, 64), // Reduced from 256 to save memory
 		stopQueries:   make(chan struct{}),
 	}
 

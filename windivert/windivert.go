@@ -23,18 +23,20 @@ var (
 )
 
 // WinDivert monitoring constants
+// Memory optimization: Reduced queue sizes to prevent memory bloat.
+// 512 packets is sufficient for most networks, 1024 max prevents OOM.
 const (
 	// DefaultQueueLength is the default WinDivert queue length
-	DefaultQueueLength = 4096
+	DefaultQueueLength = 512  // Reduced from 4096
 
 	// MaxQueueLength is the maximum queue length before overflow
-	MaxQueueLength = 8192
+	MaxQueueLength = 1024  // Reduced from 8192
 
 	// QueueCheckInterval is how often to check queue length
 	QueueCheckInterval = 100 * time.Millisecond
 
 	// QueueOverflowThreshold is the queue length threshold for overflow warning
-	QueueOverflowThreshold = 3000
+	QueueOverflowThreshold = 400  // Reduced from 3000
 )
 
 // Batch processing constants
