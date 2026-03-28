@@ -290,6 +290,28 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.55) - CRITICAL STABILITY FIXES
+
+### v3.19.55 - Critical Stability Fixes
+- **main.go**: HTTP server timeouts для API сервера
+  - `ReadTimeout`: 15s
+  - `WriteTimeout`: 60s (увеличен для экспорта логов)
+  - `IdleTimeout`: 120s
+  - Защита от Slowloris DoS атак
+- **dns/resolver.go**: defer для dnsQueryPool.Put()
+  - Гарантированный возврат буфера даже при ошибке
+  - Предотвращение утечки памяти
+- **tunnel/udp.go**: recover для UDP buffer pool
+  - Защита от паники в pipeChannel
+  - Гарантированный возврат буфера в pool
+
+**Эффект**:
+- Защита от DoS атак на HTTP сервер
+- Нет утечки DNS query буферов
+- Нет утечки UDP буферов при панике
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
