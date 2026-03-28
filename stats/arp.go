@@ -2,6 +2,7 @@ package stats
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -151,20 +152,31 @@ type ARPEntry struct {
 	MAC net.HardwareAddr
 }
 
-// getARPTable gets the system ARP table
+// Pre-compiled regex patterns for ARP parsing (avoid recompilation on each scan)
+var (
+	windowsARPRegex = regexp.MustCompile(`(?m)^(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17})`)
+	macOSARPRegex   = regexp.MustCompile(`\? \((\d+\.\d+\.\d+\.\d+)\) at ([0-9a-fA-F:]{17})`)
+	linuxARPRegex   = regexp.MustCompile(`^(\d+\.\d+\.\d+\.\d+)\s+.*\s([0-9a-fA-F:]{17})`)
+)
+
+// getARPTable gets the system ARP table with timeout protection
 func (m *ARPMonitor) getARPTable() ([]ARPEntry, error) {
+	// Use context with timeout to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var cmd *exec.Cmd
 	var parseFunc func([]byte) ([]ARPEntry, error)
 
 	switch {
 	case isWindows():
-		cmd = exec.Command("arp", "-a")
+		cmd = exec.CommandContext(ctx, "arp", "-a")
 		parseFunc = parseWindowsARP
 	case isLinux():
-		cmd = exec.Command("ip", "neigh")
+		cmd = exec.CommandContext(ctx, "ip", "neigh")
 		parseFunc = parseLinuxARP
 	case isMacOS():
-		cmd = exec.Command("arp", "-a")
+		cmd = exec.CommandContext(ctx, "arp", "-a")
 		parseFunc = parseMacOSARP
 	default:
 		return nil, fmt.Errorf("unsupported OS")
@@ -172,6 +184,9 @@ func (m *ARPMonitor) getARPTable() ([]ARPEntry, error) {
 
 	output, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("ARP scan timeout: %w", err)
+		}
 		return nil, err
 	}
 
@@ -183,10 +198,7 @@ func parseWindowsARP(output []byte) ([]ARPEntry, error) {
 	// Pre-allocate for typical ARP table size
 	entries := make([]ARPEntry, 0, 32)
 
-	// Regex for Windows ARP output: 192.168.1.100    00-11-22-33-44-55
-	ipRegex := regexp.MustCompile(`(?m)^(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17})`)
-
-	for _, matches := range ipRegex.FindAllSubmatch(output, -1) {
+	for _, matches := range windowsARPRegex.FindAllSubmatch(output, -1) {
 		if len(matches) >= 3 {
 			ip := net.ParseIP(string(matches[1]))
 			macStr := strings.Replace(string(matches[2]), "-", ":", -1)
@@ -228,10 +240,7 @@ func parseMacOSARP(output []byte) ([]ARPEntry, error) {
 	// Pre-allocate for typical ARP table size
 	entries := make([]ARPEntry, 0, 32)
 
-	// Regex for macOS ARP: ? (192.168.1.100) at 00:11:22:33:44:55
-	ipRegex := regexp.MustCompile(`\? \((\d+\.\d+\.\d+\.\d+)\) at ([0-9a-fA-F:]{17})`)
-
-	for _, matches := range ipRegex.FindAllSubmatch(output, -1) {
+	for _, matches := range macOSARPRegex.FindAllSubmatch(output, -1) {
 		if len(matches) >= 3 {
 			ip := net.ParseIP(string(matches[1]))
 			mac, err := net.ParseMAC(string(matches[2]))
