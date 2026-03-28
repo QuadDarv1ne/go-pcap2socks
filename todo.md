@@ -658,19 +658,25 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] ✅ Feature Flags & NetUtil (v3.26.0+)
 - [x] ✅ Синхронизация dev → main (v3.26.0+)
 
-### 🔴 Сессия 5: Новые функции (P0) — СЛЕДУЮЩИЕ
-- [ ] Tray Icon интеграция (v3.19.52/v3.19.54) — завершено, требуется тестирование
-- [ ] MTU cache eviction — кэширование MTU с TTL и авто-очисткой
-- [ ] DNS shutdown — полный graceful shutdown DNS resolver + DoH server
+### 🟡 Сессия 6: Стабильность (P1) — ✅ ЗАВЕРШЕНО
+- [x] ✅ MTU cache eviction — кэширование MTU с TTL и авто-очисткой (mtu/discovery.go)
+- [x] ✅ DNS shutdown — полный graceful shutdown DNS resolver + DoH server (dns/resolver.go, dns/server.go)
+- [x] ✅ Error context для proxy — детальные ошибки с контекстом в proxy/* (proxy/proxy.go: DialError, HandshakeError, UDPError)
+- [x] ✅ Error context для health — детальные ошибки в health/checker.go (ProbeError, RecoveryError)
+- [x] ✅ Error context для tunnel — детальные ошибки в tunnel/* (tunnel/tunnel.go: TunnelError, PoolError)
 
-### 🟡 Сессия 6: Стабильность (P1)
-- [ ] Error context для proxy — детальные ошибки с контекстом в proxy/*
-- [ ] Error context для health — детальные ошибки в health/checker.go
-- [ ] Error context для tunnel — детальные ошибки в tunnel/*
+### 🔴 Сессия 7: Интеграция и тестирование (P0) — СЛЕДУЮЩИЕ
+- [ ] Tray Icon интеграция — завершить интеграцию tray_improved.go в main.go
+- [ ] Audit зависимостей (govulncheck) — проверка уязвимостей
+- [ ] Integration tests —端到端 тесты для основных сценариев
+
+### 🟡 Сессия 8: Оптимизация (P2)
+- [ ] Connection pooling для SOCKS5 — переиспользование соединений к прокси
+- [ ] DNS cache warming — предзагрузка популярных доменов
+- [ ] Batch DNS queries — группировка DNS запросов
 
 ### Производительность
 - [x] ✅ CPU profiling в production (pprof) — реализовано в v3.23.0+
-- [ ] Audit зависимостей (govulncheck)
 
 ### Документация
 - [ ] Примеры конфигураций для разных сценариев
