@@ -17,7 +17,7 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
 - [x] Ветки: main/dev синхронизированы и отправлены ✅
 - [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `f8ecb68 feat: MAC filtering API — управление MAC фильтрами` ✅
+- [x] Последний коммит: `adeabad docs: обновить todo.md — Сессия 15 завершена` ✅
 - [x] govulncheck: уязвимостей нет ✅
 
 ---
