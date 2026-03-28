@@ -1,13 +1,13 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (05:00)
-**Версия**: v3.19.43+ (dev: arp-cache, main: dhcp-rate-limit)
+**Последнее обновление**: 28 марта 2026 г. (текущее время)
+**Версия**: v3.19.43+ (dev: stable, main: stable)
 **Статус**: ✅ проект стабилен, все тесты проходят, 28/28 улучшений реализовано
 
 ### Статус веток
 ```
-main: dhcp-rate-limit v3.19.43 - DHCP flood protection + ARP cache ✅
-dev:  arp-cache - ARP cache for fast IP->MAC resolution ✅
+main: v3.19.43 - DHCP flood protection + ARP cache + dead code elimination ✅
+dev:  v3.19.43 - синхронизировано с main ✅
 ```
 
 ---
@@ -249,9 +249,7 @@ dev:  arp-cache - ARP cache for fast IP->MAC resolution ✅
 
 ---
 
----
-
-## 🔄 В работе (27.03.2026 23:55) - v3.19.39+ PROPERTY-BASED TESTING
+## ✅ Завершено (27.03.2026 23:55) - v3.19.39+ PROPERTY-BASED TESTING
 
 ### Автоматическая генерация тестовых случаев
 
@@ -271,7 +269,7 @@ dev:  arp-cache - ARP cache for fast IP->MAC resolution ✅
 - **Зависимостей**: 1 (rapid)
 - **Строк добавлено**: ~195
 - **Компиляция**: ✅ Успешна
-- **Прогресс**: 15/19 задач (79%)
+- **Прогресс**: 19/19 задач (100%)
 
 ---
 

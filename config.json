@@ -4,13 +4,23 @@
     "mtu": 1486,
     "network": "169.254.0.0/16",
     "localIP": "169.254.159.243",
-    "localMAC": "0a:00:27:00:00:15"
+    "localMAC": "0a:00:27:00:00:15",
+    "networkIPv6": "fd00::/64",
+    "localIPv6": "fd00::1",
+    "interfaceGatewayIPv6": "fd00::1"
   },
   "dhcp": {
     "enabled": true,
     "poolStart": "169.254.160.87",
     "poolEnd": "169.254.160.187",
-    "leaseDuration": 86400
+    "leaseDuration": 86400,
+    "ipv6Enabled": true,
+    "ipv6PoolStart": "fd00::64:64:64:64",
+    "ipv6PoolEnd": "fd00::64:64:64:ce",
+    "ipv6Prefix": "fd00::/64",
+    "dnsServers": ["2001:4860:4860::8888", "2001:4860:4860::8844"],
+    "ntpServers": ["time.google.com"],
+    "wpadURL": ""
   },
   "dns": {
     "servers": [
@@ -19,6 +29,9 @@
       },
       {
         "address": "1.1.1.1:53"
+      },
+      {
+        "address": "2001:4860:4860::8888:53"
       }
     ],
     "useSystemDNS": false,

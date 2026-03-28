@@ -446,39 +446,52 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string,
 	return parseDNSResponse(buf[:n], qtype)
 }
 
-// queryDoH queries a DNS-over-HTTPS server
+// queryDoH queries a DNS-over-HTTPS server (queries both A and AAAA)
 func (r *Resolver) queryDoH(ctx context.Context, hostname string, server string) ([]net.IP, error) {
-	// Build DNS query
-	query, err := buildDNSQuery(hostname)
-	if err != nil {
-		return nil, err
+	var allIPs []net.IP
+
+	// Query both A and AAAA records
+	for _, qtype := range []uint16{1, 28} {
+		query, err := buildDNSQuery(hostname, qtype)
+		if err != nil {
+			continue
+		}
+
+		// Create request
+		req, err := http.NewRequestWithContext(ctx, "POST", server, bytes.NewReader(query))
+		if err != nil {
+			continue
+		}
+
+		// Set headers
+		req.Header.Set("Content-Type", "application/dns-message")
+		req.Header.Set("Accept", "application/dns-message")
+
+		// Send request
+		resp, err := r.httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+
+		// Read response
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		// Parse response
+		ips, err := parseDNSResponse(body, qtype)
+		if err == nil && len(ips) > 0 {
+			allIPs = append(allIPs, ips...)
+		}
 	}
 
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, "POST", server, bytes.NewReader(query))
-	if err != nil {
-		return nil, err
+	if len(allIPs) == 0 {
+		return nil, fmt.Errorf("DoH query failed for %s", hostname)
 	}
 
-	// Set headers
-	req.Header.Set("Content-Type", "application/dns-message")
-	req.Header.Set("Accept", "application/dns-message")
-
-	// Send request
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Read response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse response
-	return parseDNSResponse(body)
+	return allIPs, nil
 }
 
 // buildDNSQuery builds a DNS query for a specific record type
@@ -536,8 +549,8 @@ func buildDNSQuery(hostname string, qtype uint16) ([]byte, error) {
 	return result, nil
 }
 
-// parseDNSResponse parses a DNS response
-func parseDNSResponse(buf []byte) ([]net.IP, error) {
+// parseDNSResponse parses a DNS response for a specific record type
+func parseDNSResponse(buf []byte, qtype uint16) ([]net.IP, error) {
 	if len(buf) < 12 {
 		return nil, fmt.Errorf("DNS response too short")
 	}
@@ -552,6 +565,8 @@ func parseDNSResponse(buf []byte) ([]net.IP, error) {
 
 	// Skip to answers
 	offset := 12
+	var ips []net.IP
+
 	for i := 0; i < int(anCount); i++ {
 		// Skip name
 		for {
@@ -574,27 +589,41 @@ func parseDNSResponse(buf []byte) ([]net.IP, error) {
 			return nil, fmt.Errorf("DNS response truncated")
 		}
 
-		qtype := binary.BigEndian.Uint16(buf[offset : offset+2])
+		recordType := binary.BigEndian.Uint16(buf[offset : offset+2])
 		// qclass := binary.BigEndian.Uint16(buf[offset+2 : offset+4])
 		// ttl := binary.BigEndian.Uint32(buf[offset+4 : offset+8])
 		dataLen := int(binary.BigEndian.Uint16(buf[offset+8 : offset+10]))
 		offset += 10
 
-		// Check if A record
-		if qtype == 1 && dataLen == 4 {
-			if offset+4 > len(buf) {
-				return nil, fmt.Errorf("DNS response truncated")
+		// Check if record type matches requested type
+		if recordType == qtype {
+			if qtype == 1 { // A record (IPv4)
+				if dataLen == 4 && offset+4 <= len(buf) {
+					ip := make(net.IP, 4)
+					copy(ip, buf[offset:offset+4])
+					ips = append(ips, ip)
+					offset += 4
+				}
+			} else if qtype == 28 { // AAAA record (IPv6)
+				if dataLen == 16 && offset+16 <= len(buf) {
+					ip := make(net.IP, 16)
+					copy(ip, buf[offset:offset+16])
+					ips = append(ips, ip)
+					offset += 16
+				}
+			} else {
+				offset += dataLen
 			}
-			ip := make(net.IP, 4)
-			copy(ip, buf[offset:offset+4])
-			offset += 4
-			return []net.IP{ip}, nil
+		} else {
+			offset += dataLen
 		}
-
-		offset += dataLen
 	}
 
-	return nil, fmt.Errorf("no A records found")
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no records found for type %d", qtype)
+	}
+
+	return ips, nil
 }
 
 // Benchmark performs DNS benchmark
@@ -681,7 +710,7 @@ func (r *Resolver) benchmarkServer(ctx context.Context, server string, protocol 
 	}
 
 	start := time.Now()
-	_, err := r.queryDNS(ctx, "google.com", server)
+	_, err := r.queryDNS(ctx, "google.com", server, 1) // A record
 	result.Latency = time.Since(start)
 
 	if err != nil {

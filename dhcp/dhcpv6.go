@@ -2,8 +2,8 @@
 package dhcp
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
@@ -312,7 +312,7 @@ func (s *ServerV6) handleMessage(ctx context.Context, data []byte, clientAddr *n
 	msg, err := ParseDHCPv6Message(data)
 	if err != nil {
 		slog.Debug("Failed to parse DHCPv6 message", "error", err)
-		s.updateStats(nil, "error")
+		s.updateStats("error", "")
 		return
 	}
 
@@ -514,8 +514,13 @@ func (s *ServerV6) allocateIPv6(clientID []byte, iaid uint32) (net.IP, error) {
 	}
 
 	// Find available IP in pool
+	poolEnd := s.config.PoolEnd.To16()
 	for ip := s.config.PoolStart; ip.To16() != nil; ip = s.nextIPv6(ip) {
-		if ip.To16().Compare(s.config.PoolEnd.To16()) > 0 {
+		if ip.To16() == nil {
+			break
+		}
+		// Compare IPv6 addresses using bytes comparison
+		if bytes.Compare(ip.To16(), poolEnd) > 0 {
 			break
 		}
 
