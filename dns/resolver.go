@@ -192,7 +192,7 @@ func NewResolver(config *ResolverConfig) *Resolver {
 	return r
 }
 
-// LookupIP performs DNS lookup with caching
+// LookupIP performs DNS lookup with caching (returns both IPv4 and IPv6)
 func (r *Resolver) LookupIP(ctx context.Context, hostname string) ([]net.IP, error) {
 	// Check cache first
 	if ips, ok := r.getCached(hostname); ok {
@@ -210,6 +210,64 @@ func (r *Resolver) LookupIP(ctx context.Context, hostname string) ([]net.IP, err
 	r.setCached(hostname, ips)
 
 	return ips, nil
+}
+
+// LookupIPv4 performs DNS lookup for IPv4 addresses only (A records)
+func (r *Resolver) LookupIPv4(ctx context.Context, hostname string) ([]net.IP, error) {
+	ips, err := r.LookupIP(ctx, hostname)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter IPv4 only
+	var ipv4 []net.IP
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			ipv4 = append(ipv4, ip)
+		}
+	}
+
+	if len(ipv4) == 0 {
+		return nil, fmt.Errorf("no IPv4 addresses found for %s", hostname)
+	}
+
+	return ipv4, nil
+}
+
+// LookupIPv6 performs DNS lookup for IPv6 addresses only (AAAA records)
+func (r *Resolver) LookupIPv6(ctx context.Context, hostname string) ([]net.IP, error) {
+	// Check cache first
+	if ips, ok := r.getCached(hostname); ok {
+		var ipv6 []net.IP
+		for _, ip := range ips {
+			if ip.To4() == nil {
+				ipv6 = append(ipv6, ip)
+			}
+		}
+		if len(ipv6) > 0 {
+			return ipv6, nil
+		}
+	}
+
+	// Perform lookup
+	ips, err := r.lookupIPUncached(ctx, hostname)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter IPv6 only
+	var ipv6 []net.IP
+	for _, ip := range ips {
+		if ip.To4() == nil {
+			ipv6 = append(ipv6, ip)
+		}
+	}
+
+	if len(ipv6) == 0 {
+		return nil, fmt.Errorf("no IPv6 addresses found for %s", hostname)
+	}
+
+	return ipv6, nil
 }
 
 // StartPrefetch starts the background prefetch goroutine
@@ -304,15 +362,31 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	}
 	r.mu.RUnlock()
 
-	// Try each server in order of preference
+	var allIPs []net.IP
 	var lastErr error
+
+	// Try each server in order of preference
 	for _, server := range servers {
-		ips, err := r.queryDNS(ctx, hostname, server)
-		if err == nil && len(ips) > 0 {
-			return ips, nil
+		// Query both A and AAAA records
+		ipsA, errA := r.queryDNS(ctx, hostname, server, 1) // A record
+		ipsAAAA, errAAAA := r.queryDNS(ctx, hostname, server, 28) // AAAA record
+
+		if errA == nil && len(ipsA) > 0 {
+			allIPs = append(allIPs, ipsA...)
 		}
-		if err != nil {
-			lastErr = err
+		if errAAAA == nil && len(ipsAAAA) > 0 {
+			allIPs = append(allIPs, ipsAAAA...)
+		}
+
+		if len(allIPs) > 0 {
+			return allIPs, nil
+		}
+
+		if errA != nil {
+			lastErr = errA
+		}
+		if errAAAA != nil {
+			lastErr = errAAAA
 		}
 	}
 
@@ -331,16 +405,6 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	if r.useSystemDNS {
 		ips, err := net.LookupIP(hostname)
 		if err == nil && len(ips) > 0 {
-			// Filter IPv4 addresses
-			var ipv4 []net.IP
-			for _, ip := range ips {
-				if ip.To4() != nil {
-					ipv4 = append(ipv4, ip)
-				}
-			}
-			if len(ipv4) > 0 {
-				return ipv4, nil
-			}
 			return ips, nil
 		}
 	}
@@ -351,16 +415,16 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	return nil, fmt.Errorf("DNS lookup failed for %s", hostname)
 }
 
-// queryDNS queries a DNS server via UDP
-func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string) ([]net.IP, error) {
+// queryDNS queries a DNS server via UDP for a specific record type
+func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string, qtype uint16) ([]net.IP, error) {
 	conn, err := net.DialTimeout("udp", server, DefaultDNSTimeout)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 
-	// Build DNS query
-	query, err := buildDNSQuery(hostname)
+	// Build DNS query for specific type
+	query, err := buildDNSQuery(hostname, qtype)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +443,7 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string)
 	}
 
 	// Parse response
-	return parseDNSResponse(buf[:n])
+	return parseDNSResponse(buf[:n], qtype)
 }
 
 // queryDoH queries a DNS-over-HTTPS server
@@ -417,9 +481,9 @@ func (r *Resolver) queryDoH(ctx context.Context, hostname string, server string)
 	return parseDNSResponse(body)
 }
 
-// buildDNSQuery builds a DNS A record query
+// buildDNSQuery builds a DNS query for a specific record type
 // Uses dnsQueryPool for zero-copy buffer allocation
-func buildDNSQuery(hostname string) ([]byte, error) {
+func buildDNSQuery(hostname string, qtype uint16) ([]byte, error) {
 	// Remove trailing dot
 	hostname = strings.TrimSuffix(hostname, ".")
 
@@ -458,8 +522,8 @@ func buildDNSQuery(hostname string) ([]byte, error) {
 	}
 	buf.WriteByte(0) // Root label
 
-	// Query type: A (1)
-	binary.Write(buf, binary.BigEndian, uint16(1))
+	// Query type: A (1) or AAAA (28)
+	binary.Write(buf, binary.BigEndian, qtype)
 
 	// Query class: IN (1)
 	binary.Write(buf, binary.BigEndian, uint16(1))

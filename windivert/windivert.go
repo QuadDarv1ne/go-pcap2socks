@@ -56,9 +56,18 @@ const (
 // We use network mode and build Ethernet frames in software for DHCP responses
 const UsePacketLayer = false
 
-// Filter for DHCP packets (UDP ports 67 and 68)
-// In network layer, this filter works correctly
-const DHCPFilter = "udp.DstPort == 67 or udp.SrcPort == 68"
+// Filter for DHCP packets (UDP ports 67 and 68 for IPv4, 546 and 547 for IPv6)
+// In network layer, this filter works correctly for both IPv4 and IPv6
+const DHCPFilter = "(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+
+// DualStackFilter captures both IPv4 and IPv6 traffic for common protocols
+const DualStackFilter = "(ipv4 or ipv6) and (tcp or udp)"
+
+// IPv6Filter captures only IPv6 traffic
+const IPv6Filter = "ipv6"
+
+// DHCPv6Filter captures only DHCPv6 traffic
+const DHCPv6Filter = "udp.DstPort == 547 or udp.SrcPort == 546"
 
 // WinDivert layer flags
 const (
@@ -297,22 +306,24 @@ func (h *Handle) parsePacketRaw(data []byte, pkt *Packet) *Packet {
 	pkt.DstPort = 0
 	pkt.SrcMAC = nil
 	pkt.DstMAC = nil
-	
+
 	// Parse IP header (starts at byte 0 in network layer mode)
 	if len(data) < 20 {
 		return pkt
 	}
-	
-	// IPv4 header parsing
+
+	// Check IP version
 	ipVersion := (data[0] >> 4) & 0x0F
+	
 	if ipVersion == 4 {
+		// IPv4 header parsing
 		ipHeaderLen := int((data[0] & 0x0F) * 4)
 		if len(data) >= ipHeaderLen {
 			pkt.SrcIP = make(net.IP, 4)
 			pkt.DstIP = make(net.IP, 4)
 			copy(pkt.SrcIP, data[12:16])
 			copy(pkt.DstIP, data[16:20])
-			
+
 			// Parse UDP/TCP ports if present
 			if len(data) >= ipHeaderLen+4 {
 				protocol := data[9]
@@ -324,8 +335,30 @@ func (h *Handle) parsePacketRaw(data []byte, pkt *Packet) *Packet {
 				}
 			}
 		}
+	} else if ipVersion == 6 {
+		// IPv6 header parsing (40 bytes fixed header)
+		if len(data) >= 40 {
+			pkt.SrcIP = make(net.IP, 16)
+			pkt.DstIP = make(net.IP, 16)
+			copy(pkt.SrcIP, data[8:24])
+			copy(pkt.DstIP, data[24:40])
+
+			// Next header field (like protocol in IPv4)
+			nextHeader := data[6]
+			
+			// Parse UDP/TCP ports if present
+			// IPv6 header is fixed 40 bytes, extension headers may exist but we skip them for simplicity
+			if len(data) >= 44 {
+				if nextHeader == 17 || nextHeader == 6 { // UDP or TCP
+					srcPort := uint16(data[40])<<8 | uint16(data[41])
+					dstPort := uint16(data[42])<<8 | uint16(data[43])
+					pkt.SrcPort = srcPort
+					pkt.DstPort = dstPort
+				}
+			}
+		}
 	}
-	
+
 	// Parse Ethernet header if present (check for valid MAC addresses)
 	if len(data) >= 14 {
 		pkt.DstMAC = make(net.HardwareAddr, 6)
@@ -333,7 +366,7 @@ func (h *Handle) parsePacketRaw(data []byte, pkt *Packet) *Packet {
 		copy(pkt.DstMAC, data[0:6])
 		copy(pkt.SrcMAC, data[6:12])
 	}
-	
+
 	return pkt
 }
 

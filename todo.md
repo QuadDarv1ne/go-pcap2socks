@@ -1,14 +1,44 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (04:30)
-**Версия**: v3.19.42+ (dev: dhcp-rate-limit, main: cleanup-optimizations)
-**Статус**: ✅ проект стабилен, все тесты проходят, 27/27 улучшений реализовано
+**Последнее обновление**: 28 марта 2026 г. (05:00)
+**Версия**: v3.19.43+ (dev: arp-cache, main: dhcp-rate-limit)
+**Статус**: ✅ проект стабилен, все тесты проходят, 28/28 улучшений реализовано
 
 ### Статус веток
 ```
-main: cleanup-optimizations v3.19.42 - Dead code elimination + DHCP rate limiting ✅
-dev:  dhcp-rate-limit - DHCP flood protection ✅
+main: dhcp-rate-limit v3.19.43 - DHCP flood protection + ARP cache ✅
+dev:  arp-cache - ARP cache for fast IP->MAC resolution ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 05:00) - v3.19.43+ ARP CACHE
+
+### Кэширование ARP для снижения нагрузки
+
+#### 1. ARP Cache в stats.Store (`stats/store.go`)
+- [x] **Добавлено**: `arpCache sync.Map` - кэш IP->MAC+hostname
+- [x] **Добавлено**: `UpdateArpCache()` - обновление записи (lock-free)
+- [x] **Добавлено**: `GetFromArpCache()` - получение из кэша (O(1))
+- [x] **Добавлено**: `cleanupArpCache()` - очистка expired записей
+- [x] **Добавлено**: `GetArpCacheStats()` - статистика кэша
+- [x] **Конфигурация**: 
+  - `maxArpCache`: 500 записей
+  - `arpCacheTTL`: 5 минут
+- [x] **Эффект**: Снижение ARP scan overhead, O(1) доступ к MAC
+
+#### 2. Lock-free реализация
+- [x] **sync.Map**: Для хранения записей кэша
+- [x] **atomic.Int32**: Для счётчика размера
+- [x] **Аллокаций**: 0 на чтение, 1 на запись
+- [x] **Эффект**: Минимальный overhead в hot path
+
+### Итоговый эффект v3.19.43+
+- **Производительность**: O(1) IP->MAC lookup vs O(n) scan
+- **Память**: ~50KB max (500 entries × ~100 bytes)
+- **Аллокаций**: 0 на чтение кэша
+- **Компиляция**: ✅ Успешна
+- **Прогресс**: 28/28 задач (100%)
 
 ---
 

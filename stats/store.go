@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,7 +21,25 @@ type Store struct {
 	stopCleanup       chan struct{}
 	cleanupWg         sync.WaitGroup
 	deviceCount       atomic.Int32
+	
+	// ARP cache for fast IP->MAC resolution (reduces ARP scan overhead)
+	// Cache entry: IP -> *arpCacheEntry
+	arpCache     sync.Map
+	arpCacheSize atomic.Int32
+	maxArpCache  int32
+	arpCacheTTL  time.Duration
 }
+
+type arpCacheEntry struct {
+	mac       string
+	hostname  string
+	timestamp time.Time
+}
+
+const (
+	defaultMaxArpCache = 500           // Max entries in ARP cache
+	defaultArpCacheTTL = 5 * time.Minute // Cache entry TTL
+)
 
 // DeviceStats holds statistics for a single device
 type DeviceStats struct {
@@ -142,6 +161,8 @@ func NewStoreWithCleanup(inactivityTimeout, cleanupInterval time.Duration) *Stor
 		inactivityTimeout: inactivityTimeout,
 		cleanupInterval:   cleanupInterval,
 		stopCleanup:       make(chan struct{}),
+		maxArpCache:       defaultMaxArpCache,
+		arpCacheTTL:       defaultArpCacheTTL,
 	}
 
 	// Start cleanup goroutine if cleanup is enabled
@@ -201,6 +222,81 @@ func (s *Store) Stop() {
 		close(s.stopCleanup)
 		s.cleanupWg.Wait()
 	}
+}
+
+// UpdateArpCache updates the ARP cache entry for an IP
+// Lock-free operation using sync.Map
+func (s *Store) UpdateArpCache(ip net.IP, mac net.HardwareAddr, hostname string) {
+	if ip == nil || len(mac) == 0 {
+		return
+	}
+
+	ipStr := ip.String()
+	macStr := mac.String()
+
+	// Store in ARP cache
+	s.arpCache.Store(ipStr, &arpCacheEntry{
+		mac:       macStr,
+		hostname:  hostname,
+		timestamp: time.Now(),
+	})
+
+	// Update cache size counter
+	size := s.arpCacheSize.Add(1)
+	
+	// Evict old entries if cache is full
+	if size > s.maxArpCache {
+		s.cleanupArpCache()
+	}
+}
+
+// GetFromArpCache retrieves MAC and hostname from ARP cache
+// Returns empty strings if not found or expired
+func (s *Store) GetFromArpCache(ip net.IP) (mac string, hostname string, found bool) {
+	if ip == nil {
+		return "", "", false
+	}
+
+	ipStr := ip.String()
+	val, ok := s.arpCache.Load(ipStr)
+	if !ok {
+		return "", "", false
+	}
+
+	entry := val.(*arpCacheEntry)
+	
+	// Check if entry is expired
+	if time.Since(entry.timestamp) > s.arpCacheTTL {
+		s.arpCache.Delete(ipStr)
+		s.arpCacheSize.Add(-1)
+		return "", "", false
+	}
+
+	return entry.mac, entry.hostname, true
+}
+
+// cleanupArpCache removes expired entries from ARP cache
+func (s *Store) cleanupArpCache() {
+	now := time.Now()
+	deleted := 0
+
+	s.arpCache.Range(func(k, v any) bool {
+		entry := v.(*arpCacheEntry)
+		if now.Sub(entry.timestamp) > s.arpCacheTTL {
+			s.arpCache.Delete(k)
+			deleted++
+		}
+		return true
+	})
+
+	if deleted > 0 {
+		s.arpCacheSize.Add(-int32(deleted))
+	}
+}
+
+// GetArpCacheStats returns ARP cache statistics
+func (s *Store) GetArpCacheStats() (size int32, max int32, ttl time.Duration) {
+	return s.arpCacheSize.Load(), s.maxArpCache, s.arpCacheTTL
 }
 
 // RecordTraffic records traffic for a device
