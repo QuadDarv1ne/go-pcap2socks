@@ -167,6 +167,28 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.51) - DHCP & ARP STABILITY
+
+### v3.19.51 - DHCP & ARP Stability
+- **dhcp/server.go**: cleanupRateLimitCache() goroutine
+  - Каждые 5 минут удаляет старые counter (>5 window)
+  - Предотвращает бесконечный рост requestCount map
+- **stats/arp.go**: context.WithTimeout(10s) для exec.Command
+  - `getARPTable()`: exec.CommandContext вместо exec.Command
+  - Проверка ctx.Err() для детектирования timeout
+  - Возврат ошибки 'ARP scan timeout'
+- **stats/arp.go**: pre-compiled regex patterns
+  - `windowsARPRegex`, `macOSARPRegex`, `linuxARPRegex`
+  - Избегают компиляции regex на каждый вызов
+
+**Эффект**:
+- Нет утечки памяти в DHCP rate limit cache
+- Нет зависания при недоступности ARP команды
+- Быстрее парсинг ARP (regex компилируется 1 раз)
+- Лучшая диагностика ошибок
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
