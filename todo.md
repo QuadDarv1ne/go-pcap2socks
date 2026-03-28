@@ -693,7 +693,7 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 
 ### 🟡 Сессия 11: Улучшения (P2) — ✅ ЗАВЕРШЕНО
 - [x] ✅ Config hot reload — перезагрузка конфига без рестарта (cfg/reload.go, main.go)
-- [ ] Health check улучшения — добавить новые probe types (TCP, UDP)
+- [x] ✅ Health check улучшения — добавить новые probe types (TCP, UDP) (health/checker.go, health/probe_test.go)
 - [ ] Rate limit улучшения — adaptive rate limiting
 
 ### Производительность

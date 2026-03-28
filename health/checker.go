@@ -66,6 +66,10 @@ const (
 	ProbeDHCP
 	// ProbeInterface checks network interface status
 	ProbeInterface
+	// ProbeTCP checks TCP port connectivity
+	ProbeTCP
+	// ProbeUDP checks UDP service availability
+	ProbeUDP
 )
 
 func (p ProbeType) String() string {
@@ -78,6 +82,10 @@ func (p ProbeType) String() string {
 		return "DHCP"
 	case ProbeInterface:
 		return "Interface"
+	case ProbeTCP:
+		return "TCP"
+	case ProbeUDP:
+		return "UDP"
 	default:
 		return "Unknown"
 	}
@@ -591,6 +599,133 @@ type HealthStats struct {
 	MaxBackoff          time.Duration `json:"max_backoff"`
 	BackoffMultiplier   float64       `json:"backoff_multiplier"`
 	BackoffJitter       float64       `json:"backoff_jitter"`
+}
+
+// TCPProbe checks TCP port connectivity
+type TCPProbe struct {
+	name    string
+	address string
+	timeout time.Duration
+}
+
+// NewTCPProbe creates a new TCP probe
+func NewTCPProbe(name, address string, timeout time.Duration) *TCPProbe {
+	return &TCPProbe{
+		name:    name,
+		address: address,
+		timeout: timeout,
+	}
+}
+
+func (p *TCPProbe) Name() string { return p.name }
+func (p *TCPProbe) Type() ProbeType { return ProbeTCP }
+
+func (p *TCPProbe) Run(ctx context.Context) ProbeResult {
+	start := time.Now()
+	result := ProbeResult{
+		Type:      ProbeTCP,
+		Timestamp: start,
+	}
+
+	dialer := &net.Dialer{Timeout: p.timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", p.address)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Errorf("TCP connect to %s failed: %w", p.address, err)
+		result.Latency = time.Since(start)
+		return result
+	}
+	conn.Close()
+
+	result.Success = true
+	result.Latency = time.Since(start)
+	return result
+}
+
+// UDPProbe checks UDP service availability
+type UDPProbe struct {
+	name     string
+	address  string
+	timeout  time.Duration
+	payload  []byte
+	expected int // expected response size (0 = fire and forget)
+}
+
+// NewUDPProbe creates a new UDP probe
+func NewUDPProbe(name, address string, timeout time.Duration, payload []byte) *UDPProbe {
+	return &UDPProbe{
+		name:     name,
+		address:  address,
+		timeout:  timeout,
+		payload:  payload,
+		expected: 0,
+	}
+}
+
+// WithExpectedResponse sets the expected response size
+func (p *UDPProbe) WithExpectedResponse(size int) *UDPProbe {
+	p.expected = size
+	return p
+}
+
+func (p *UDPProbe) Name() string { return p.name }
+func (p *UDPProbe) Type() ProbeType { return ProbeUDP }
+
+func (p *UDPProbe) Run(ctx context.Context) ProbeResult {
+	start := time.Now()
+	result := ProbeResult{
+		Type:      ProbeUDP,
+		Timestamp: start,
+	}
+
+	// Create UDP connection
+	conn, err := net.DialTimeout("udp", p.address, p.timeout)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Errorf("UDP dial to %s failed: %w", p.address, err)
+		result.Latency = time.Since(start)
+		return result
+	}
+	defer conn.Close()
+
+	// Set deadlines
+	conn.SetDeadline(time.Now().Add(p.timeout))
+
+	// Send payload (or empty packet if no payload)
+	payload := p.payload
+	if len(payload) == 0 {
+		payload = []byte{0x00} // minimal payload
+	}
+
+	_, err = conn.Write(payload)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Errorf("UDP write to %s failed: %w", p.address, err)
+		result.Latency = time.Since(start)
+		return result
+	}
+
+	// If we expect a response, read it
+	if p.expected > 0 {
+		buf := make([]byte, p.expected)
+		n, err := conn.Read(buf)
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Errorf("UDP read from %s failed: %w", p.address, err)
+			result.Latency = time.Since(start)
+			return result
+		}
+		if n < p.expected {
+			result.Success = false
+			result.Error = fmt.Errorf("UDP response from %s too short: got %d, expected %d", p.address, n, p.expected)
+			result.Latency = time.Since(start)
+			return result
+		}
+	}
+
+	result.Success = true
+	result.Latency = time.Since(start)
+	return result
 }
 
 // IsHealthy returns true if the system is currently healthy
