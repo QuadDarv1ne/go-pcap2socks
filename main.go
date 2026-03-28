@@ -2307,8 +2307,8 @@ func formatBytes(bytes uint64) string {
 
 // runTray runs the application in system tray mode
 func runTray() {
-	slog.Info("Starting in tray mode...")
-	tray.Run()
+	slog.Info("Starting in tray mode with WebSocket...")
+	tray.RunWithWebSocket()
 }
 
 // runWebServer starts the web server with API and automatic port selection
