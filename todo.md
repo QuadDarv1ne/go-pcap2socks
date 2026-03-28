@@ -57,6 +57,28 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.46) - ZERO-COPY & SYNC.POOL OPTIMIZATION
+
+### v3.19.46 - Zero-Copy & Memory Pool Optimization
+- **common/pool/pool.go**: расширен специализированными пулами
+  - `addrPool`: для SOCKS адресов (259 bytes)
+  - `udpBufferPool`: для UDP пакетов (64KB)
+  - `dnsBufferPool`: для DNS запросов (512 bytes)
+- **transport/socks5.go**: zero-copy оптимизации
+  - `ClientHandshake`: `pool.GetAddr()` вместо `make()`
+  - `SerializeAddr`: stack-allocated `[2]byte` для port (0 аллокаций)
+  - `EncodeUDPPacket`: `pool.GetUDP()` для пакетов >1KB
+- **tunnel/tcp.go**: раздельные буферы для направлений
+  - `pipe()`: отдельные буферы для origin→remote и remote→origin
+  - Устранён contention при одновременной записи
+
+**Эффект**:
+- Аллокаций меньше: -3 на TCP сессию, -2 на SOCKS handshake
+- Память: переиспользование буферов через sync.Pool
+- Производительность: нет contention в full-duplex pipe
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
