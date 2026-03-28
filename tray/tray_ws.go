@@ -4,6 +4,7 @@ package tray
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -23,6 +24,12 @@ import (
 	"github.com/getlantern/systray"
 	"golang.org/x/sys/windows"
 )
+
+//go:embed icons/running.ico
+var runningIcon embed.FS
+
+//go:embed icons/stopped.ico
+var stoppedIcon embed.FS
 
 // wsUpgrader creates WebSocket connections
 var wsUpgrader = websocket.Upgrader{
@@ -131,11 +138,20 @@ func (c *WebSocketStatusClient) connectAndListen(ctx context.Context, mStatus, m
 
 // updateUI updates tray UI with status
 func (c *WebSocketStatusClient) updateUI(status *APIStatus, mStatus, mDevices, mStart, mStop *systray.MenuItem) {
+	// Update icon based on status
 	if status.Running {
+		iconData, err := runningIcon.ReadFile("icons/running.ico")
+		if err == nil {
+			systray.SetIcon(iconData)
+		}
 		mStatus.SetTitle(fmt.Sprintf("Статус: Запущено (%s)", status.Uptime))
 		mStart.Hide()
 		mStop.Show()
 	} else {
+		iconData, err := stoppedIcon.ReadFile("icons/stopped.ico")
+		if err == nil {
+			systray.SetIcon(iconData)
+		}
 		mStatus.SetTitle("Статус: Остановлено")
 		mStart.Show()
 		mStop.Hide()

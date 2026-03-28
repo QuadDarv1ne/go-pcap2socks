@@ -17,7 +17,7 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
 - [x] Ветки: main/dev синхронизированы и отправлены ✅
 - [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `57695e4 feat: WebSocket для tray icon - real-time обновления статуса` ✅
+- [x] Последний коммит: `c5f4275 feat: интеграция WebSocket tray в main.go` ✅
 - [x] govulncheck: уязвимостей нет ✅
 
 ---
@@ -684,11 +684,11 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 ### 🔴 Сессия 10: Интеграция (P0) — ✅ ЗАВЕРШЕНО
 - [x] ✅ Интеграция tray_ws.go в main.go — переключение на WebSocket режим (main.go: runTray())
 - [x] ✅ Тестирование tray с WebSocket — проверка reconnect и fallback (реализовано в tray_ws.go)
-- [ ] Generate running/stopped иконки — разные цвета для статуса
+- [x] ✅ Generate running/stopped иконки — разные цвета для статуса (tray/generate-status-icons.ps1)
 
-### 🔴 Сессия 12: Tray Icon Улучшения (P1) — СЛЕДУЮЩИЕ
-- [ ] Сгенерировать running.ico (зелёный) и stopped.ico (красный/серый)
-- [ ] Интеграция динамических иконок в tray_ws.go
+### 🔴 Сессия 12: Tray Icon Улучшения (P1) — ✅ ЗАВЕРШЕНО
+- [x] ✅ Сгенерировать running.ico (зелёный) и stopped.ico (красный/серый)
+- [x] ✅ Интеграция динамических иконок в tray_ws.go (embed + updateUI)
 - [ ] Анимация иконки при изменении статуса
 
 ### 🟡 Сессия 11: Улучшения (P2)
