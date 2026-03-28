@@ -13,11 +13,6 @@ import (
 	"time"
 )
 
-// init initializes random seed for jitter calculation
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 // ProbeType represents the type of health probe
 type ProbeType int
 
