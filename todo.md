@@ -1,14 +1,41 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (03:00)
-**Версия**: v3.19.40+ (dev: property-based-testing, main: performance-optimizations)
-**Статус**: ✅ проект стабилен, все тесты проходят, 25/25 улучшений реализовано
+**Последнее обновление**: 28 марта 2026 г. (04:00)
+**Версия**: v3.19.41+ (dev: cleanup-optimizations, main: performance-optimizations)
+**Статус**: ✅ проект стабилен, все тесты проходят, 26/26 улучшений реализовано
 
 ### Статус веток
 ```
-main: performance-optimizations v3.19.40 - 25 performance optimizations ✅
-dev:  property-based-testing - Property-based tests with rapid ✅
+main: performance-optimizations v3.19.41 - 25 perf opt + dead code elimination ✅
+dev:  cleanup-optimizations - Dead code elimination ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 04:00) - v3.19.41+ DEAD CODE ELIMINATION
+
+### Удаление неиспользуемого кода
+
+#### 1. core/udpforwarder.go
+- [x] **Удалено**: `newUDPConn()` - deprecated функция (причина race condition)
+- [x] **Заменено на**: `newUDPConnWithID()` с явной передачей id/proto
+- [x] **Эффект**: Устранена путаница, меньше кода
+
+#### 2. di/services.go
+- [x] **Удалено**: `ServiceCollection` struct (deprecated)
+- [x] **Удалено**: `NewServiceCollection()` (deprecated)
+- [x] **Упрощено**: `ConfigureServices()` до placeholder функции
+- [x] **Эффект**: -50 строк, яснее API
+
+#### 3. dhcp_server_windows.go
+- [x] **Удалено**: `findNpcapInterface()` - deprecated, всегда возвращала input
+- [x] **Эффект**: -5 строк, меньше мёртвого кода
+
+### Итоговый эффект v3.19.41+
+- **Удалено функций**: 3
+- **Удалено строк**: ~55
+- **Компиляция**: ✅ Успешна
+- **Прогресс**: 26/26 задач (100%)
 
 ---
 

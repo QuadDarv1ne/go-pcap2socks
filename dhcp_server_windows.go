@@ -68,11 +68,6 @@ func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig 
 	return winDivertDHCP, nil
 }
 
-// findNpcapInterface is deprecated - kept for compatibility
-func findNpcapInterface(netConfig *device.NetworkConfig) (*device.NetworkConfig, error) {
-	return netConfig, nil
-}
-
 // isWinDivertServer checks if DHCP server is WinDivert-based
 func isWinDivertServer(dhcpServer interface{}) bool {
 	_, ok := dhcpServer.(*windivert.DHCPServer)

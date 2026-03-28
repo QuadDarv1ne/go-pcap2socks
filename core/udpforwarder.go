@@ -223,14 +223,6 @@ func (f *UDPForwarder) newUDPConnWithID(natConn N.PacketConn, id stack.Transport
 	}
 }
 
-// newUDPConn is deprecated - use newUDPConnWithID instead
-// Kept for backward compatibility but should not be used
-func (f *UDPForwarder) newUDPConn(natConn N.PacketConn) N.PacketWriter {
-	// This method is deprecated and will cause race conditions if used
-	// Use newUDPConnWithID instead
-	return f.newUDPConnWithID(natConn, stack.TransportEndpointID{}, 0)
-}
-
 type UDPBackWriter struct {
 	// Note: No mutex needed - gVisor stack is internally thread-safe
 	// Removing mutex eliminates contention in hot path for high-concurrency UDP
