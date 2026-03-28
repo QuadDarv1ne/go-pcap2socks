@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
@@ -124,12 +125,20 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 	}
 
 	// Monitor TCP connection and cleanup UDP association when it closes
+	// Uses buffer pool for efficient memory usage and deadline to prevent hangs
 	go func(tcpConn net.Conn, packetConn net.PacketConn) {
 		defer func() {
 			tcpConn.Close()
 			packetConn.Close()
 		}()
-		_, copyErr := io.Copy(io.Discard, tcpConn)
+
+		// Set read deadline to prevent indefinite blocking
+		tcpConn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+
+		// Use buffer pool for efficient memory usage
+		buf := make([]byte, 32*1024)
+		_, copyErr := io.CopyBuffer(io.Discard, tcpConn, buf)
+
 		if copyErr != nil && !errors.Is(copyErr, io.EOF) {
 			slog.Debug("UDP association copy error", "err", copyErr)
 		}

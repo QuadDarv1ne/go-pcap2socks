@@ -152,6 +152,8 @@ func (m *Manager) StartStateSaver(interval time.Duration) {
 	m.stateSaveTicker = time.NewTicker(interval)
 
 	go func() {
+		defer m.stateSaveTicker.Stop() // Ensure ticker resources are released
+
 		for {
 			select {
 			case <-m.stateSaveTicker.C:

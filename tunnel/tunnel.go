@@ -15,8 +15,26 @@ const (
 	// maxConcurrentTCPConnections limits simultaneous TCP connections to prevent system overload
 	maxConcurrentTCPConnections = 1024
 
-	// workerPoolSize is the number of worker goroutines processing TCP connections
-	workerPoolSize = 32
+	// minWorkerPoolSize is the minimum number of worker goroutines
+	minWorkerPoolSize = 8
+
+	// maxWorkerPoolSize is the maximum number of worker goroutines
+	maxWorkerPoolSize = 256 // Increased from 128 for better scalability
+
+	// workerScaleUpThreshold is the queue depth that triggers scaling up
+	workerScaleUpThreshold = 50 // Lower threshold for faster response
+
+	// workerScaleDownThreshold is the queue depth that allows scaling down
+	workerScaleDownThreshold = 5 // More aggressive scale-down
+
+	// workerScaleCheckInterval is how often to check if scaling is needed
+	workerScaleCheckInterval = 200 * time.Millisecond // Faster response to load changes
+
+	// workerScaleUpRatio is the queue depth per worker that triggers scale-up
+	workerScaleUpRatio = 10 // Add worker if queue > workers * 10
+
+	// workerIdleTimeout is how long a worker waits before exiting on scale-down
+	workerIdleTimeout = 30 * time.Second
 
 	// tcpQueueBufferSize increased for better burst traffic handling
 	// Larger buffer reduces blocking during traffic spikes
@@ -38,7 +56,11 @@ var (
 	_startOnce        sync.Once
 	_activeConnCount  atomic.Int32
 	_droppedConnCount atomic.Uint64
-	
+
+	// Adaptive worker pool management
+	_workerCount    atomic.Int32 // Current number of active workers
+	_scaleChan      = make(chan int, 1) // Channel for scale commands (positive=up, negative=down)
+
 	// Connection pool with semaphore for better resource management
 	_connPool         = make(chan *pooledConn, connectionPoolSize)
 	_connPoolWg       sync.WaitGroup
@@ -233,6 +255,11 @@ func GetDroppedConnectionCount() uint64 {
 	return _droppedConnCount.Load()
 }
 
+// GetWorkerCount returns the current number of active workers
+func GetWorkerCount() int32 {
+	return _workerCount.Load()
+}
+
 // process spawns workers to handle TCP connections with concurrency limit
 func process() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -248,22 +275,104 @@ func process() {
 		cleanupPool()
 	}()
 
-	// Start worker pool
+	// Start adaptive worker pool manager
+	go scaleWorkers(ctx)
+
+	// Start initial workers (minimum pool size)
 	var wg sync.WaitGroup
-	for i := 0; i < workerPoolSize; i++ {
+	for i := 0; i < minWorkerPoolSize; i++ {
 		wg.Add(1)
+		_workerCount.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
+			defer _workerCount.Add(-1)
 			worker(ctx, workerID)
 		}(i)
 	}
 
 	<-ctx.Done()
 	wg.Wait()
-	
+
 	// Close pool and cleanup
 	closePool()
 	_connPoolWg.Wait()
+}
+
+// scaleWorkers manages adaptive worker scaling based on queue depth and load
+func scaleWorkers(ctx context.Context) {
+	ticker := time.NewTicker(workerScaleCheckInterval)
+	defer ticker.Stop()
+
+	var consecutiveIdleChecks int
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			queueLen := len(_tcpQueue)
+			currentWorkers := int(_workerCount.Load())
+			activeConns := int(_activeConnCount.Load())
+
+			// Calculate target workers based on queue depth and active connections
+			// Target = max(minWorkers, queueLen/scaleRatio, activeConns/2)
+			targetWorkers := minWorkerPoolSize
+			if target := queueLen / workerScaleUpRatio; target > targetWorkers {
+				targetWorkers = target
+			}
+			if target := (activeConns / 2) + 1; target > targetWorkers {
+				targetWorkers = target
+			}
+			if targetWorkers > maxWorkerPoolSize {
+				targetWorkers = maxWorkerPoolSize
+			}
+
+			// Scale up: if we need more workers
+			if currentWorkers < targetWorkers {
+				delta := targetWorkers - currentWorkers
+				for i := 0; i < delta; i++ {
+					select {
+					case _scaleChan <- 1:
+					default:
+					}
+				}
+				consecutiveIdleChecks = 0
+			}
+
+			// Scale down: if queue is empty and we have excess workers
+			if queueLen < workerScaleDownThreshold && currentWorkers > minWorkerPoolSize {
+				consecutiveIdleChecks++
+				// Only scale down after multiple idle checks to prevent oscillation
+				if consecutiveIdleChecks >= 3 {
+					select {
+					case _scaleChan <- -1:
+					default:
+					}
+				}
+			} else {
+				consecutiveIdleChecks = 0
+			}
+
+		case delta := <-_scaleChan:
+			if delta > 0 {
+				// Scale up: add a worker
+				if int(_workerCount.Load()) < maxWorkerPoolSize {
+					_workerCount.Add(1)
+					go func() {
+						defer _workerCount.Add(-1)
+						worker(ctx, int(_workerCount.Load()))
+					}()
+					slog.Debug("Worker pool scaled up", "workers", _workerCount.Load())
+				}
+			} else if delta < 0 {
+				// Scale down: signal one worker to exit (via channel drain)
+				if int(_workerCount.Load()) > minWorkerPoolSize {
+					// Workers will naturally exit when no work is available
+					slog.Debug("Worker pool scaled down", "workers", _workerCount.Load())
+				}
+			}
+		}
+	}
 }
 
 // closePool closes all pooled connections
@@ -282,35 +391,67 @@ func closePool() {
 		"total_reused", _poolReusedCount.Load())
 }
 
-// worker processes TCP connections from the queue
+// worker processes TCP connections from the queue with adaptive scaling support
 func worker(ctx context.Context, workerID int) {
+	idleTimer := time.NewTimer(workerIdleTimeout)
+	idleTimer.Stop() // Start in stopped state
+
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case conn := <-_tcpQueue:
-			if conn == nil {
+		// Check if we should scale down (idle timeout)
+		if _workerCount.Load() > int32(minWorkerPoolSize) && len(_tcpQueue) == 0 {
+			idleTimer.Reset(workerIdleTimeout)
+			select {
+			case <-ctx.Done():
+				idleTimer.Stop()
+				return
+			case <-idleTimer.C:
+				// Idle timeout - exit if we have excess workers
+				if _workerCount.Load() > int32(minWorkerPoolSize) {
+					_workerCount.Add(-1)
+					slog.Debug("Worker exited due to idle timeout", "worker_id", workerID)
+					return
+				}
 				continue
+			case conn := <-_tcpQueue:
+				idleTimer.Stop()
+				if conn == nil {
+					continue
+				}
+				processConnection(conn)
 			}
-
-			// Check connection limit before processing
-			if _activeConnCount.Load() >= maxConcurrentTCPConnections {
-				_droppedConnCount.Add(1)
-				conn.Close()
-				slog.Debug("TCP connection dropped due to limit",
-					"active", _activeConnCount.Load(),
-					"dropped", _droppedConnCount.Load())
-				continue
+		} else {
+			// Normal processing mode
+			select {
+			case <-ctx.Done():
+				idleTimer.Stop()
+				return
+			case conn := <-_tcpQueue:
+				if conn == nil {
+					continue
+				}
+				processConnection(conn)
 			}
-
-			_activeConnCount.Add(1)
-			
-			// Use connection pool
-			pooled := acquireConn(conn)
-			handleTCPConn(pooled.conn)
-			releaseConn(pooled)
-			
-			_activeConnCount.Add(-1)
 		}
 	}
+}
+
+// processConnection handles a single TCP connection
+func processConnection(conn adapter.TCPConn) {
+	// Check connection limit before processing
+	if _activeConnCount.Load() >= maxConcurrentTCPConnections {
+		_droppedConnCount.Add(1)
+		conn.Close()
+		slog.Debug("TCP connection dropped due to limit",
+			"active", _activeConnCount.Load(),
+			"dropped", _droppedConnCount.Load())
+		return
+	}
+
+	_activeConnCount.Add(1)
+	defer _activeConnCount.Add(-1)
+
+	// Use connection pool
+	pooled := acquireConn(conn)
+	handleTCPConn(pooled.conn)
+	releaseConn(pooled)
 }

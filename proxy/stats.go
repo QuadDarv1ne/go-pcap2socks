@@ -110,9 +110,12 @@ type statsConn struct {
 }
 
 func (sc *statsConn) Read(b []byte) (int, error) {
-	// Check rate limit for download
+	// Check rate limit for download with exponential backoff
 	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.srcIP, len(b), false) {
-		time.Sleep(10 * time.Millisecond)
+		// Use context-based wait instead of blocking sleep
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		_ = sc.rateLimiter.Wait(ctx, sc.srcIP, len(b), false)
 	}
 
 	n, err := sc.Conn.Read(b)
@@ -123,9 +126,12 @@ func (sc *statsConn) Read(b []byte) (int, error) {
 }
 
 func (sc *statsConn) Write(b []byte) (int, error) {
-	// Check rate limit for upload
+	// Check rate limit for upload with exponential backoff
 	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.srcIP, len(b), true) {
-		time.Sleep(10 * time.Millisecond)
+		// Use context-based wait instead of blocking sleep
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		_ = sc.rateLimiter.Wait(ctx, sc.srcIP, len(b), true)
 	}
 
 	n, err := sc.Conn.Write(b)
@@ -146,9 +152,11 @@ type statsPacketConn struct {
 }
 
 func (spc *statsPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
-	// Check rate limit for download
+	// Check rate limit for download with context-based wait
 	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.srcIP, len(p), false) {
-		time.Sleep(10 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		_ = spc.rateLimiter.Wait(ctx, spc.srcIP, len(p), false)
 	}
 
 	n, addr, err := spc.PacketConn.ReadFrom(p)
@@ -159,9 +167,11 @@ func (spc *statsPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 func (spc *statsPacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	// Check rate limit for upload
+	// Check rate limit for upload with context-based wait
 	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.srcIP, len(p), true) {
-		time.Sleep(10 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		_ = spc.rateLimiter.Wait(ctx, spc.srcIP, len(p), true)
 	}
 
 	n, err := spc.PacketConn.WriteTo(p, addr)

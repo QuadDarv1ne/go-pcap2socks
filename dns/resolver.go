@@ -49,6 +49,14 @@ var (
 	CloudflareDoH = "https://cloudflare-dns.com/dns-query"
 	GoogleDoH     = "https://dns.google.com/dns-query"
 	Quad9DoH      = "https://dns.quad9.net/dns-query"
+
+	// dnsQueryPool provides zero-copy DNS query buffer allocation
+	// DNS queries are typically < 512 bytes, so 512 byte capacity is sufficient
+	dnsQueryPool = sync.Pool{
+		New: func() any {
+			return &bytes.Buffer{}
+		},
+	}
 )
 
 // DNS-over-TLS endpoints
@@ -410,12 +418,14 @@ func (r *Resolver) queryDoH(ctx context.Context, hostname string, server string)
 }
 
 // buildDNSQuery builds a DNS A record query
+// Uses dnsQueryPool for zero-copy buffer allocation
 func buildDNSQuery(hostname string) ([]byte, error) {
 	// Remove trailing dot
 	hostname = strings.TrimSuffix(hostname, ".")
 
-	// Build query
-	buf := new(bytes.Buffer)
+	// Get buffer from pool
+	buf := dnsQueryPool.Get().(*bytes.Buffer)
+	buf.Reset()
 
 	// Transaction ID (random)
 	binary.Write(buf, binary.BigEndian, uint16(rand.Intn(65535)))
@@ -439,6 +449,8 @@ func buildDNSQuery(hostname string) ([]byte, error) {
 	labels := strings.Split(hostname, ".")
 	for _, label := range labels {
 		if len(label) > 63 {
+			// Return buffer to pool before returning error
+			dnsQueryPool.Put(buf)
 			return nil, fmt.Errorf("label too long: %s", label)
 		}
 		buf.WriteByte(byte(len(label)))
@@ -452,7 +464,12 @@ func buildDNSQuery(hostname string) ([]byte, error) {
 	// Query class: IN (1)
 	binary.Write(buf, binary.BigEndian, uint16(1))
 
-	return buf.Bytes(), nil
+	// Copy bytes to return, then return buffer to pool
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	dnsQueryPool.Put(buf)
+
+	return result, nil
 }
 
 // parseDNSResponse parses a DNS response

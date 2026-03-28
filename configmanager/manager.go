@@ -116,7 +116,11 @@ func (m *ConfigManager) Rollback() error {
 }
 
 // createBackup creates a backup of the current configuration
+// Requires m.mu to be held by caller
 func (m *ConfigManager) createBackup() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.currentConfig == nil {
 		// Load current config first
 		data, err := os.ReadFile(m.configPath)

@@ -2,6 +2,7 @@
 package pool
 
 import (
+	"math/bits"
 	"sync"
 	"sync/atomic"
 )
@@ -87,14 +88,26 @@ func (pp *packetPool) PutPacket(buf []byte) {
 }
 
 // sizeIndex returns the pool index for a given size
+// Uses O(1) bit manipulation instead of linear search for better performance
 func (pp *packetPool) sizeIndex(size int) int {
-	// Binary search for appropriate size class
-	for i, classSize := range sizeClasses {
-		if size <= classSize {
-			return i
-		}
+	if size <= 64 {
+		return 0
 	}
-	return len(sizeClasses) - 1 // Use largest pool
+	if size > 2097152 {
+		return 15 // Use largest pool
+	}
+	// Use bits.Len to find the smallest power of 2 that fits the size
+	// sizeClasses are roughly powers of 2, so we can use bit position
+	// 64 = 2^6, 128 = 2^7, 256 = 2^8, etc.
+	pos := bits.Len(uint(size - 1)) // -1 to handle exact powers of 2
+	idx := pos - 6                  // Adjust for starting at 64 (2^6)
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > 15 {
+		idx = 15
+	}
+	return idx
 }
 
 // Stats returns allocation statistics for monitoring

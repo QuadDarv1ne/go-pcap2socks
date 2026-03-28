@@ -422,28 +422,60 @@ func (bp *BatchProcessor) PutBatch(batch []*Packet) {
 }
 
 // RecvBatch receives a batch of packets with improved throughput
-// Returns the number of packets received
+// Uses timer-based waiting instead of busy-wait polling
 func (bp *BatchProcessor) RecvBatch(batch []*Packet) (int, error) {
 	count := 0
 	deadline := time.Now().Add(MaxBatchWait)
+	timer := time.NewTimer(MaxBatchWait)
+	defer timer.Stop()
 
 	for count < len(batch) {
-		// Check timeout
-		if time.Now().After(deadline) && count > 0 {
+		// Calculate remaining wait time
+		remaining := time.Until(deadline)
+		if remaining <= 0 && count > 0 {
 			break
 		}
 
-		// Receive packet
-		packet, err := bp.handle.Recv()
-		if err != nil {
+		// Reset timer for remaining duration
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(remaining)
+
+		// Use channel-based receive with timeout
+		type recvResult struct {
+			pkt *Packet
+			err error
+		}
+		resultChan := make(chan recvResult, 1)
+
+		go func() {
+			pkt, err := bp.handle.Recv()
+			resultChan <- recvResult{pkt: pkt, err: err}
+		}()
+
+		select {
+		case result := <-resultChan:
+			if result.err != nil {
+				if count > 0 {
+					break
+				}
+				return 0, result.err
+			}
+			batch[count] = result.pkt
+			count++
+			// Reset deadline on successful receive
+			deadline = time.Now().Add(MaxBatchWait)
+		case <-timer.C:
+			// Timeout - return what we have
 			if count > 0 {
 				break
 			}
-			return 0, err
+			return 0, nil
 		}
-
-		batch[count] = packet
-		count++
 	}
 
 	return count, nil
@@ -478,6 +510,9 @@ func (bp *BatchProcessor) SendBatch(batch []*Packet, count int) error {
 // and sends them to the batch channel
 func (bp *BatchProcessor) StartBatchReader() {
 	go func() {
+		errorDelay := time.Duration(0)
+		maxDelay := time.Second
+
 		for {
 			select {
 			case <-bp.handle.stopChan:
@@ -489,9 +524,22 @@ func (bp *BatchProcessor) StartBatchReader() {
 				if err != nil {
 					slog.Debug("Batch receive error", "error", err)
 					bp.PutBatch(batch)
-					time.Sleep(BatchTimeout)
+
+					// Exponential backoff on error instead of busy-wait
+					if errorDelay == 0 {
+						errorDelay = BatchTimeout
+					} else {
+						errorDelay *= 2
+						if errorDelay > maxDelay {
+							errorDelay = maxDelay
+						}
+					}
+					time.Sleep(errorDelay)
 					continue
 				}
+
+				// Reset error delay on success
+				errorDelay = 0
 
 				if count > 0 {
 					bp.batchChan <- batch[:count]

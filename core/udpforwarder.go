@@ -2,13 +2,13 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"net"
 	"net/netip"
 	"os"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -138,10 +138,6 @@ type UDPForwarder struct {
 	stack  *stack.Stack
 	udpNat *udpnat.Service[netip.AddrPort]
 
-	// cache
-	cacheProto tcpip.NetworkProtocolNumber
-	cacheID    stack.TransportEndpointID
-
 	// Session tracking
 	sessionCount atomic.Int32
 	droppedCount atomic.Uint64
@@ -178,10 +174,13 @@ func (f *UDPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.Pac
 	var upstreamMetadata M.Metadata
 	upstreamMetadata.Source = M.SocksaddrFrom(AddrFromAddress(id.RemoteAddress), id.RemotePort)
 	upstreamMetadata.Destination = M.SocksaddrFrom(AddrFromAddress(id.LocalAddress), id.LocalPort)
+	
+	// Determine protocol locally without storing in shared field
+	var proto tcpip.NetworkProtocolNumber
 	if upstreamMetadata.Source.IsIPv4() {
-		f.cacheProto = header.IPv4ProtocolNumber
+		proto = header.IPv4ProtocolNumber
 	} else {
-		f.cacheProto = header.IPv6ProtocolNumber
+		proto = header.IPv6ProtocolNumber
 	}
 
 	// Reuse buffer instead of copying
@@ -190,42 +189,51 @@ func (f *UDPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.Pac
 	gBuffer.Apply(func(view *buffer.View) {
 		sBuffer.Write(view.AsSlice())
 	})
+	// Release gBuffer after copying to prevent memory leak
+	gBuffer.Release()
 
-	f.cacheID = id
 	f.udpNat.NewPacket(
 		f.ctx,
 		upstreamMetadata.Source.AddrPort(),
 		sBuffer,
 		upstreamMetadata,
-		f.newUDPConn,
+		func(natConn N.PacketConn) N.PacketWriter {
+			return f.newUDPConnWithID(natConn, id, proto)
+		},
 	)
 
 	return true
 }
 
-// DecrSessionCount decrements the session counter (called when UDP session ends)
-func (f *UDPForwarder) DecrSessionCount() {
-	f.sessionCount.Add(-1)
-}
-
-func (f *UDPForwarder) newUDPConn(natConn N.PacketConn) N.PacketWriter {
+// newUDPConnWithID creates a new UDP connection with explicit ID and protocol
+// This eliminates race condition from shared cacheProto/cacheID fields
+func (f *UDPForwarder) newUDPConnWithID(natConn N.PacketConn, id stack.TransportEndpointID, proto tcpip.NetworkProtocolNumber) N.PacketWriter {
 	// Increment session counter only when new connection is created
 	f.sessionCount.Add(1)
 
 	// Create a wrapper that decrements the counter when the connection is closed
 	return &UDPBackWriter{
 		stack:         f.stack,
-		source:        f.cacheID.RemoteAddress,
-		sourcePort:    f.cacheID.RemotePort,
-		sourceNetwork: f.cacheProto,
+		source:        id.RemoteAddress,
+		sourcePort:    id.RemotePort,
+		sourceNetwork: proto,
 		onClose: func() {
 			f.sessionCount.Add(-1)
 		},
 	}
 }
 
+// newUDPConn is deprecated - use newUDPConnWithID instead
+// Kept for backward compatibility but should not be used
+func (f *UDPForwarder) newUDPConn(natConn N.PacketConn) N.PacketWriter {
+	// This method is deprecated and will cause race conditions if used
+	// Use newUDPConnWithID instead
+	return f.newUDPConnWithID(natConn, stack.TransportEndpointID{}, 0)
+}
+
 type UDPBackWriter struct {
-	access        sync.Mutex
+	// Note: No mutex needed - gVisor stack is internally thread-safe
+	// Removing mutex eliminates contention in hot path for high-concurrency UDP
 	stack         *stack.Stack
 	source        tcpip.Address
 	sourcePort    uint16
@@ -235,6 +243,11 @@ type UDPBackWriter struct {
 }
 
 func (w *UDPBackWriter) WritePacket(packetBuffer *buf.Buffer, destination M.Socksaddr) error {
+	// Check closed status without lock (atomic is sufficient)
+	if w.closed.Load() {
+		return errors.New("connection closed")
+	}
+
 	if !destination.IsIP() {
 		return E.Cause(os.ErrInvalid, "invalid destination")
 	} else if destination.IsIPv4() && w.sourceNetwork == header.IPv6ProtocolNumber {

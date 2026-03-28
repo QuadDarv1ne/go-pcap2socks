@@ -89,6 +89,7 @@ type routeCacheEntry struct {
 //   - Cache hit: ~80ns/op (optimized with sync.Map for read-heavy workloads)
 //   - Thread-safe with atomic counters for hit/miss statistics
 //   - Uses sync.Map for lock-free reads in hot path
+//   - Uses sync.Pool for zero-allocation key building in hot path
 type routeCache struct {
 	entries sync.Map // map[string]*routeCacheEntry
 	maxSize int
@@ -96,12 +97,18 @@ type routeCache struct {
 	hits    atomic.Uint64 // atomic counter for hits
 	misses  atomic.Uint64 // atomic counter for misses
 	size    atomic.Int32  // approximate size for eviction
+	keyPool sync.Pool   // pool of byte slices for key building
 }
 
 func newRouteCache(maxSize int, ttl time.Duration) *routeCache {
 	return &routeCache{
 		maxSize: maxSize,
 		ttl:     ttl,
+		keyPool: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 0, 64)
+			},
+		},
 	}
 }
 
@@ -188,15 +195,16 @@ func (c *routeCache) len() int32 {
 }
 
 // buildKey creates a cache key for routing decision
-// Optimized for minimal allocations using pre-sized buffer and string builder
+// Uses sync.Pool for zero-allocation buffer reuse in hot path
 // Format: proto:srcIP:srcPort:dstIP:dstPort
 // Max size: 4 + 16 + 1 + 5 + 1 + 16 + 1 + 5 = 49 bytes for IPv6
 func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dstPort uint16) string {
-	// Pre-allocate buffer with known size to avoid reallocations
-	// Using byte slice with exact capacity to avoid string builder overhead
-	buf := make([]byte, 0, 50)
+	// Get buffer from pool (zero allocation for hot path)
+	buf := c.keyPool.Get().([]byte)
+	buf = buf[:0] // Reset length, keep capacity
 
 	buf = append(buf, protocol...)
+	buf = append(buf, ':')
 	buf = append(buf, srcIP...)
 	buf = append(buf, ':')
 	buf = strconv.AppendUint(buf, uint64(srcPort), 10)
@@ -204,7 +212,16 @@ func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dst
 	buf = append(buf, dstIP...)
 	buf = append(buf, ':')
 	buf = strconv.AppendUint(buf, uint64(dstPort), 10)
-	return unsafe.String(unsafe.SliceData(buf), len(buf))
+
+	// Convert to string using unsafe to avoid copy
+	result := unsafe.String(unsafe.SliceData(buf), len(buf))
+
+	// Return buffer to pool for reuse
+	// Reset length but keep capacity for next use
+	buf = buf[:cap(buf)]
+	c.keyPool.Put(buf)
+
+	return result
 }
 
 // Router is the central component that routes network traffic through appropriate proxies.

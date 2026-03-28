@@ -1,4 +1,4 @@
-// Package tunnel provides network tunneling functionality.
+// Package tunnel provides network tunnel functionality.
 package tunnel
 
 import (
@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	alog "github.com/anacrolix/log"
@@ -41,6 +40,14 @@ var (
 	upnpCacheMu      sync.RWMutex
 	upnpCachedDevices []upnp.Device
 	upnpCacheExpiry   time.Time
+
+	// udpBufferPool provides zero-copy UDP buffer allocation
+	// 64KB buffers are expensive, so we pool them
+	udpBufferPool = sync.Pool{
+		New: func() any {
+			return make([]byte, udpRelayBufferSize)
+		},
+	}
 )
 
 type UDPMapping struct {
@@ -183,20 +190,33 @@ func HandleUDPConn(uc adapter.UDPConn) {
 func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	buf := pool.Get(udpRelayBufferSize)
-	defer pool.Put(buf)
+	// Get buffer from pool instead of allocating
+	buf := udpBufferPool.Get().([]byte)
+	defer udpBufferPool.Put(buf)
+
+	// Set deadlines ONCE at session start to avoid syscall overhead
+	// Updating deadline on every packet is expensive (2000+ syscalls/sec for gaming traffic)
+	deadline := time.Now().Add(UdpSessionTimeout)
+	from.SetReadDeadline(deadline)
+	to.SetWriteDeadline(deadline)
 
 	for {
-		from.SetReadDeadline(time.Now().Add(UdpSessionTimeout))
 		n, dest, err := from.ReadFrom(buf)
 		if err != nil {
-			if errors.Is(err, io.ErrClosedPipe) || !errors.Is(err, os.ErrDeadlineExceeded) {
+			if errors.Is(err, io.ErrClosedPipe) {
 				return
+			}
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				// Session timeout - extend deadline and continue
+				// This handles idle gaming sessions that resume after timeout
+				deadline := time.Now().Add(UdpSessionTimeout)
+				from.SetReadDeadline(deadline)
+				to.SetWriteDeadline(deadline)
+				continue
 			}
 			return
 		}
 
-		to.SetWriteDeadline(time.Now().Add(UdpSessionTimeout))
 		if _, err := to.WriteTo(buf[:n], dest); err != nil {
 			return
 		}

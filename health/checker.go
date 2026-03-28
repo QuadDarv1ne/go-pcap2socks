@@ -5,12 +5,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+// init initializes random seed for jitter calculation
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // ProbeType represents the type of health probe
 type ProbeType int
@@ -211,16 +217,23 @@ type HealthChecker struct {
 	recoveryThreshold int
 	stopChan          chan struct{}
 	wg                sync.WaitGroup
-	
+
 	// Statistics
 	consecutiveFailures atomic.Int32
 	totalChecks         atomic.Int64
 	totalRecoveries     atomic.Int64
 	lastCheckTime       atomic.Value // time.Time
 	lastSuccessTime     atomic.Value // time.Time
-	
+
+	// Exponential backoff for repeated failures with jitter
+	backoffInterval   atomic.Int64 // nanoseconds
+	minBackoff        time.Duration
+	maxBackoff        time.Duration
+	backoffMultiplier float64
+	backoffJitter     float64 // Random jitter factor (0.0-1.0)
+
 	// Callbacks
-	onRecoveryNeeded func()
+	onRecoveryNeeded   func()
 	onRecoveryComplete func(error)
 }
 
@@ -228,15 +241,23 @@ type HealthChecker struct {
 type HealthCheckerConfig struct {
 	CheckInterval     time.Duration
 	RecoveryThreshold int // Number of consecutive failures before triggering recovery
+	MinBackoff        time.Duration // Minimum backoff between checks after failure
+	MaxBackoff        time.Duration // Maximum backoff between checks
+	BackoffMultiplier float64       // Multiplier for exponential backoff
+	BackoffJitter     float64       // Jitter factor (0.0-1.0) to prevent thundering herd
 	OnRecoveryNeeded  func()
 	OnRecoveryComplete func(error)
 }
 
-// DefaultHealthCheckerConfig returns default configuration
+// DefaultHealthCheckerConfig returns default configuration with exponential backoff
 func DefaultHealthCheckerConfig() *HealthCheckerConfig {
 	return &HealthCheckerConfig{
 		CheckInterval:     10 * time.Second,
 		RecoveryThreshold: 3,
+		MinBackoff:        5 * time.Second,
+		MaxBackoff:        2 * time.Minute,
+		BackoffMultiplier: 2.0,
+		BackoffJitter:     0.1, // 10% jitter to prevent thundering herd
 	}
 }
 
@@ -247,17 +268,22 @@ func NewHealthChecker(cfg *HealthCheckerConfig) *HealthChecker {
 	}
 
 	hc := &HealthChecker{
-		probes:            make([]Probe, 0),
-		checkInterval:     cfg.CheckInterval,
-		recoveryThreshold: cfg.RecoveryThreshold,
-		stopChan:          make(chan struct{}),
-		onRecoveryNeeded:  cfg.OnRecoveryNeeded,
+		probes:             make([]Probe, 0),
+		checkInterval:      cfg.CheckInterval,
+		recoveryThreshold:  cfg.RecoveryThreshold,
+		stopChan:           make(chan struct{}),
+		onRecoveryNeeded:   cfg.OnRecoveryNeeded,
 		onRecoveryComplete: cfg.OnRecoveryComplete,
+		minBackoff:         cfg.MinBackoff,
+		maxBackoff:         cfg.MaxBackoff,
+		backoffMultiplier:  cfg.BackoffMultiplier,
+		backoffJitter:      cfg.BackoffJitter,
 	}
-	
+
 	hc.lastCheckTime.Store(time.Time{})
 	hc.lastSuccessTime.Store(time.Time{})
-	
+	hc.backoffInterval.Store(int64(cfg.MinBackoff))
+
 	return hc
 }
 
@@ -304,21 +330,22 @@ func (hc *HealthChecker) Stop() {
 	slog.Info("Health checker stopped")
 }
 
-// run is the main health check loop
+// run is the main health check loop with exponential backoff and jitter
 func (hc *HealthChecker) run(ctx context.Context) {
-	ticker := time.NewTicker(hc.checkInterval)
-	defer ticker.Stop()
-	
 	// Run initial check immediately
 	hc.runChecks(ctx)
-	
+
 	for {
+		// Calculate delay with jitter to prevent thundering herd
+		baseBackoff := time.Duration(hc.backoffInterval.Load())
+		delay := hc.applyJitter(baseBackoff)
+
 		select {
 		case <-hc.stopChan:
 			return
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-time.After(delay):
 			hc.runChecks(ctx)
 		}
 	}
@@ -374,17 +401,64 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 	// Check if recovery is needed
 	if len(failedProbes) > 0 {
 		failures := hc.consecutiveFailures.Add(1)
+		
+		// Apply exponential backoff on failures
+		hc.applyBackoff()
+		
 		if failures >= int32(hc.recoveryThreshold) {
 			slog.Error("Health check failed consecutively, triggering recovery",
 				"failures", failures,
 				"threshold", hc.recoveryThreshold,
-				"failed_probes", len(failedProbes))
+				"failed_probes", len(failedProbes),
+				"backoff", time.Duration(hc.backoffInterval.Load()))
 			hc.triggerRecovery(ctx, failedProbes)
 		}
 	} else {
-		// Reset counter on success
+		// Reset counter and backoff on success
 		hc.consecutiveFailures.Store(0)
+		hc.resetBackoff()
 	}
+}
+
+// applyBackoff increases the backoff interval exponentially with cap
+func (hc *HealthChecker) applyBackoff() {
+	current := time.Duration(hc.backoffInterval.Load())
+	next := time.Duration(float64(current) * hc.backoffMultiplier)
+
+	if next > hc.maxBackoff {
+		next = hc.maxBackoff
+	}
+
+	hc.backoffInterval.Store(int64(next))
+
+	slog.Debug("Health check backoff increased",
+		"current_backoff", next,
+		"consecutive_failures", hc.consecutiveFailures.Load())
+}
+
+// applyJitter adds random jitter to backoff to prevent thundering herd
+// Jitter is ±backoffJitter percentage of the base backoff
+func (hc *HealthChecker) applyJitter(base time.Duration) time.Duration {
+	if hc.backoffJitter <= 0 {
+		return base
+	}
+
+	// Calculate jitter range
+	jitterRange := float64(base) * hc.backoffJitter
+	// Random jitter between -jitterRange and +jitterRange
+	jitter := (rand.Float64()*2 - 1) * jitterRange
+
+	result := float64(base) + jitter
+	if result < float64(hc.minBackoff) {
+		result = float64(hc.minBackoff)
+	}
+
+	return time.Duration(result)
+}
+
+// resetBackoff resets the backoff interval to minimum after success
+func (hc *HealthChecker) resetBackoff() {
+	hc.backoffInterval.Store(int64(hc.minBackoff))
 }
 
 // triggerRecovery initiates the recovery process
@@ -426,7 +500,7 @@ func (hc *HealthChecker) triggerRecovery(ctx context.Context, failedProbes []Pro
 	}
 }
 
-// GetStats returns health checker statistics
+// GetStats returns health checker statistics with backoff details
 func (hc *HealthChecker) GetStats() HealthStats {
 	return HealthStats{
 		TotalChecks:         hc.totalChecks.Load(),
@@ -435,6 +509,11 @@ func (hc *HealthChecker) GetStats() HealthStats {
 		LastCheckTime:       hc.lastCheckTime.Load().(time.Time),
 		LastSuccessTime:     hc.lastSuccessTime.Load().(time.Time),
 		ProbeCount:          len(hc.probes),
+		CurrentBackoff:      time.Duration(hc.backoffInterval.Load()),
+		MinBackoff:          hc.minBackoff,
+		MaxBackoff:          hc.maxBackoff,
+		BackoffMultiplier:   hc.backoffMultiplier,
+		BackoffJitter:       hc.backoffJitter,
 	}
 }
 
@@ -446,6 +525,11 @@ type HealthStats struct {
 	LastCheckTime       time.Time
 	LastSuccessTime     time.Time
 	ProbeCount          int
+	CurrentBackoff      time.Duration `json:"current_backoff"`
+	MinBackoff          time.Duration `json:"min_backoff"`
+	MaxBackoff          time.Duration `json:"max_backoff"`
+	BackoffMultiplier   float64       `json:"backoff_multiplier"`
+	BackoffJitter       float64       `json:"backoff_jitter"`
 }
 
 // IsHealthy returns true if the system is currently healthy

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +18,7 @@ var (
 )
 
 // Collector collects and exports Prometheus metrics
+// All fields are atomic for lock-free operation
 type Collector struct {
 	statsStore        *stats.Store
 	startTime         time.Time
@@ -31,7 +31,7 @@ type Collector struct {
 	errorsTotal       atomic.Uint64
 	cacheHits         atomic.Uint64
 	cacheMisses       atomic.Uint64
-	writeMu           sync.Mutex // Protects WriteMetrics only
+	// Note: No mutex needed - all fields are atomic and statsStore is thread-safe
 }
 
 // NewCollector creates a new metrics collector
@@ -81,21 +81,19 @@ func (c *Collector) RecordCacheMiss() {
 }
 
 // WriteMetrics writes Prometheus format metrics to writer
+// Lock-free: all fields are atomic and statsStore is thread-safe
 func (c *Collector) WriteMetrics(w io.Writer) {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-
-	// Get stats from store
+	// Load atomic values FIRST (snapshot, no lock needed)
 	var totalUpload, totalDownload, totalPackets uint64
 	var activeDevices int
 	if c.statsStore != nil {
+		// statsStore is thread-safe
 		_, totalUpload, totalDownload, totalPackets = c.statsStore.GetTotalTraffic()
 		activeDevices = c.statsStore.GetActiveDeviceCount()
 	}
 
 	uptime := time.Since(c.startTime).Seconds()
 
-	// Load atomic values
 	connectionsTotal := c.connectionsTotal.Load()
 	connectionsActive := c.connectionsActive.Load()
 	bytesTotal := c.bytesTotal.Load()

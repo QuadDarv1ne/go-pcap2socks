@@ -971,13 +971,24 @@ func ErrorResponse(message string) APIResponse {
 	}
 }
 
+// deviceSlicePool provides pooling for Device slices to reduce allocations
+// /api/status is called frequently, so we pool the slice allocation
+var deviceSlicePool = sync.Pool{
+	New: func() any {
+		return make([]Device, 0, 256)
+	},
+}
+
 func (s *Server) getDevices() []Device {
 	if s.statsStore == nil {
 		return []Device{}
 	}
 
 	devicesStats := s.statsStore.GetAllDevices()
-	devices := make([]Device, 0, len(devicesStats))
+
+	// Get slice from pool
+	devices := deviceSlicePool.Get().([]Device)
+	devices = devices[:0] // Reset length, keep capacity
 
 	for _, ds := range devicesStats {
 		ds.RLock()
@@ -990,6 +1001,8 @@ func (s *Server) getDevices() []Device {
 		ds.RUnlock()
 	}
 
+	// Note: Caller should return slice to pool after use
+	// For now, let GC handle it as this is a read-only snapshot
 	return devices
 }
 

@@ -27,6 +27,7 @@ type Server struct {
 	smartDHCP      *auto.SmartDHCPManager     // Smart DHCP with device-based IP allocation
 	deviceProfiles sync.Map // map[string]auto.DeviceProfile
 	leaseCount     atomic.Int32
+	wg             sync.WaitGroup // WaitGroup for graceful shutdown
 }
 
 // ServerOption is a function that configures the server
@@ -84,10 +85,18 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 	}
 
 	// Start lease cleanup goroutine
-	go s.cleanupLoop()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.cleanupLoop()
+	}()
 
 	// Start metrics logging goroutine
-	go s.metricsLoop()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.metricsLoop()
+	}()
 
 	return s
 }
@@ -204,12 +213,15 @@ func (s *Server) handleRelease(msg *DHCPMessage) ([]byte, error) {
 	macStr := msg.ClientHardware.String()
 	s.metrics.RecordRelease()
 
-	s.leases.Delete(macStr)
-	s.leaseCount.Add(-1)
+	// Only decrement if lease actually existed
+	if _, exists := s.leases.Load(macStr); exists {
+		s.leases.Delete(macStr)
+		s.leaseCount.Add(-1)
 
-	// Delete from persistent database
-	if s.leaseDB != nil {
-		s.leaseDB.DeleteLease(msg.ClientHardware)
+		// Delete from persistent database
+		if s.leaseDB != nil {
+			s.leaseDB.DeleteLease(msg.ClientHardware)
+		}
 	}
 
 	// No response needed for RELEASE
@@ -255,24 +267,27 @@ func (s *Server) buildResponse(request *DHCPMessage, messageType uint8, ip net.I
 		// Router (gateway)
 		response.Options[OptionRouter] = s.config.ServerIP.To4()
 
-		// DNS servers
+		// DNS servers - use buffer pool efficiently
 		if len(s.config.DNSServers) > 0 {
 			dnsSize := len(s.config.DNSServers) * 4
 			dnsBuf := pool.Get(dnsSize)
-			dnsBytes := dnsBuf[:0]
+			// Write directly to buffer without append
+			n := 0
 			for _, dns := range s.config.DNSServers {
-				dnsBytes = append(dnsBytes, dns.To4()...)
+				copy(dnsBuf[n:n+4], dns.To4())
+				n += 4
 			}
 			// Copy to response and return buffer to pool
-			response.Options[OptionDNSServer] = append([]byte(nil), dnsBytes...)
+			response.Options[OptionDNSServer] = append([]byte(nil), dnsBuf[:dnsSize]...)
 			pool.Put(dnsBuf)
 		}
 
-		// Lease time
+		// Lease time - use buffer pool efficiently
 		leaseTime := uint32(s.config.LeaseDuration.Seconds())
 		leaseTimeBuf := pool.Get(4)
 		binary.BigEndian.PutUint32(leaseTimeBuf[:4], leaseTime)
 		response.Options[OptionLeaseTime] = append([]byte(nil), leaseTimeBuf[:4]...)
+		pool.Put(leaseTimeBuf)
 	}
 
 	return response.Marshal()
@@ -421,30 +436,37 @@ func (s *Server) cleanupLoop() {
 }
 
 func (s *Server) cleanupLeases() {
-	deleted := 0
 	now := time.Now()
+	deleted := 0
 
 	s.leases.Range(func(k, v any) bool {
 		mac := k.(string)
 		lease := v.(*DHCPLease)
 		if now.After(lease.ExpiresAt) {
 			s.leases.Delete(mac)
-			s.leaseCount.Add(-1)
 			deleted++
 			slog.Debug("DHCP lease expired", "mac", mac, "ip", lease.IP.String())
 		}
 		return true
 	})
 
-	// Sync with persistent database
-	if deleted > 0 && s.leaseDB != nil {
-		s.leaseDB.CleanupExpired()
+	// Decrement counter once after counting all deletions
+	if deleted > 0 {
+		s.leaseCount.Add(-int32(deleted))
+
+		// Sync with persistent database
+		if s.leaseDB != nil {
+			s.leaseDB.CleanupExpired()
+		}
 	}
 }
 
-// Stop stops the DHCP server
+// Stop stops the DHCP server and waits for all goroutines to finish
 func (s *Server) Stop() {
 	close(s.stopChan)
+
+	// Wait for all goroutines to finish
+	s.wg.Wait()
 
 	// Save leases to persistent database
 	if s.leaseDB != nil {
@@ -452,6 +474,8 @@ func (s *Server) Stop() {
 			slog.Error("Failed to save lease database on stop", "err", err)
 		}
 	}
+
+	slog.Info("DHCP server stopped")
 }
 
 // Start starts the DHCP server (cleanup loop already started in NewServer)

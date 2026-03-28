@@ -39,8 +39,12 @@ func NewAllocator() *Allocator {
 // Optimized for hot path with inline hint
 //go:inline
 func (alloc *Allocator) Get(size int) []byte {
+	// Handle zero or negative size explicitly - return empty non-nil slice
+	if size <= 0 {
+		return make([]byte, 0)
+	}
 	// Fast path: inline bounds check
-	if size < minBufferSize || size > maxBufferSize {
+	if size > maxBufferSize {
 		return nil
 	}
 

@@ -303,22 +303,13 @@ func (s *Store) getDeviceByMAC(mac string) (*DeviceStats, string, bool) {
 }
 
 // forEachDeviceByMAC executes fn for device(s) matching the MAC address
-// Uses MAC index for fast lookup, falls back to full scan if index miss
+// Uses MAC index for O(1) lookup. No fallback to full scan on index miss.
 func (s *Store) forEachDeviceByMAC(mac string, fn func(*DeviceStats) bool) {
-	// Fast path: use MAC index for O(1) lookup
+	// Use MAC index for O(1) lookup
 	if device, _, found := s.getDeviceByMAC(mac); found {
 		fn(device)
-		return
 	}
-
-	// Fallback: search through devices if index miss (shouldn't happen normally)
-	s.devices.Range(func(k, v any) bool {
-		device := v.(*DeviceStats)
-		if device.MAC == mac {
-			return fn(device)
-		}
-		return true
-	})
+	// No fallback on index miss - index is authoritative
 }
 
 // SetHostname sets the hostname for a device identified by MAC address

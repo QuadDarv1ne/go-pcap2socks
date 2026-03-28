@@ -62,7 +62,6 @@ func (p LoadBalancePolicy) String() string {
 // connections. The counter is automatically incremented/decremented via
 // trackedConn wrappers.
 type ProxyGroup struct {
-	mu       sync.RWMutex
 	proxies  []Proxy
 	policy   LoadBalancePolicy
 	current  int32 // atomic counter for round-robin
@@ -305,32 +304,45 @@ func (c *trackedConn) Close() error {
 }
 
 // DialContext dials a TCP connection through the proxy group
-// Optimized: removed RLock in Failover path since g.proxies is read-only
+// Optimized: use selectProxy once and reduce redundant health checks
 func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
 	if g.policy == Failover {
-		// For failover policy, try each proxy until one succeeds
-		startIdx := int(atomic.LoadInt32(&g.activeIndex))
-		for i := 0; i < len(g.proxies); i++ {
-			idx := (startIdx + i) % len(g.proxies)
+		// Use selectProxy to get current active proxy
+		proxy, idx, err := g.selectProxy()
+		if err != nil {
+			return nil, err
+		}
 
-			if !g.healthStatus[idx].Load() {
-				continue // Skip unhealthy proxies
+		// Try active proxy first
+		conn, err := proxy.DialContext(ctx, metadata)
+		if err == nil {
+			return conn, nil
+		}
+
+		// Mark as unhealthy on failure
+		g.healthStatus[idx].Store(false)
+		slog.Debug("Active proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
+
+		// Fallback: try other proxies
+		for i := 0; i < len(g.proxies); i++ {
+			fallbackIdx := (idx + i + 1) % len(g.proxies)
+			if !g.healthStatus[fallbackIdx].Load() {
+				continue
 			}
 
-			// No lock needed - g.proxies is read-only after initialization
-			proxy := g.proxies[idx]
-
-			conn, err := proxy.DialContext(ctx, metadata)
+			fallbackProxy := g.proxies[fallbackIdx]
+			conn, err := fallbackProxy.DialContext(ctx, metadata)
 			if err == nil {
+				// Update active index on success
+				atomic.StoreInt32(&g.activeIndex, int32(fallbackIdx))
 				return conn, nil
 			}
 
-			// Mark as unhealthy using atomic operation to avoid race condition
-			g.healthStatus[idx].CompareAndSwap(true, false)
-			slog.Debug("Proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
+			g.healthStatus[fallbackIdx].Store(false)
+			slog.Debug("Fallback proxy connection failed", "group", g.name, "proxy", fallbackProxy.Addr(), "err", err)
 		}
 
-		// All proxies failed
+		// All proxies failed - update active index for next attempt
 		g.updateActiveIndex()
 		return nil, fmt.Errorf("all proxies in failover group are unavailable")
 	}
@@ -348,9 +360,13 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 	if err != nil {
 		// Decrement on failure
 		g.activeConns[idx].Add(-1)
-		// Mark as unhealthy using atomic operation to avoid race condition
-		g.healthStatus[idx].CompareAndSwap(true, false)
+		// Mark as unhealthy
+		g.healthStatus[idx].Store(false)
 		slog.Debug("Proxy connection failed", "group", g.name, "proxy", proxy.Addr(), "err", err)
+
+		if g.policy == Failover {
+			g.updateActiveIndex()
+		}
 		return nil, err
 	}
 
@@ -436,18 +452,16 @@ func (g *ProxyGroup) GetPolicy() LoadBalancePolicy {
 }
 
 // GetProxyCount returns the number of proxies in the group
+// Optimized: no lock needed since g.proxies is read-only after initialization
 func (g *ProxyGroup) GetProxyCount() int {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 	return len(g.proxies)
 }
 
 // GetStats returns proxy group statistics for monitoring
 // Returns: proxy count, healthy count, active connections per proxy
+// Optimized: no lock needed since g.proxies is read-only after initialization
 func (g *ProxyGroup) GetStats() (proxyCount, healthyCount int, activeConns []int32) {
-	g.mu.RLock()
 	proxyCount = len(g.proxies)
-	g.mu.RUnlock()
 
 	healthyCount = 0
 	activeConns = make([]int32, proxyCount)

@@ -15,13 +15,16 @@ import (
 )
 
 // TokenBucket implements token bucket algorithm for rate limiting
+// Uses atomic operations for lock-free token management in hot path
 type TokenBucket struct {
-	tokens     float64   // Current tokens
-	maxTokens  float64   // Maximum tokens (burst capacity)
-	refillRate float64   // Tokens per second
-	lastRefill time.Time // Last token refill time
-	mu         sync.Mutex
+	tokens     atomic.Uint64   // Current tokens (fixed-point: tokens * 1000)
+	maxTokens  uint64          // Maximum tokens (burst capacity, fixed-point)
+	refillRate uint64          // Tokens per second (fixed-point)
+	lastRefill atomic.Int64    // Last refill time (nanoseconds since epoch)
 }
+
+// fixedPointMultiplier is used for sub-token precision in atomic operations
+const fixedPointMultiplier = 1000
 
 // NewTokenBucket creates a new token bucket
 // rateBytesPerSecond: bandwidth limit in bytes per second
@@ -30,42 +33,70 @@ func NewTokenBucket(rateBytesPerSecond uint64, burstSeconds float64) *TokenBucke
 	if burstSeconds <= 0 {
 		burstSeconds = 1.0 // Default 1 second burst
 	}
-	
-	maxTokens := float64(rateBytesPerSecond) * burstSeconds
-	
-	return &TokenBucket{
-		tokens:     maxTokens, // Start full
+
+	maxTokens := uint64(float64(rateBytesPerSecond) * burstSeconds * fixedPointMultiplier)
+
+	tb := &TokenBucket{
 		maxTokens:  maxTokens,
-		refillRate: float64(rateBytesPerSecond),
-		lastRefill: time.Now(),
+		refillRate: uint64(float64(rateBytesPerSecond) * fixedPointMultiplier),
 	}
+	tb.initTokens(maxTokens)
+	return tb
+}
+
+func (tb *TokenBucket) initTokens(maxTokens uint64) {
+	tb.tokens.Store(maxTokens)
+	tb.lastRefill.Store(time.Now().UnixNano())
 }
 
 // Take attempts to take n tokens from the bucket
 // Returns number of tokens actually taken (may be less if insufficient)
+// Lock-free implementation using atomic CAS operations
 func (tb *TokenBucket) Take(n int) int {
-	tb.mu.Lock()
-	defer tb.mu.Unlock()
-	
-	// Refill tokens based on elapsed time
-	now := time.Now()
-	elapsed := now.Sub(tb.lastRefill).Seconds()
-	tb.tokens += elapsed * tb.refillRate
-	if tb.tokens > tb.maxTokens {
-		tb.tokens = tb.maxTokens
+	nFixed := uint64(n * fixedPointMultiplier)
+
+	for {
+		// Read current state
+		currentTokens := tb.tokens.Load()
+		lastRefillNano := tb.lastRefill.Load()
+
+		// Refill tokens based on elapsed time
+		now := time.Now()
+		nowNano := now.UnixNano()
+		elapsedNano := nowNano - lastRefillNano
+
+		// Calculate tokens to add (in fixed-point)
+		// refillRate is tokens/second * 1000, elapsed is in nanoseconds
+		tokensToAdd := uint64(0)
+		if elapsedNano > 0 && tb.refillRate > 0 {
+			tokensToAdd = uint64((uint64(elapsedNano) * tb.refillRate) / 1e9)
+		}
+
+		newTokens := currentTokens + tokensToAdd
+		if newTokens > tb.maxTokens {
+			newTokens = tb.maxTokens
+		}
+
+		// Try to take tokens
+		var taken uint64
+		if newTokens >= nFixed {
+			taken = nFixed
+		} else {
+			taken = newTokens
+		}
+
+		finalTokens := newTokens - taken
+
+		// CAS to update state atomically
+		if tb.tokens.CompareAndSwap(currentTokens, finalTokens) {
+			// Also update timestamp (best-effort, may race but harmless)
+			tb.lastRefill.Store(nowNano)
+
+			return int(taken / fixedPointMultiplier)
+		}
+
+		// CAS failed, retry (another goroutine updated tokens)
 	}
-	tb.lastRefill = now
-	
-	// Take tokens (or wait if insufficient)
-	if tb.tokens >= float64(n) {
-		tb.tokens -= float64(n)
-		return n
-	}
-	
-	// Return what we have (caller should handle partial reads)
-	taken := int(tb.tokens)
-	tb.tokens = 0
-	return taken
 }
 
 // Wait blocks until n tokens are available
@@ -75,14 +106,18 @@ func (tb *TokenBucket) Wait(ctx context.Context, n int) error {
 		if taken >= n {
 			return nil
 		}
-		
+
 		// Wait for tokens to refill
 		need := n - taken
-		waitTime := time.Duration(float64(need)/tb.refillRate*1000) * time.Millisecond
+		// refillRate is in fixed-point (tokens/sec * 1000)
+		// need is in normal units, so: waitTime = need / (refillRate / 1000) seconds
+		// = need * 1000 / refillRate seconds
+		// = need * 1000 * 1e9 / refillRate nanoseconds
+		waitTime := time.Duration(uint64(need)*1000*1e9/tb.refillRate) * time.Nanosecond
 		if waitTime < time.Millisecond {
 			waitTime = time.Millisecond
 		}
-		
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -105,11 +140,11 @@ type RateLimitedConn struct {
 }
 
 // BandwidthLimiter manages bandwidth limits for multiple clients
+// Uses sync.Map for lock-free client bucket access in hot path
 type BandwidthLimiter struct {
-	mu            sync.RWMutex
 	defaultLimit  uint64 // bytes per second
 	rules         []cfg.RateLimitRule
-	clientBuckets map[string]*clientBuckets // key: MAC or IP
+	clientBuckets sync.Map // map[string]*clientBuckets, key: MAC or IP
 	burstSeconds  float64
 }
 
@@ -122,11 +157,10 @@ type clientBuckets struct {
 func NewBandwidthLimiter(config *cfg.RateLimit) (*BandwidthLimiter, error) {
 	if config == nil {
 		return &BandwidthLimiter{
-			clientBuckets: make(map[string]*clientBuckets),
-			burstSeconds:  1.0,
+			burstSeconds: 1.0,
 		}, nil
 	}
-	
+
 	var defaultLimit uint64 = 0
 	if config.Default != "" {
 		var err error
@@ -135,14 +169,13 @@ func NewBandwidthLimiter(config *cfg.RateLimit) (*BandwidthLimiter, error) {
 			return nil, fmt.Errorf("parse default bandwidth: %w", err)
 		}
 	}
-	
+
 	limiter := &BandwidthLimiter{
-		defaultLimit:  defaultLimit,
-		rules:         config.Rules,
-		clientBuckets: make(map[string]*clientBuckets),
-		burstSeconds:  1.0,
+		defaultLimit: defaultLimit,
+		rules:        config.Rules,
+		burstSeconds: 1.0,
 	}
-	
+
 	return limiter, nil
 }
 
@@ -169,38 +202,28 @@ func (bl *BandwidthLimiter) getLimitForClient(mac, ip string) uint64 {
 }
 
 // getOrCreateBuckets gets or creates token buckets for a client
+// Uses sync.Map for lock-free access in hot path
 func (bl *BandwidthLimiter) getOrCreateBuckets(mac, ip string) *clientBuckets {
 	key := mac
 	if key == "" {
 		key = ip
 	}
-	
-	// Fast path - check if exists
-	bl.mu.RLock()
-	buckets, exists := bl.clientBuckets[key]
-	bl.mu.RUnlock()
-	
-	if exists {
-		return buckets
+
+	// Fast path - sync.Map Load is lock-free
+	if buckets, ok := bl.clientBuckets.Load(key); ok {
+		return buckets.(*clientBuckets)
 	}
-	
-	// Slow path - create new
-	bl.mu.Lock()
-	defer bl.mu.Unlock()
-	
-	// Double-check after acquiring write lock
-	if buckets, exists = bl.clientBuckets[key]; exists {
-		return buckets
-	}
-	
+
+	// Slow path - create new buckets
 	limit := bl.getLimitForClient(mac, ip)
-	buckets = &clientBuckets{
+	buckets := &clientBuckets{
 		read:  NewTokenBucket(limit, bl.burstSeconds),
 		write: NewTokenBucket(limit, bl.burstSeconds),
 	}
-	bl.clientBuckets[key] = buckets
-	
-	return buckets
+
+	// StoreOrLoad ensures only one bucket set is created per key
+	actual, _ := bl.clientBuckets.LoadOrStore(key, buckets)
+	return actual.(*clientBuckets)
 }
 
 // LimitConn wraps a connection with bandwidth limiting
@@ -278,9 +301,6 @@ type BandwidthStats struct {
 
 // GetClientStats returns statistics for all clients
 func (bl *BandwidthLimiter) GetClientStats() map[string]BandwidthStats {
-	bl.mu.RLock()
-	defer bl.mu.RUnlock()
-	
 	stats := make(map[string]BandwidthStats)
 	// Note: We don't track per-client stats in this implementation
 	// This would require additional bookkeeping
@@ -289,15 +309,17 @@ func (bl *BandwidthLimiter) GetClientStats() map[string]BandwidthStats {
 
 // UpdateConfig updates the bandwidth limiter configuration
 func (bl *BandwidthLimiter) UpdateConfig(config *cfg.RateLimit) error {
-	bl.mu.Lock()
-	defer bl.mu.Unlock()
-	
 	if config == nil {
 		bl.defaultLimit = 0
 		bl.rules = nil
+		// Clear all buckets using sync.Map Range
+		bl.clientBuckets.Range(func(key, value any) bool {
+			bl.clientBuckets.Delete(key)
+			return true
+		})
 		return nil
 	}
-	
+
 	if config.Default != "" {
 		limit, err := cfg.ParseBandwidth(config.Default)
 		if err != nil {
@@ -305,12 +327,15 @@ func (bl *BandwidthLimiter) UpdateConfig(config *cfg.RateLimit) error {
 		}
 		bl.defaultLimit = limit
 	}
-	
+
 	bl.rules = config.Rules
-	
+
 	// Clear existing buckets to apply new limits
-	bl.clientBuckets = make(map[string]*clientBuckets)
-	
+	bl.clientBuckets.Range(func(key, value any) bool {
+		bl.clientBuckets.Delete(key)
+		return true
+	})
+
 	return nil
 }
 
