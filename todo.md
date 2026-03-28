@@ -122,6 +122,30 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.49) - GRACEFUL SHUTDOWN & HTTP TIMEOUTS
+
+### v3.19.49 - Graceful Shutdown & HTTP Timeouts
+- **main.go**: `performGracefulShutdown()` - централизованный shutdown
+  - 12 шагов для полной остановки всех компонентов
+  - DNS resolver prefetch + DoH server
+  - ARP monitor + Health checker
+  - Hotkey manager + UPnP manager
+  - API server + WebSocket updates
+  - Router + Proxy groups
+  - Network stack + Device + DHCP server
+  - Async logs flush + Shutdown manager
+- **main.go**: HTTP server timeouts для защиты от DoS
+  - `ReadTimeout`: 15s
+  - `WriteTimeout`: 15s
+  - `IdleTimeout`: 60s
+
+**Эффект**:
+- Все компоненты корректно останавливаются
+- Нет утечек ресурсов при shutdown
+- Защита от slow client DoS атак
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
