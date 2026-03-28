@@ -1,6 +1,7 @@
 package upnp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -35,28 +36,69 @@ func NewManager(config *cfg.UPnP, internalIP string) *Manager {
 }
 
 // Start starts the UPnP manager and performs initial port forwarding
+// Implements retry logic with timeout for reliability
 func (m *Manager) Start() error {
 	if m == nil {
 		return nil
 	}
 
-	// Discover UPnP devices
-	devices, err := m.upnp.Discover()
-	if err != nil {
-		return fmt.Errorf("UPnP discovery failed: %w", err)
+	// Discover UPnP devices with retry and timeout
+	var devices []Device
+	var err error
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	for attempt := 0; attempt < 3; attempt++ {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("UPnP discovery timeout: %w", ctx.Err())
+		default:
+		}
+		
+		devices, err = m.upnp.Discover()
+		if err == nil && len(devices) > 0 {
+			break
+		}
+		
+		if attempt < 2 {
+			// Exponential backoff: 1s, 2s
+			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			slog.Debug("UPnP discovery failed, retrying", "attempt", attempt+1, "backoff", backoff, "err", err)
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("UPnP discovery timeout during backoff: %w", ctx.Err())
+			case <-time.After(backoff):
+			}
+		}
 	}
-
+	
 	if len(devices) == 0 {
-		return fmt.Errorf("no UPnP devices found")
+		return fmt.Errorf("no UPnP devices found: %w", err)
 	}
 
-	// Get external IP (ignore error, continue with port mappings)
-	_, _ = m.upnp.GetExternalIP()
+	// Get external IP with timeout
+	externalIPCtx, externalIPCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer externalIPCancel()
+	
+	done := make(chan struct{})
+	go func() {
+		_, _ = m.upnp.GetExternalIP()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		// Completed
+	case <-externalIPCtx.Done():
+		slog.Debug("UPnP GetExternalIP timeout")
+	}
 
 	// Apply port mappings if autoForward is enabled
 	if m.config.AutoForward {
 		if err := m.ApplyPortMappings(); err != nil {
 			// Log error but don't fail
+			slog.Debug("UPnP ApplyPortMappings failed", "err", err)
 		}
 	}
 
@@ -115,7 +157,7 @@ func (m *Manager) ApplyPortMappings() error {
 
 func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) error {
 	key := fmt.Sprintf("%s:%d", mapping.Protocol, mapping.ExternalPort)
-	
+
 	// Check if already mapped (lock-free)
 	if _, ok := m.activeMaps.Load(key); ok {
 		return nil
@@ -126,27 +168,43 @@ func (m *Manager) addPortMapping(mapping cfg.PortMapping, leaseDuration int) err
 		description = "go-pcap2socks"
 	}
 
-	// Add TCP mapping
+	// Add TCP mapping with retry
 	if mapping.Protocol == "TCP" || mapping.Protocol == "both" {
-		err := m.upnp.AddPortMapping("TCP", mapping.ExternalPort, mapping.InternalPort, m.internalIP, description, leaseDuration)
-		if err != nil {
-			return fmt.Errorf("TCP mapping failed: %w", err)
+		tcpKey := "TCP:" + fmt.Sprint(mapping.ExternalPort)
+		if err := m.addPortMappingWithRetry("TCP", mapping.ExternalPort, mapping.InternalPort, m.internalIP, description, leaseDuration, tcpKey); err != nil {
+			return err
 		}
-		m.activeMaps.Store("TCP:"+fmt.Sprint(mapping.ExternalPort), true)
-		m.mappingCount.Add(1)
 	}
 
-	// Add UDP mapping
+	// Add UDP mapping with retry
 	if mapping.Protocol == "UDP" || mapping.Protocol == "both" {
-		err := m.upnp.AddPortMapping("UDP", mapping.ExternalPort, mapping.InternalPort, m.internalIP, description, leaseDuration)
-		if err != nil {
-			return fmt.Errorf("UDP mapping failed: %w", err)
+		udpKey := "UDP:" + fmt.Sprint(mapping.ExternalPort)
+		if err := m.addPortMappingWithRetry("UDP", mapping.ExternalPort, mapping.InternalPort, m.internalIP, description, leaseDuration, udpKey); err != nil {
+			return err
 		}
-		m.activeMaps.Store("UDP:"+fmt.Sprint(mapping.ExternalPort), true)
-		m.mappingCount.Add(1)
 	}
 
 	return nil
+}
+
+// addPortMappingWithRetry adds a port mapping with retry logic
+func (m *Manager) addPortMappingWithRetry(protocol string, externalPort, internalPort int, internalIP, description string, leaseDuration int, key string) error {
+	var err error
+	for attempt := 0; attempt < 2; attempt++ {
+		err = m.upnp.AddPortMapping(protocol, externalPort, internalPort, internalIP, description, leaseDuration)
+		if err == nil {
+			m.activeMaps.Store(key, true)
+			m.mappingCount.Add(1)
+			return nil
+		}
+		
+		if attempt < 1 {
+			// Retry after 1 second
+			time.Sleep(1 * time.Second)
+		}
+	}
+	
+	return fmt.Errorf("%s port %d mapping failed after 2 attempts: %w", protocol, externalPort, err)
 }
 
 // Stop removes all port mappings
