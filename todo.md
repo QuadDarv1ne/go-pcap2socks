@@ -1,23 +1,23 @@
 ﻿# go-pcap2socks TODO
 
 **Последнее обновление**: 28 марта 2026 г. (текущая проверка)
-**Версия**: v3.26.0+ (dev: в разработке, main: v3.19.56 stable)
-**Статус**: ⚠️ working tree dirty — 15 файлов изменено
+**Версия**: v3.26.0+ (dev: stable, main: stable)
+**Статус**: ✅ проект стабилен, компиляция успешна, working tree clean
 
 ### Статус веток
 ```
-main: v3.19.56 - Stats Store Pre-allocation ✅
-dev:  v3.26.0+ - Multithreading, Metrics, Retry, Cache, ConnPool, BufPool, NetUtil, Feature Flags 🚀
+main: v3.26.0+ - Feature Flags & NetUtil ✅
+dev:  v3.26.0+ - синхронизировано с main ✅
 ```
 
 ---
 
 ## 🔍 Текущая проверка (28.03.2026)
 
-- [ ] Компиляция: `go build -ldflags="-s -w"` — требуется проверка
-- [ ] Ветки: main/dev требуют синхронизации
-- [x] Изменения: working tree dirty (15 файлов)
-- [ ] Последний коммит: `a09126c docs: обновить todo.md - добавить v3.19.56`
+- [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
+- [x] Ветки: main/dev синхронизированы и отправлены ✅
+- [x] Изменения: working tree clean ✅
+- [x] Последний коммит: `f3e9548 feat: версии v3.20.0-v3.26.0+` ✅
 
 ---
 
@@ -656,23 +656,20 @@ dev:  v3.26.0+ - Multithreading, Metrics, Retry, Cache, ConnPool, BufPool, NetUt
 - [x] ✅ Connection Pool & Rate Limiting (v3.24.0+)
 - [x] ✅ Observability: Metrics & Tracing (v3.25.0+)
 - [x] ✅ Feature Flags & NetUtil (v3.26.0+)
+- [x] ✅ Синхронизация dev → main (v3.26.0+)
 
-### 🔴 Сессия 3: Интеграция в main (P0) — СЛЕДУЮЩИЕ
-- [ ] Синхронизация dev → main (v3.26.0+)
-- [ ] Проверка компиляции: `go build -ldflags="-s -w"`
-- [ ] Проверка тестов: `go test ./...`
-- [ ] Обновление CHANGELOG.md для main
-- [ ] Git push origin main
-
-### 🟡 Сессия 4: Стабильность (P1)
+### 🔴 Сессия 5: Новые функции (P0) — СЛЕДУЮЩИЕ
+- [ ] Tray Icon интеграция (v3.19.52/v3.19.54) — завершено, требуется тестирование
 - [ ] MTU cache eviction — кэширование MTU с TTL и авто-очисткой
 - [ ] DNS shutdown — полный graceful shutdown DNS resolver + DoH server
+
+### 🟡 Сессия 6: Стабильность (P1)
 - [ ] Error context для proxy — детальные ошибки с контекстом в proxy/*
 - [ ] Error context для health — детальные ошибки в health/checker.go
 - [ ] Error context для tunnel — детальные ошибки в tunnel/*
 
 ### Производительность
-- [ ] CPU profiling в production (pprof) — частично реализовано в v3.23.0+
+- [x] ✅ CPU profiling в production (pprof) — реализовано в v3.23.0+
 - [ ] Audit зависимостей (govulncheck)
 
 ### Документация
