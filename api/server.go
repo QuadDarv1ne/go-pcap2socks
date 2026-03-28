@@ -1367,12 +1367,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *Server) StartRealTimeUpdates(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				s.broadcastStats()
 			case <-s.stopChan:
-				ticker.Stop()
 				return
 			}
 		}

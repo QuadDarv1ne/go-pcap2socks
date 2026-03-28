@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -527,7 +528,7 @@ func main() {
 	}
 
 	// Mark as running
-	_running = true
+	_running.Store(true)
 
 	// Initialize shutdown channel
 	_shutdownChan = make(chan struct{})
@@ -562,7 +563,7 @@ func main() {
 
 	// Set running state checker for API
 	api.SetIsRunningFn(func() bool {
-		return _running
+		return _running.Load()
 	})
 
 	// Set interface list getter for API
@@ -704,8 +705,8 @@ func main() {
 	api.SetServiceCallbacks(
 		func() error {
 			// Start service: set running flag and reset start time
-			if !_running {
-				_running = true
+			if !_running.Load() {
+				_running.Store(true)
 				api.SetStartTime(time.Now())
 				slog.Info("Service started via API")
 				// Notify via system notification
@@ -715,8 +716,8 @@ func main() {
 		},
 		func() error {
 			// Stop service: clear running flag
-			if _running {
-				_running = false
+			if _running.Load() {
+				_running.Store(false)
 				slog.Info("Service stopped via API")
 				// Notify via system notification
 				notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
@@ -942,8 +943,8 @@ var (
 	// _httpServer holds the HTTP server for graceful shutdown
 	_httpServer *http.Server
 
-	// _running indicates if the service is running
-	_running bool
+	// _running indicates if the service is running (atomic for thread-safe access)
+	_running atomic.Bool
 
 	// _upnpManager holds the UPnP manager
 	_upnpManager *upnpmanager.Manager
@@ -989,18 +990,18 @@ func GetShutdownChan() <-chan struct{} {
 
 // IsRunning returns the running state
 func IsRunning() bool {
-	return _running
+	return _running.Load()
 }
 
 // Stop stops the service gracefully
 func Stop() {
 	slog.Info("Stopping service...")
-	_running = false
+	_running.Store(false)
 
 	// Use shutdown manager if available
 	if _shutdownManager != nil {
 		slog.Info("Using shutdown manager for graceful shutdown")
-		
+
 		// Update state before shutdown
 		if _statsStore != nil {
 			total, upload, download, packets, _, _ := _statsStore.GetStats()
@@ -1676,7 +1677,7 @@ func autoConfigureAndStart() {
 	}
 	
 	localizer := i18n.NewLocalizer(i18n.Language(config.Language))
-	
+
 	err = run(config, localizer)
 	if err != nil {
 		slog.Error("run error", slog.Any("err", err))
@@ -1684,7 +1685,7 @@ func autoConfigureAndStart() {
 	}
 
 	// Mark as running
-	_running = true
+	_running.Store(true)
 
 	// Initialize shutdown channel
 	_shutdownChan = make(chan struct{})
@@ -1778,7 +1779,7 @@ func autoConfigureAndStart() {
 
 	// Set running state checker for API
 	api.SetIsRunningFn(func() bool {
-		return _running
+		return _running.Load()
 	})
 
 	// Set DHCP leases getter for API
@@ -1897,8 +1898,8 @@ func autoConfigureAndStart() {
 	// Set service control callbacks for API
 	api.SetServiceCallbacks(
 		func() error {
-			if !_running {
-				_running = true
+			if !_running.Load() {
+				_running.Store(true)
 				api.SetStartTime(time.Now())
 				slog.Info("Service started via API")
 				notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
@@ -1906,8 +1907,8 @@ func autoConfigureAndStart() {
 			return nil
 		},
 		func() error {
-			if _running {
-				_running = false
+			if _running.Load() {
+				_running.Store(false)
 				slog.Info("Service stopped via API")
 				notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
 			}

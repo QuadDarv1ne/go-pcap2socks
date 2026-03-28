@@ -9,7 +9,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	socks5 "github.com/QuadDarv1ne/go-pcap2socks/transport"
 )
@@ -126,25 +128,26 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 
 	// Monitor TCP connection and cleanup UDP association when it closes
 	// Uses buffer pool for efficient memory usage and deadline to prevent hangs
-	go func(tcpConn net.Conn, packetConn net.PacketConn) {
+	goroutine.SafeGo(func() {
 		defer func() {
-			tcpConn.Close()
-			packetConn.Close()
+			c.Close()
+			pc.Close()
 		}()
 
 		// Set read deadline to prevent indefinite blocking
-		tcpConn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+		c.SetReadDeadline(time.Now().Add(5 * time.Minute))
 
 		// Use buffer pool for efficient memory usage
-		buf := make([]byte, 32*1024)
-		_, copyErr := io.CopyBuffer(io.Discard, tcpConn, buf)
+		buf := pool.Get(32 * 1024)
+		defer pool.Put(buf)
+		_, copyErr := io.CopyBuffer(io.Discard, c, buf)
 
 		if copyErr != nil && !errors.Is(copyErr, io.EOF) {
 			slog.Debug("UDP association copy error", "err", copyErr)
 		}
 		// A UDP association terminates when the TCP connection that the UDP
 		// ASSOCIATE request arrived on terminates. RFC1928
-	}(c, pc)
+	})
 
 	bindAddr := addr.UDPAddr()
 	if bindAddr == nil {

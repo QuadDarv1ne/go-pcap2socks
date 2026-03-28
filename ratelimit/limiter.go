@@ -3,15 +3,14 @@
 package ratelimit
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// Pre-defined errors for rate limiting
-var (
-	ErrRateLimitExceeded = "rate limit exceeded"
-)
+// Pre-defined error for rate limiting
+var ErrRateLimitExceeded = errors.New("rate limit exceeded")
 
 // Limiter implements a lock-free token bucket rate limiter using atomic operations.
 // Uses fixed-point arithmetic for precise token tracking.
