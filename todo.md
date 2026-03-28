@@ -146,6 +146,27 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.50) - WEBSOCKET & DNS IMPROVEMENTS
+
+### v3.19.50 - WebSocket & DNS Stability
+- **api/websocket.go**: sync.WaitGroup для ожидания горутин
+  - `WebSocketHub.wg`: WaitGroup для cleanup
+  - `runPingPong/writePump/readPump`: wg.Add(1) + defer wg.Done()
+  - `Stop()`: wg.Wait() для ожидания завершения
+- **dns/resolver.go**: retry logic с exponential backoff
+  - `queryDNS`: retry до 3 попыток
+  - Backoff: 100ms, 200ms между попытками
+  - Проверка context.Done() для отмены
+- **health/checker.go**: удалён устаревший `rand.Seed` (Go 1.20+)
+
+**Эффект**:
+- Нет утечки горутин при WebSocket shutdown
+- Устойчивость DNS к временным ошибкам сети
+- Меньше ложных DNS failures
+- Соответствие современным стандартам Go
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
