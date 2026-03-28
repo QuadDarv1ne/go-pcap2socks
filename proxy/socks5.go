@@ -57,7 +57,12 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 
 	c, err = dialer.DialContext(ctx, network, ss.Addr())
 	if err != nil {
-		return nil, fmt.Errorf("connect to %s: %w", ss.Addr(), err)
+		return nil, &DialError{
+			ProxyAddr: ss.Addr(),
+			DestAddr:  metadata.DestinationAddress(),
+			Timeout:   tcpConnectTimeout,
+			Err:       fmt.Errorf("connect: %w", err),
+		}
 	}
 	setKeepAlive(c)
 
@@ -74,12 +79,23 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 	}
 
 	_, err = socks5.ClientHandshake(c, serializeSocksAddr(metadata), socks5.CmdConnect, user)
+	if err != nil {
+		return nil, &HandshakeError{
+			ProxyAddr: ss.Addr(),
+			Step:      "CONNECT",
+			Err:       err,
+		}
+	}
 	return
 }
 
 func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 	if ss.unix {
-		return nil, fmt.Errorf("%w when unix domain socket is enabled", errors.ErrUnsupported)
+		return nil, &UDPError{
+			ProxyAddr: ss.Addr(),
+			Operation: "associate",
+			Err:       errors.ErrUnsupported,
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), tcpConnectTimeout)
@@ -87,8 +103,12 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 
 	c, err := dialer.DialContext(ctx, "tcp", ss.Addr())
 	if err != nil {
-		err = fmt.Errorf("connect to %s: %w", ss.Addr(), err)
-		return
+		return nil, &DialError{
+			ProxyAddr: ss.Addr(),
+			DestAddr:  "UDP associate",
+			Timeout:   tcpConnectTimeout,
+			Err:       fmt.Errorf("connect: %w", err),
+		}
 	}
 	setKeepAlive(c)
 
@@ -118,12 +138,22 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 
 	addr, err := socks5.ClientHandshake(c, targetAddr, socks5.CmdUDPAssociate, user)
 	if err != nil {
-		return nil, fmt.Errorf("client handshake: %w", err)
+		c.Close()
+		return nil, &UDPError{
+			ProxyAddr: ss.Addr(),
+			Operation: "associate",
+			Err:       fmt.Errorf("handshake: %w", err),
+		}
 	}
 
 	pc, err := dialer.ListenPacket("udp", "")
 	if err != nil {
-		return nil, fmt.Errorf("listen packet: %w", err)
+		c.Close()
+		return nil, &UDPError{
+			ProxyAddr: ss.Addr(),
+			Operation: "listen",
+			Err:       err,
+		}
 	}
 
 	// Monitor TCP connection and cleanup UDP association when it closes
@@ -151,13 +181,21 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 
 	bindAddr := addr.UDPAddr()
 	if bindAddr == nil {
-		return nil, fmt.Errorf("invalid UDP binding address: %#v", addr)
+		return nil, &UDPError{
+			ProxyAddr: ss.Addr(),
+			Operation: "associate",
+			Err:       fmt.Errorf("invalid UDP binding address: %#v", addr),
+		}
 	}
 
 	if bindAddr.IP.IsUnspecified() { /* e.g. "0.0.0.0" or "::" */
 		udpAddr, err := net.ResolveUDPAddr("udp", ss.Addr())
 		if err != nil {
-			return nil, fmt.Errorf("resolve udp address %s: %w", ss.Addr(), err)
+			return nil, &UDPError{
+				ProxyAddr: ss.Addr(),
+				Operation: "resolve",
+				Err:       fmt.Errorf("resolve: %w", err),
+			}
 		}
 		bindAddr.IP = udpAddr.IP
 	}

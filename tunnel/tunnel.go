@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -67,13 +68,57 @@ var (
 	_poolActiveCount  atomic.Int32
 	_poolCreatedCount atomic.Int32
 	_poolReusedCount  atomic.Int32
-	
+
 	// ErrPoolClosed is returned when trying to acquire from a closed pool
 	ErrPoolClosed = errors.New("connection pool is closed")
-	
+
 	// ErrPoolExhausted is returned when pool is at capacity
 	ErrPoolExhausted = errors.New("connection pool exhausted")
+	
+	// Tunnel operation errors with context
+	ErrTunnelDialFailed   = errors.New("tunnel dial failed")
+	ErrTunnelCopyFailed   = errors.New("tunnel copy failed")
+	ErrTunnelClosed       = errors.New("tunnel closed")
+	ErrTunnelTimeout      = errors.New("tunnel timeout")
+	ErrTunnelConnRefused  = errors.New("tunnel connection refused")
+	
+	// UDP tunnel errors
+	ErrUDPSessionTimeout = errors.New("udp session timeout")
+	ErrUPnPMappingFailed = errors.New("upnp mapping failed")
+	ErrPortExcluded      = errors.New("port excluded from forwarding")
 )
+
+// TunnelError wraps tunnel errors with context
+type TunnelError struct {
+	Operation string   // Operation: "dial", "copy", "close"
+	SrcAddr   string   // Source address
+	DstAddr   string   // Destination address
+	Err       error    // Underlying error
+}
+
+func (e *TunnelError) Error() string {
+	return fmt.Sprintf("tunnel %s: failed to %s from %s to %s: %v", e.Operation, e.Operation, e.SrcAddr, e.DstAddr, e.Err)
+}
+
+func (e *TunnelError) Unwrap() error {
+	return e.Err
+}
+
+// PoolError wraps connection pool errors with context
+type PoolError struct {
+	PoolSize  int    // Pool size
+	Active    int32  // Active connections
+	Operation string // Operation: "acquire", "return", "close"
+	Err       error  // Underlying error
+}
+
+func (e *PoolError) Error() string {
+	return fmt.Sprintf("tunnel pool: %s failed (active=%d, size=%d): %v", e.Operation, e.Active, e.PoolSize, e.Err)
+}
+
+func (e *PoolError) Unwrap() error {
+	return e.Err
+}
 
 // pooledConn wraps a TCP connection with pooling metadata
 type pooledConn struct {

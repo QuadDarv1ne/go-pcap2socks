@@ -1,9 +1,11 @@
 package dhcp
 
 import (
+	"context"
 	"encoding/binary"
 	"log/slog"
 	"net"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +18,7 @@ import (
 
 // Server represents a DHCP server
 // Optimized with sync.Map for lock-free lease access
+// Uses worker pool for concurrent DHCP request processing
 type Server struct {
 	config         *ServerConfig
 	leases         sync.Map // map[string]*DHCPLease (MAC -> Lease)
@@ -34,6 +37,18 @@ type Server struct {
 	requestCount   sync.Map // map[string]*requestCounter (MAC -> counter)
 	rateLimit      int      // max requests per minute per MAC
 	rateLimitWindow time.Duration // time window for rate limiting
+
+	// Multi-threaded processing
+	workerCount int                    // Number of worker goroutines
+	requestQueue chan *dhcpRequest    // Queue for DHCP requests
+	processWg    sync.WaitGroup       // WaitGroup for workers
+}
+
+// dhcpRequest represents a DHCP request to be processed
+type dhcpRequest struct {
+	data       []byte
+	mac        string
+	responseCh chan<- []byte
 }
 
 type requestCounter struct {
@@ -78,6 +93,8 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 		metrics:         NewMetricsCollector(),
 		rateLimit:       defaultRateLimit,
 		rateLimitWindow: defaultRateLimitWindow,
+		workerCount:     runtime.NumCPU(), // Use all CPU cores for DHCP processing
+		requestQueue:    make(chan *dhcpRequest, 256), // Buffer for burst requests
 	}
 	s.nextIP.Store(config.FirstIP)
 
@@ -101,6 +118,13 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 		}
 		slog.Info("DHCP server restored leases from database", "count", s.leaseCount.Load())
 	}
+
+	// Start worker pool for concurrent DHCP request processing
+	for i := 0; i < s.workerCount; i++ {
+		s.processWg.Add(1)
+		go s.dhcpWorker(i)
+	}
+	slog.Info("DHCP worker pool started", "workers", s.workerCount)
 
 	// Start lease cleanup goroutine
 	s.wg.Add(1)
@@ -131,7 +155,7 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 func (s *Server) checkRateLimit(mac string) bool {
 	now := time.Now().UnixNano()
 	windowNanos := int64(s.rateLimitWindow)
-	
+
 	// Get or create counter for this MAC
 	val, _ := s.requestCount.Load(mac)
 	counter, ok := val.(*requestCounter)
@@ -140,7 +164,7 @@ func (s *Server) checkRateLimit(mac string) bool {
 		counter.resetTime.Store(now)
 		s.requestCount.Store(mac, counter)
 	}
-	
+
 	// Check if we need to reset the counter
 	resetTime := counter.resetTime.Load()
 	if now-resetTime > windowNanos {
@@ -149,32 +173,56 @@ func (s *Server) checkRateLimit(mac string) bool {
 		counter.resetTime.Store(now)
 		resetTime = now
 	}
-	
+
 	// Check if rate limit exceeded
 	count := counter.count.Load()
 	if count >= int32(s.rateLimit) {
 		return false // Rate limited
 	}
-	
+
 	// Increment counter
 	counter.count.Add(1)
 	return true // Allowed
 }
 
-// HandleRequest processes a DHCP request and returns a response packet
-// Optimized with sync.Map for lock-free lease access
-func (s *Server) HandleRequest(data []byte) ([]byte, error) {
+// dhcpWorker is a worker goroutine that processes DHCP requests
+func (s *Server) dhcpWorker(id int) {
+	defer s.processWg.Done()
+
+	for {
+		select {
+		case <-s.stopChan:
+			slog.Debug("DHCP worker stopped", "worker_id", id)
+			return
+		case req, ok := <-s.requestQueue:
+			if !ok {
+				return
+			}
+
+			// Process DHCP request
+			response, err := s.processDHCPRequest(req.data, req.mac)
+			if err != nil {
+				slog.Error("DHCP worker processing error", "worker_id", id, "mac", req.mac, "err", err)
+				s.metrics.RecordError()
+			}
+
+			// Send response back
+			if req.responseCh != nil {
+				select {
+				case req.responseCh <- response:
+				default:
+					// Response channel blocked, drop response
+				}
+			}
+		}
+	}
+}
+
+// processDHCPRequest processes a single DHCP request (called by worker)
+func (s *Server) processDHCPRequest(data []byte, mac string) ([]byte, error) {
 	msg, err := ParseDHCPMessage(data)
 	if err != nil {
 		return nil, err
-	}
-
-	// Check rate limit to protect against flood attacks
-	macStr := msg.ClientHardware.String()
-	if !s.checkRateLimit(macStr) {
-		s.metrics.RecordError()
-		slog.Warn("DHCP request rate limited", "mac", macStr)
-		return nil, nil // Silently drop rate-limited requests
 	}
 
 	messageType := msg.Options[OptionDHCPMessageType]
@@ -193,6 +241,48 @@ func (s *Server) HandleRequest(data []byte) ([]byte, error) {
 		return s.handleInform(msg)
 	default:
 		return nil, nil
+	}
+}
+
+// HandleRequest processes a DHCP request and returns a response packet
+// Uses worker pool for concurrent processing
+// Optimized with sync.Map for lock-free lease access
+func (s *Server) HandleRequest(data []byte) ([]byte, error) {
+	// Extract MAC address for rate limiting
+	msg, err := ParseDHCPMessage(data)
+	if err != nil {
+		return nil, err
+	}
+	macStr := msg.ClientHardware.String()
+
+	// Check rate limit to protect against flood attacks
+	if !s.checkRateLimit(macStr) {
+		s.metrics.RecordError()
+		slog.Warn("DHCP request rate limited", "mac", macStr)
+		return nil, nil // Silently drop rate-limited requests
+	}
+
+	// Submit to worker pool for processing
+	responseCh := make(chan []byte, 1)
+	req := &dhcpRequest{
+		data:       data,
+		mac:        macStr,
+		responseCh: responseCh,
+	}
+
+	select {
+	case s.requestQueue <- req:
+		// Successfully queued, wait for response
+		select {
+		case response := <-responseCh:
+			return response, nil
+		case <-time.After(500 * time.Millisecond):
+			return nil, context.DeadlineExceeded
+		}
+	default:
+		// Queue full, process synchronously as fallback
+		slog.Debug("DHCP queue full, processing synchronously", "mac", macStr)
+		return s.processDHCPRequest(data, macStr)
 	}
 }
 
@@ -552,6 +642,14 @@ func (s *Server) cleanupRateLimitCache() {
 
 // Stop stops the DHCP server and waits for all goroutines to finish
 func (s *Server) Stop() {
+	slog.Info("Stopping DHCP server...")
+
+	// Stop worker pool first
+	close(s.requestQueue)
+	s.processWg.Wait()
+	slog.Info("DHCP worker pool stopped")
+
+	// Stop other goroutines
 	close(s.stopChan)
 
 	// Wait for all goroutines to finish

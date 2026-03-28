@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 )
@@ -56,6 +57,14 @@ const (
 	WireGuardOverhead = 60
 )
 
+// mtuCacheEntry holds cached MTU with eviction metadata
+type mtuCacheEntry struct {
+	result      *DiscoveryResult
+	accessCount uint32     // Access frequency for LRU
+	lastAccess  time.Time  // Last access time
+	createdAt   time.Time  // Creation time for TTL
+}
+
 // DiscoveryResult holds the result of MTU discovery
 type DiscoveryResult struct {
 	MTU           uint32
@@ -69,18 +78,101 @@ type DiscoveryResult struct {
 
 // MTUDiscoverer performs Path MTU Discovery
 type MTUDiscoverer struct {
-	mu           sync.RWMutex
-	cache        map[string]*DiscoveryResult
-	cacheExpiry  time.Duration
-	probeTimeout time.Duration
+	mu            sync.RWMutex
+	cache         map[string]*mtuCacheEntry
+	cacheExpiry   time.Duration // TTL for cache entries
+	probeTimeout  time.Duration
+	maxCacheSize  int           // Maximum cache entries
+	evictionMutex sync.Mutex
+	stopEviction  chan struct{}
+	evictionDone  chan struct{}
 }
 
 // NewMTUDiscoverer creates a new MTU discoverer
 func NewMTUDiscoverer() *MTUDiscoverer {
-	return &MTUDiscoverer{
-		cache:        make(map[string]*DiscoveryResult),
+	d := &MTUDiscoverer{
+		cache:        make(map[string]*mtuCacheEntry),
 		cacheExpiry:  DefaultProbeInterval,
 		probeTimeout: DefaultProbeTimeout,
+		maxCacheSize: 1000, // Limit cache size
+		stopEviction: make(chan struct{}),
+		evictionDone: make(chan struct{}),
+	}
+	// Start background eviction goroutine
+	go d.runEviction()
+	return d
+}
+
+// runEviction periodically removes stale cache entries
+func (d *MTUDiscoverer) runEviction() {
+	ticker := time.NewTicker(DefaultProbeInterval / 2)
+	defer ticker.Stop()
+	defer close(d.evictionDone)
+
+	for {
+		select {
+		case <-ticker.C:
+			d.evictStaleEntries()
+		case <-d.stopEviction:
+			return
+		}
+	}
+}
+
+// evictStaleEntries removes expired and LRU entries when cache is full
+func (d *MTUDiscoverer) evictStaleEntries() {
+	d.evictionMutex.Lock()
+	defer d.evictionMutex.Unlock()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	now := time.Now()
+	expired := make([]string, 0, len(d.cache)/4)
+
+	// First pass: collect expired entries
+	for key, entry := range d.cache {
+		if now.Sub(entry.createdAt) > d.cacheExpiry {
+			expired = append(expired, key)
+		}
+	}
+
+	// Remove expired entries
+	for _, key := range expired {
+		delete(d.cache, key)
+		slog.Debug("MTU cache eviction (expired)", "destination", key)
+	}
+
+	// Second pass: LRU eviction if cache is full
+	if len(d.cache) > d.maxCacheSize {
+		// Sort by access count and last access time
+		type cacheEntry struct {
+			key        string
+			accessCount uint32
+			lastAccess  time.Time
+		}
+		entries := make([]cacheEntry, 0, len(d.cache))
+		for key, entry := range d.cache {
+			entries = append(entries, cacheEntry{
+				key:        key,
+				accessCount: entry.accessCount,
+				lastAccess:  entry.lastAccess,
+			})
+		}
+
+		// Sort by access count (ascending), then by last access (oldest first)
+		sort.Slice(entries, func(i, j int) bool {
+			if entries[i].accessCount != entries[j].accessCount {
+				return entries[i].accessCount < entries[j].accessCount
+			}
+			return entries[i].lastAccess.Before(entries[j].lastAccess)
+		})
+
+		// Remove least used entries (keep 75% of maxCacheSize)
+		toRemove := len(d.cache) - (d.maxCacheSize * 3 / 4)
+		for i := 0; i < toRemove && i < len(entries); i++ {
+			delete(d.cache, entries[i].key)
+			slog.Debug("MTU cache eviction (LRU)", "destination", entries[i].key, "access_count", entries[i].accessCount)
+		}
 	}
 }
 
@@ -89,8 +181,11 @@ func (d *MTUDiscoverer) DiscoverMTU(ctx context.Context, destination string, pro
 	d.mu.Lock()
 
 	// Check cache first
-	if result, ok := d.cache[destination]; ok {
-		if time.Since(result.LastChecked) < d.cacheExpiry && result.IsValid {
+	if entry, ok := d.cache[destination]; ok {
+		if time.Since(entry.createdAt) < d.cacheExpiry && entry.result.IsValid {
+			entry.accessCount++
+			entry.lastAccess = time.Now()
+			result := entry.result
 			d.mu.Unlock()
 			slog.Debug("MTU cache hit", "destination", destination, "mtu", result.MTU)
 			return result, nil
@@ -103,9 +198,14 @@ func (d *MTUDiscoverer) DiscoverMTU(ctx context.Context, destination string, pro
 	// Perform discovery
 	result := d.performDiscovery(ctx, destination, protocol)
 
-	// Cache result
+	// Cache result with metadata
 	d.mu.Lock()
-	d.cache[destination] = result
+	d.cache[destination] = &mtuCacheEntry{
+		result:      result,
+		accessCount: 1,
+		lastAccess:  time.Now(),
+		createdAt:   time.Now(),
+	}
 	d.mu.Unlock()
 
 	if result.Error != nil {
@@ -441,8 +541,12 @@ func (d *MTUDiscoverer) GetCachedMTU(destination string) *DiscoveryResult {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	if result, ok := d.cache[destination]; ok {
-		return result
+	if entry, ok := d.cache[destination]; ok {
+		if time.Since(entry.createdAt) < d.cacheExpiry && entry.result.IsValid {
+			entry.accessCount++
+			entry.lastAccess = time.Now()
+			return entry.result
+		}
 	}
 	return nil
 }
@@ -451,7 +555,13 @@ func (d *MTUDiscoverer) GetCachedMTU(destination string) *DiscoveryResult {
 func (d *MTUDiscoverer) ClearCache() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.cache = make(map[string]*DiscoveryResult)
+	d.cache = make(map[string]*mtuCacheEntry)
+}
+
+// Stop stops the background eviction goroutine
+func (d *MTUDiscoverer) Stop() {
+	close(d.stopEviction)
+	<-d.evictionDone
 }
 
 // GetCacheStats returns cache statistics
@@ -459,9 +569,22 @@ func (d *MTUDiscoverer) GetCacheStats() map[string]interface{} {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
+	var totalAccesses uint32
+	var oldest time.Time
+	for _, entry := range d.cache {
+		totalAccesses += entry.accessCount
+		if oldest.IsZero() || entry.createdAt.Before(oldest) {
+			oldest = entry.createdAt
+		}
+	}
+
 	return map[string]interface{}{
-		"cached_entries": len(d.cache),
-		"cache_expiry":   d.cacheExpiry.String(),
+		"cached_entries":  len(d.cache),
+		"cache_expiry":    d.cacheExpiry.String(),
+		"max_cache_size":  d.maxCacheSize,
+		"total_accesses":  totalAccesses,
+		"oldest_entry":    oldest.Format(time.RFC3339),
+		"eviction_active": d.stopEviction != nil,
 	}
 }
 

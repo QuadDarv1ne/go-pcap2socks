@@ -49,6 +49,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/tlsutil"
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
+	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
@@ -1022,12 +1023,10 @@ func performGracefulShutdown() {
 
 	// 2. Stop DNS components
 	if _dnsResolver != nil {
-		_dnsResolver.StopPrefetch()
-		slog.Info("DNS resolver prefetch stopped")
+		_dnsResolver.Stop()
 	}
 	if _dohServer != nil {
 		_dohServer.Stop()
-		slog.Info("DoH server stopped")
 	}
 
 	// 3. Stop monitoring components
@@ -1074,6 +1073,10 @@ func performGracefulShutdown() {
 		}
 	}
 
+	// 7a. Stop tunnel processor
+	tunnel.Stop()
+	slog.Info("Tunnel stopped")
+
 	// 8. Stop stats store
 	if _statsStore != nil {
 		_statsStore.Stop()
@@ -1097,6 +1100,12 @@ func performGracefulShutdown() {
 			server.Stop()
 			slog.Info("DHCP server stopped")
 		}
+	}
+
+	// 10a. Stop MTU discoverer and clear cache
+	if _mtuDiscoverer != nil {
+		_mtuDiscoverer.Stop()
+		slog.Info("MTU discoverer stopped")
 	}
 
 	// 11. Flush async logs

@@ -18,13 +18,6 @@ import (
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
-// Pre-defined errors for tunnel operations
-var (
-	ErrTunnelDialFailed   = errors.New("tunnel dial failed")
-	ErrTunnelCopyFailed   = errors.New("tunnel copy failed")
-	ErrTunnelClosed       = errors.New("tunnel closed")
-)
-
 // TCP tunnel constants
 const (
 	// TCPWaitTimeout implements a TCP half-close timeout.

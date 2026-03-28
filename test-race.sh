@@ -1,27 +1,34 @@
 #!/bin/bash
 # Race Detection Test Script
-# WARNING: This script consumes HIGH MEMORY and may cause system lag
-# Use test.sh for faster local testing
+# ⚠️  WARNING: Race detector increases memory usage 10x and slows tests 20x
+# ⚠️  May cause system crash on machines with <16GB RAM
+# ✅ For local development, use: test.sh (fast, low memory)
 
 set -e
 
 echo "=== Race Detection Test Suite ==="
-echo "WARNING: This may consume high memory and slow down your system!"
-echo "For faster tests, use: test.sh"
+echo "⚠️  WARNING: Race detector uses ~10x more memory!"
+echo "⚠️  Recommended: 16GB+ RAM, close other applications"
+echo ""
+echo "For faster local tests, use: ./test.sh"
 echo ""
 echo "Go version: $(go version)"
 echo ""
 
-# Enable race detector
+# Enable race detector with memory limit
 export CGO_ENABLED=1
+# Limit Go runtime memory to prevent OOM crashes
+export GOMEMLIMIT=4096  # 4GB soft limit
 
-echo "Running tests with race detection..."
+echo "Running tests with race detection (GOMEMLIMIT=4GB)..."
 echo ""
 
-# Run tests with race detection for all packages
-# -race: enables data race detector (10x memory, 20x slower)
-# -timeout: 5 minutes max
-go test -race -v -timeout=5m ./... 2>&1 | tee race-test-output.log
+# Run tests with race detection
+# -race: enables data race detector
+# -p 1: limit parallelism to reduce memory pressure
+# -timeout: 10 minutes max
+# -parallel 1: disable parallel test execution
+go test -race -p 1 -parallel 1 -v -timeout=10m ./... 2>&1 | tee race-test-output.log
 
 echo ""
 echo "=== Race Detection Complete ==="

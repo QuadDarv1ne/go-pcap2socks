@@ -1,8 +1,9 @@
 @echo off
-REM Fast Test Script for Local Development
+REM Fast Test Script for Local Development (Windows)
 REM Runs tests without race detector to avoid high memory/CPU usage
 
 echo === Go Test Suite (Fast Mode) ===
+echo Go version:
 go version
 echo.
 
@@ -26,20 +27,19 @@ echo.
 
 REM Show summary
 echo Test summary:
-findstr /R /C:"^ok " /C:"^FAIL" test-output.log | findstr /V /C:"--- PASS"
+findstr /R "^ok ^FAIL" test-output.log
+
 echo.
 
 REM Count passed/failed
-findstr /C:"^ok " test-output.log >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f %%i in ('findstr /C:"^ok " test-output.log ^| find /C /V ""') do set PASSED=%%i
-    echo [check] Passed: %PASSED% packages
-)
+for /f "delims=" %%a in ('findstr /C:"^ok " test-output.log ^| find /c /v ""') do set PASSED=%%a
+for /f "delims=" %%a in ('findstr /C:"^FAIL" test-output.log ^| find /c /v ""') do set FAILED=%%a
 
-findstr /C:"^FAIL" test-output.log >nul 2>&1
-if %errorlevel% equ 0 (
-    echo X Some tests failed!
+echo Passed: %PASSED% packages
+
+if "%FAILED%" GTR "0" (
+    echo Failed: %FAILED% packages
     exit /b 1
 ) else (
-    echo [check] All tests passed!
+    echo All tests passed!
 )

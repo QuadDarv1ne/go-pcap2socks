@@ -16,13 +16,6 @@ import (
 	"github.com/anacrolix/upnp"
 )
 
-// Pre-defined errors for UDP tunnel operations
-var (
-	ErrUDPSessionTimeout = errors.New("udp session timeout")
-	ErrUPnPMappingFailed = errors.New("upnp mapping failed")
-	ErrPortExcluded      = errors.New("port excluded from forwarding")
-)
-
 // UDP tunnel constants
 const (
 	// UdpSessionTimeout is the timeout for UDP sessions

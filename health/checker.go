@@ -3,6 +3,7 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -12,6 +13,46 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+// Pre-defined errors for health checking
+var (
+	ErrProbeTimeout      = errors.New("probe timeout")
+	ErrProbeFailed       = errors.New("probe failed")
+	ErrRecoveryFailed    = errors.New("recovery failed")
+	ErrHealthCheckFailed = errors.New("health check failed")
+	ErrComponentUnhealthy = errors.New("component unhealthy")
+)
+
+// ProbeError wraps probe errors with context
+type ProbeError struct {
+	ProbeName string    // Name of the probe
+	ProbeType ProbeType // Type of probe
+	Target    string    // Target being probed
+	Err       error     // Underlying error
+}
+
+func (e *ProbeError) Error() string {
+	return fmt.Sprintf("health probe %s (%s) failed for %s: %v", e.ProbeName, e.ProbeType, e.Target, e.Err)
+}
+
+func (e *ProbeError) Unwrap() error {
+	return e.Err
+}
+
+// RecoveryError wraps recovery errors with context
+type RecoveryError struct {
+	Component string   // Component being recovered
+	Attempt   int      // Attempt number
+	Err       error    // Underlying error
+}
+
+func (e *RecoveryError) Error() string {
+	return fmt.Sprintf("health recovery for %s (attempt %d) failed: %v", e.Component, e.Attempt, e.Err)
+}
+
+func (e *RecoveryError) Unwrap() error {
+	return e.Err
+}
 
 // ProbeType represents the type of health probe
 type ProbeType int
@@ -93,7 +134,12 @@ func (p *HTTPProbe) Run(ctx context.Context) ProbeResult {
 
 	req, err := http.NewRequestWithContext(reqCtx, "GET", p.url, nil)
 	if err != nil {
-		result.Error = err
+		result.Error = &ProbeError{
+			ProbeName: p.name,
+			ProbeType: ProbeHTTP,
+			Target:    p.url,
+			Err:       fmt.Errorf("request creation: %w", err),
+		}
 		return result
 	}
 
@@ -101,13 +147,23 @@ func (p *HTTPProbe) Run(ctx context.Context) ProbeResult {
 	result.Latency = time.Since(start)
 
 	if err != nil {
-		result.Error = err
+		result.Error = &ProbeError{
+			ProbeName: p.name,
+			ProbeType: ProbeHTTP,
+			Target:    p.url,
+			Err:       fmt.Errorf("request failed: %w", err),
+		}
 		return result
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		result.Error = fmt.Errorf("HTTP status %d", resp.StatusCode)
+		result.Error = &ProbeError{
+			ProbeName: p.name,
+			ProbeType: ProbeHTTP,
+			Target:    p.url,
+			Err:       fmt.Errorf("HTTP status %d", resp.StatusCode),
+		}
 		return result
 	}
 
@@ -159,7 +215,12 @@ func (p *DNSProbe) Run(ctx context.Context) ProbeResult {
 	result.Latency = time.Since(start)
 
 	if err != nil {
-		result.Error = err
+		result.Error = &ProbeError{
+			ProbeName: p.name,
+			ProbeType: ProbeDNS,
+			Target:    p.dnsServer,
+			Err:       fmt.Errorf("DNS resolution failed: %w", err),
+		}
 		return result
 	}
 
@@ -197,7 +258,12 @@ func (p *DHCPProbe) Run(ctx context.Context) ProbeResult {
 	if p.checkFunc() {
 		result.Success = true
 	} else {
-		result.Error = fmt.Errorf("DHCP health check failed")
+		result.Error = &ProbeError{
+			ProbeName: p.name,
+			ProbeType: ProbeDHCP,
+			Target:    p.description,
+			Err:       ErrHealthCheckFailed,
+		}
 	}
 
 	result.Latency = time.Since(start)

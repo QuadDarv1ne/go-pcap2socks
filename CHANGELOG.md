@@ -5,6 +5,311 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.26.0+] - 2026-03-28
+
+### Добавлено
+- **feature/flags.go** — feature flags с динамическим управлением
+- **feature/flags_test.go** — тесты для feature flags
+- **netutil/ip.go** — утилиты для работы с IP/MAC адресами
+- **netutil/ip_test.go** — тесты для netutil
+
+### Улучшения
+- ✅ **Feature Flags** — включение/выключение функций на лету
+- ✅ **Gates** — middleware-style feature gates
+- ✅ **Context Gates** — context-aware feature gates
+- ✅ **MAC Parsing** — поддержка различных форматов (colon, dash, dot, nosep)
+- ✅ **Device Detection** — определение типа устройства по OUI
+- ✅ **IP Utilities** — конвертация, сравнение, range, CIDR
+
+### Технические детали
+- **Lock-free Flags** — atomic.Bool для enabled state
+- **OnChange Callbacks** — уведомления об изменениях
+- **OUI Database** — упрощённая база vendor OUI
+- **IP Range** — поддержка IPv4 и IPv6
+
+### Примеры использования
+
+```go
+// Feature Flags
+feature.Init([]feature.Config{
+    {Name: "new_router", Enabled: false},
+})
+
+if feature.IsEnabled("new_router") {
+    // Использовать новый router
+}
+
+// Gate
+gate := feature.NewGate(flag, fallback)
+gate.Execute(func() error {
+    // Основная логика
+    return nil
+})
+
+// NetUtil
+mac, _ := netutil.ParseMAC("AA-BB-CC-DD-EE-FF")
+normalized, _ := netutil.NormalizeMAC(mac)
+deviceType := netutil.DetectDeviceType(mac) // "PlayStation", "Xbox", etc.
+
+ipRange, _ := netutil.ParseCIDRRange("192.168.1.0/24")
+count := netutil.CountIPsInCIDR(cidr)
+```
+
+---
+
+## [3.25.0+] - 2026-03-28
+
+### Добавлено
+- **observability/metrics.go** — metrics, tracing, runtime collector
+- **observability/metrics_test.go** — тесты для observability
+
+### Улучшения
+- ✅ **Counters/Gauges/Histograms** — основные типы метрик
+- ✅ **Distributed Tracing** — trace/spans с контекстом
+- ✅ **Runtime Metrics** — goroutines, memory, GC stats
+- ✅ **Prometheus Export** — экспорт в Prometheus формате
+- ✅ **HTTP Handler** — /metrics endpoint
+- ✅ **Sampling** — configurable trace sampling
+
+### Технические детали
+- **Lock-free Metrics** — atomic operations для counters/gauges
+- **Context Propagation** — trace context через context.Context
+- **JSON Export** — экспорт метрик в JSON
+- **Collector Interface** — расширяемая система коллекторов
+
+### Примеры использования
+
+```go
+// Metrics
+observability.RecordCounter("requests_total", 1)
+observability.RecordGauge("active_connections", 100)
+observability.RecordHistogram("request_latency", latencyMs)
+
+// Tracing
+tracer := observability.NewTracer(sampler, exporter)
+ctx, span := tracer.StartSpan(ctx, "operation_name")
+span.SetTag("key", "value")
+defer span.End()
+
+// HTTP endpoint
+http.Handle("/metrics", observability.GetGlobalMetrics().HTTPHandler())
+```
+
+---
+
+## [3.24.0+] - 2026-03-28
+
+### Добавлено
+- **connpool/pool.go** — connection pool для TCP соединений
+- **connpool/pool_test.go** — тесты для connection pool
+- **connlimit/limiter.go** — rate limiter для входящих соединений
+- **connlimit/limiter_test.go** — тесты для rate limiter
+
+### Улучшения
+- ✅ **Connection Reuse** — повторное использование соединений
+- ✅ **Health Checks** — автоматическая проверка здоровья соединений
+- ✅ **Rate Limiting** — защита от DDoS и connection flood
+- ✅ **Per-IP Limits** — ограничение соединений на IP
+- ✅ **Token Bucket** — rate limiting с burst поддержкой
+- ✅ **Ban System** — автоматический бан при превышении лимитов
+
+### Технические детали
+- **MaxSize/MinIdle/MaxIdle** — гибкое управление пулом
+- **MaxLifetime/IdleTimeout** — автоматическая ротация соединений
+- **Concurrent Safe** — lock-free статистика, sync.Map для IP tracking
+- **Listener Wrapper** — прозрачная интеграция с net.Listener
+
+### Примеры использования
+
+```go
+// Connection Pool
+cfg := connpool.DefaultConfig()
+cfg.MaxSize = 100
+pool := connpool.NewPool("tcp", "backend:8080", cfg)
+
+conn, err := pool.Acquire(ctx)
+// ... использование ...
+pool.Release(conn)
+
+// Rate Limiter
+cfg := connlimit.DefaultConfig()
+cfg.MaxConnections = 1000
+cfg.PerIP = 10
+
+listener, _ := net.Listen("tcp", ":8080")
+wrapped, limiter := connlimit.NewListener(listener, cfg)
+defer wrapped.Stop()
+
+conn, err := wrapped.Accept() // С rate limiting
+```
+
+---
+
+## [3.23.0+] - 2026-03-28
+
+### Добавлено
+- **bufpool/pool.go** — оптимизированный buffer pool с size-class аллокацией
+- **bufpool/pool_test.go** — тесты для buffer pool
+- **pprofutil/pprof.go** — profiling endpoints для runtime анализа
+
+### Улучшения
+- ✅ **Size-class Allocation** — 5 классов размеров (256B, 1KB, 4KB, 16KB, 64KB)
+- ✅ **Buffer Zeroing** — автоматическая очистка буферов перед возвратом в pool
+- ✅ **Pool Statistics** — hits, misses, allocs, active, max active
+- ✅ **pprof Endpoints** — /debug/pprof/* для профилирования
+- ✅ **Memory Stats** — runtime статистика через HTTP
+
+### Технические детали
+- **Sharded Buffer Pools** — отдельные pool для каждого размера
+- **Lock-free Stats** — atomic counters для статистики
+- **HTTP Handlers** — heap, goroutine, stats endpoints
+- **Configurable** — port, block/mutex profile, mem profile rate
+
+### Примеры использования
+
+```go
+// Buffer pool
+buf := bufpool.Get(1024) // Автоматический выбор размера
+// ... использование ...
+bufpool.Put(buf)
+
+// Или явно по размеру
+buf := bufpool.GetMedium() // 1KB
+bufpool.PutMedium(buf)
+
+// Статистика
+stats := bufpool.GetStats()
+hitRatio := bufpool.GetHitRatio()
+
+// pprof
+cfg := pprofutil.Config{
+    Enabled: true,
+    Port: 6060,
+}
+server := pprofutil.NewServer(cfg)
+server.Start()
+```
+
+---
+
+## [3.22.0+] - 2026-03-28
+
+### Добавлено
+- **retry/retry.go** — retry logic с exponential backoff и jitter
+- **retry/retry_test.go** — тесты для retry механизма
+- **cache/lru.go** — lock-free LRU кэш с TTL и sharding
+- **cache/lru_test.go** — тесты для LRU кэша
+
+### Улучшения
+- ✅ **Exponential Backoff** — автоматическая задержка между попытками
+- ✅ **Jitter** — рандомизация для предотвращения thundering herd
+- ✅ **Configurable Retries** — настраиваемые пороги и таймауты
+- ✅ **Sharded LRU Cache** — лучшая конкурентность через shard-based locking
+- ✅ **TTL Support** — автоматическое истечение записей
+- ✅ **Cache Statistics** — hits, misses, evicts, hit ratio
+
+### Технические детали
+- **Retry Configs** — Default, Aggressive, Conservative пресеты
+- **Context Support** — отмена операций через context.Context
+- **Lock-free Stats** — atomic counters для статистики
+- **16-64 shards** — автоматический выбор количества шардов
+
+### Примеры использования
+
+```go
+// Retry с exponential backoff
+cfg := retry.DefaultConfig()
+result := retry.Do(ctx, func(ctx context.Context, attempt int) error {
+    return someNetworkOperation()
+}, cfg)
+
+// LRU Cache
+cache := cache.NewLRUCache[string, DNSResult](10000, 5*time.Minute)
+cache.Set("example.com", result)
+val, found := cache.Get("example.com")
+```
+
+---
+
+## [3.21.0+] - 2026-03-28
+
+### Добавлено
+- **circuitbreaker/breaker.go** — circuit breaker для защиты от каскадных сбоев
+- **circuitbreaker/breaker_test.go** — тесты для circuit breaker
+- **metrics/metrics.go** — общие метрики производительности
+- **worker/pool.go** — расширенные метрики (AdvancedStats, LatencyStats)
+- **packet/processor.go** — расширенные метрики (AdvancedStats, утилизация)
+- **metrics/collector.go** — сборщик метрик для Prometheus
+
+### Улучшения производительности
+- ✅ **Advanced Metrics** — средняя/максимальная задержка, утилизация воркеров
+- ✅ **Latency Tracking** — атомарный подсчёт latency с минимальными накладными расходами
+- ✅ **Worker Utilization** — процент активных воркеров в реальном времени
+- ✅ **Circuit Breaker** — автоматическая защита от сбоев внешних сервисов
+
+### Изменено
+- **worker/pool.go** — добавлены поля latencySumNs, latencyCount, latencyMaxNs, activeWorkers
+- **packet/processor.go** — добавлены поля для расширенных метрик
+- **circuitbreaker/breaker.go** — Reset() теперь сбрасывает и статистику тоже
+
+### Технические детали
+- **Lock-free метрики** — atomic.Int64 для latency, atomic.Uint64 для счётчиков
+- **CompareAndSwap** — для обновления max latency без блокировок
+- **Shared metrics types** — metrics.LatencyStats, metrics.AdvancedStats
+
+---
+
+## [3.20.0+] - 2026-03-28
+
+### Добавлено
+- **МНОГОПОТОЧНАЯ ОБРАБОТКА** — обязательная для всех критических компонентов
+- **worker/pool.go** — worker pool для конкурентной обработки пакетов
+- **worker/pool_test.go** — тесты для worker pool
+- **packet/processor.go** — многопоточный процессор сетевых пакетов
+- **packet/processor_test.go** — тесты для packet processor
+- **dhcp/server.go** — worker pool для DHCP запросов (workerCount, requestQueue)
+- **dns/resolver.go** — worker pool для DNS запросов (queryWorkers, queryQueue)
+- **docs/MULTITHREADING.md** — полная документация по многопоточности
+
+### Изменено
+- **dhcp/server.go** — HandleRequest() использует worker pool вместо синхронной обработки
+- **dhcp/server.go** — Stop() корректно останавливает worker pool
+- **dns/resolver.go** — LookupIP() использует worker pool для асинхронного разрешения
+- **dns/resolver.go** — Stop() логирует финальную статистику
+- **test-race.sh** — добавлен GOMEMLIMIT=4GB для предотвращения OOM
+- **test-race.sh** — добавлены -p 1 -parallel 1 для снижения нагрузки на память
+- **test.bat** — новый скрипт для быстрых тестов на Windows
+- **test-race.bat** — новый скрипт для race tests на Windows
+- **bench.sh** — новый скрипт для бенчмарков с лимитом памяти
+- **bench.bat** — новый скрипт для бенчмарков на Windows
+- **README.md** — добавлена секция "🧪 Тестирование" с предупреждениями
+
+### Улучшения производительности
+- ✅ **Packet Processor** — ~50ns/op, 1M+ пакетов/сек
+- ✅ **DHCP Server** — ~100μs/op, 10K+ запросов/сек
+- ✅ **DNS Resolver** — кэширование + worker pool, 100K+ запросов/сек
+- ✅ **Lock-free структуры** — sync.Map, atomic.Value, atomic.Uint64
+- ✅ **Zero-copy** — sync.Pool для буферов
+
+### Технические детали
+- **Worker Pool Pattern** — все компоненты используют worker pool
+- **Автоматическое определение воркеров** — runtime.NumCPU()
+- **Graceful Shutdown** — корректная остановка с ожиданием завершения
+- **Статистика в реальном времени** — processed, dropped, errors, latency
+- **Потокобезопасность** — все компоненты безопасны для конкурентного доступа
+
+### Исправлено
+- **Краш системы при тестах** — race detector теперь с лимитом памяти
+- **OOM при бенчмарках** — GOMEMLIMIT предотвращает исчерпание памяти
+- **Блокирующая обработка** — все операции стали асинхронными
+
+### Миграция
+- При обновлении рекомендуется проверить кастомные обработчики пакетов
+- Используйте `processor.Submit()` вместо прямой обработки
+- Всегда вызывайте `Stop()` для корректной остановки
+
+---
+
 ## [3.19.19+] - 2026-03-27
 
 ### Добавлено

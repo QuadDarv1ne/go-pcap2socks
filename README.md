@@ -238,6 +238,48 @@ go build -o go-pcap2socks.exe .
 GOOS=linux GOARCH=amd64 go build -o go-pcap2socks-linux .
 ```
 
+## 🧪 Тестирование
+
+### ⚡ Быстрые тесты (рекомендуется для разработки)
+
+```bash
+# Linux/macOS
+./test.sh
+
+# Windows
+.\test.bat
+```
+
+✅ Без race detector — низкое потребление памяти (~100MB)  
+✅ Только unit-тесты, без бенчмарков  
+✅ Ограниченная параллельность
+
+### 🔍 Тесты с race detector (только для CI/серверов)
+
+```bash
+# Linux/macOS
+./test-race.sh
+
+# Windows
+.\test-race.bat
+```
+
+⚠️ **Внимание:** Race detector увеличивает потребление памяти в **10 раз** и замедляет тесты в **20 раз**.  
+⚠️ **Требования:** 16GB+ RAM, запускать на стабильной системе.  
+⚠️ **Не рекомендуется** для локальной разработки на машинах с <16GB RAM.
+
+### 📊 Бенчмарки
+
+```bash
+# Linux/macOS
+./bench.sh 1s ./proxy
+
+# Windows
+.\bench.bat 1s ./proxy
+```
+
+Память ограничена: `GOMEMLIMIT=2GB` для предотвращения OOM.
+
 ## 🏗️ Архитектура
 
 ```
