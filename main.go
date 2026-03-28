@@ -256,22 +256,7 @@ func main() {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("Critical error, shutting down", "error", r)
-			// Perform graceful shutdown
-			if _shutdownManager != nil {
-				_shutdownManager.ShutdownWithTimeout(30 * time.Second)
-			}
-			if _httpServer != nil {
-				_httpServer.Shutdown(context.Background())
-			}
-			if _arpMonitor != nil {
-				_arpMonitor.Stop()
-			}
-			if _healthChecker != nil {
-				_healthChecker.Stop()
-			}
-			if asyncHandler != nil {
-				asyncHandler.Flush()
-			}
+			performGracefulShutdown()
 			os.Exit(1)
 		}
 	}()
@@ -556,10 +541,11 @@ func main() {
 
 	// Setup HTTP server with graceful shutdown on port 8085
 	_httpServer = &http.Server{
-		Addr: fmt.Sprintf(":%d", defaultHTTPPort),
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte(msgs.HelloWorld))
-		}),
+		Addr:         fmt.Sprintf(":%d", defaultHTTPPort),
+		Handler:      http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(msgs.HelloWorld)) }),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	// Start HTTP server in goroutine
@@ -1006,6 +992,119 @@ func GetShutdownChan() <-chan struct{} {
 // IsRunning returns the running state
 func IsRunning() bool {
 	return _running.Load()
+}
+
+// performGracefulShutdown performs a complete graceful shutdown of all components
+// Called on panic recovery or signal handling
+func performGracefulShutdown() {
+	slog.Info("Performing graceful shutdown...")
+
+	// 1. Stop accepting new connections - HTTP server
+	if _httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := _httpServer.Shutdown(ctx); err != nil {
+			slog.Error("HTTP server shutdown error", slog.Any("err", err))
+		} else {
+			slog.Info("HTTP server stopped")
+		}
+	}
+
+	// 2. Stop DNS components
+	if _dnsResolver != nil {
+		_dnsResolver.StopPrefetch()
+		slog.Info("DNS resolver prefetch stopped")
+	}
+	if _dohServer != nil {
+		_dohServer.Stop()
+		slog.Info("DoH server stopped")
+	}
+
+	// 3. Stop monitoring components
+	if _arpMonitor != nil {
+		_arpMonitor.Stop()
+		slog.Info("ARP monitor stopped")
+	}
+	if _healthChecker != nil {
+		_healthChecker.Stop()
+		slog.Info("Health checker stopped")
+	}
+
+	// 4. Stop hotkey manager
+	if _hotkeyManager != nil {
+		_hotkeyManager.Stop()
+		slog.Info("Hotkey manager stopped")
+	}
+
+	// 5. Stop UPnP manager
+	if _upnpManager != nil {
+		_upnpManager.Stop()
+		slog.Info("UPnP manager stopped")
+	}
+
+	// 6. Stop API server
+	if _apiServer != nil {
+		_apiServer.StopRealTimeUpdates()
+		_apiServer.Stop()
+		slog.Info("API server stopped")
+	}
+
+	// 7. Stop router and proxy groups
+	if _defaultProxy != nil {
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			router.Stop()
+			slog.Info("Router stopped")
+			// Stop proxy groups
+			for _, p := range router.Proxies {
+				if group, ok := p.(*proxy.ProxyGroup); ok {
+					group.Stop()
+					slog.Debug("Proxy group stopped", "name", group.Addr())
+				}
+			}
+		}
+	}
+
+	// 8. Stop stats store
+	if _statsStore != nil {
+		_statsStore.Stop()
+		slog.Info("Stats store stopped")
+	}
+
+	// 9. Close network stack and device
+	if _defaultStack != nil {
+		_defaultStack.Close()
+		slog.Info("Network stack closed")
+	}
+	if _defaultDevice != nil {
+		_defaultDevice.Close()
+		slog.Info("Network device closed")
+	}
+
+	// 10. Stop DHCP server and save leases
+	if _dhcpServer != nil {
+		switch server := _dhcpServer.(type) {
+		case *dhcp.Server:
+			server.Stop()
+			slog.Info("DHCP server stopped")
+		}
+	}
+
+	// 11. Flush async logs
+	if asyncHandler != nil {
+		asyncHandler.Flush()
+		slog.Info("Async logs flushed")
+	}
+
+	// 12. Finally, shutdown manager for state persistence
+	if _shutdownManager != nil {
+		if err := _shutdownManager.ShutdownWithTimeout(30 * time.Second); err != nil {
+			slog.Warn("Shutdown manager reported errors", slog.Any("error", err))
+		} else {
+			slog.Info("Shutdown manager completed")
+		}
+	}
+
+	slog.Info("Graceful shutdown completed")
 }
 
 // Stop stops the service gracefully
