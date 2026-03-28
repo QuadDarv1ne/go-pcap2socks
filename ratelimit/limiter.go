@@ -82,6 +82,12 @@ func (l *Limiter) Allow() bool {
 	}
 }
 
+// SetRate updates the rate limit dynamically
+func (l *Limiter) SetRate(rate float64) {
+	refillRate := uint64(rate * tokenScale / 1e9) // tokens per nanosecond
+	l.refillRate = refillRate
+}
+
 // AllowN checks if n tokens are available (lock-free)
 func (l *Limiter) AllowN(n int) bool {
 	l.init()
