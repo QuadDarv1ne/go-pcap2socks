@@ -15,12 +15,16 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
+	"github.com/armon/go-radix"
 )
 
 // RoutingTable provides lock-free routing rule storage using atomic.Value
 // This eliminates RWMutex contention in high-concurrency scenarios
+// Optimized with radix tree for O(log n) IP lookup instead of O(n) linear search
 type RoutingTable struct {
-	rules atomic.Value // contains []*cfg.Rule
+	rules atomic.Value // contains []cfg.Rule
+	// Radix tree for IP-based routing: key = IP CIDR string, value = *cfg.Rule
+	ipTree atomic.Value // *radix.Tree
 }
 
 // NewRoutingTable creates a new routing table with the given rules
@@ -30,13 +34,28 @@ func NewRoutingTable(rules []cfg.Rule) *RoutingTable {
 	return rt
 }
 
-// Update atomically replaces all routing rules
+// Update atomically replaces all routing rules and rebuilds the radix tree
 // This is safe for concurrent use and provides instant rule updates
 func (rt *RoutingTable) Update(rules []cfg.Rule) {
 	// Create a copy to prevent external modification
 	rulesCopy := make([]cfg.Rule, len(rules))
 	copy(rulesCopy, rules)
 	rt.rules.Store(rulesCopy)
+
+	// Build radix tree for IP-based rules
+	tree := radix.New()
+	for i := range rulesCopy {
+		rule := &rulesCopy[i]
+		// Add source IP rules
+		for _, ip := range rule.SrcIPs {
+			tree.Insert(ip.String(), rule)
+		}
+		// Add destination IP rules
+		for _, ip := range rule.DstIPs {
+			tree.Insert(ip.String(), rule)
+		}
+	}
+	rt.ipTree.Store(tree)
 }
 
 // Load returns the current routing rules (read-only snapshot)
@@ -49,8 +68,29 @@ func (rt *RoutingTable) Load() []cfg.Rule {
 }
 
 // Match finds the first matching rule for the given metadata
-// This is lock-free and safe for concurrent access
+// Optimized with radix tree for O(log n) IP lookup
+// Falls back to linear search for port-based rules
 func (rt *RoutingTable) Match(metadata *M.Metadata) (string, bool) {
+	// First check radix tree for IP-based rules (fast path)
+	if tree := rt.ipTree.Load(); tree != nil {
+		radixTree := tree.(*radix.Tree)
+		// Check source IP
+		if _, value, ok := radixTree.LongestPrefix(metadata.SrcIP.String()); ok && value != nil {
+			rule := value.(*cfg.Rule)
+			if matchRuleNoIP(metadata, rule) {
+				return rule.OutboundTag, true
+			}
+		}
+		// Check destination IP
+		if _, value, ok := radixTree.LongestPrefix(metadata.DstIP.String()); ok && value != nil {
+			rule := value.(*cfg.Rule)
+			if matchRuleNoIP(metadata, rule) {
+				return rule.OutboundTag, true
+			}
+		}
+	}
+
+	// Fallback to linear search for port-only rules
 	rules := rt.rules.Load()
 	if rules == nil {
 		return "", false
@@ -384,6 +424,18 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	}
 
 	return nil, ErrProxyNotFound
+}
+
+// matchRuleNoIP checks if metadata matches a routing rule (without IP check)
+// Used after radix tree lookup for port-based matching
+func matchRuleNoIP(metadata *M.Metadata, rule *cfg.Rule) bool {
+	if rule.SrcPortMatcher != nil && rule.SrcPortMatcher.Matches(metadata.SrcPort) {
+		return true
+	}
+	if rule.DstPortMatcher != nil && rule.DstPortMatcher.Matches(metadata.DstPort) {
+		return true
+	}
+	return false
 }
 
 // matchRule checks if metadata matches a routing rule
