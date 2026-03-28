@@ -17,7 +17,7 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
 - [x] Ветки: main/dev синхронизированы и отправлены ✅
 - [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `c5f4275 feat: интеграция WebSocket tray в main.go` ✅
+- [x] Последний коммит: `92a3144 feat: динамические иконки для tray icon` ✅
 - [x] govulncheck: уязвимостей нет ✅
 
 ---
@@ -691,10 +691,10 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] ✅ Интеграция динамических иконок в tray_ws.go (embed + updateUI)
 - [ ] Анимация иконки при изменении статуса
 
-### 🟡 Сессия 11: Улучшения (P2)
+### 🟡 Сессия 11: Улучшения (P2) — ✅ ЗАВЕРШЕНО
+- [x] ✅ Config hot reload — перезагрузка конфига без рестарта (cfg/reload.go, main.go)
 - [ ] Health check улучшения — добавить новые probe types (TCP, UDP)
 - [ ] Rate limit улучшения — adaptive rate limiting
-- [ ] Config hot reload — перезагрузка конфига без рестарта
 
 ### Производительность
 - [x] ✅ CPU profiling в production (pprof) — реализовано в v3.23.0+

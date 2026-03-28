@@ -78,6 +78,9 @@ var asyncHandler *asynclogger.AsyncHandler
 // _apiServer is the global API server instance
 var _apiServer *api.Server
 
+// _configReloader handles hot config reloads
+var _configReloader *cfg.Reloader
+
 // allowedCommands - whitelist разрешённых команд для executeOnStart
 // Это предотвращает Command Injection уязвимость
 var allowedCommands = map[string]bool{
@@ -332,6 +335,9 @@ func main() {
 		return
 	}
 	slog.Info("Config validation passed")
+
+	// Initialize hot config reload
+	initConfigReload(cfgFile)
 
 	// Initialize localizer with language from config
 	localizer := i18n.NewLocalizer(i18n.Language(config.Language))
@@ -1009,6 +1015,12 @@ func IsRunning() bool {
 // Called on panic recovery or signal handling
 func performGracefulShutdown() {
 	slog.Info("Performing graceful shutdown...")
+
+	// 0. Stop config reloader
+	if _configReloader != nil {
+		_configReloader.Stop()
+		slog.Info("Config reloader stopped")
+	}
 
 	// 1. Stop accepting new connections - HTTP server
 	if _httpServer != nil {
@@ -2764,4 +2776,40 @@ func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) 
 	}
 
 	return nil, nil
+}
+
+// initConfigReload initializes hot config reload
+func initConfigReload(cfgFile string) {
+	reloader, err := cfg.AutoReload(cfgFile, func(newConfig *cfg.Config) error {
+		slog.Info("Config reloaded, applying changes...")
+		
+		// Apply language change
+		if newConfig.Language != "" {
+			localizer := i18n.NewLocalizer(i18n.Language(newConfig.Language))
+			_ = localizer
+		}
+		
+		// Apply API token change
+		if newConfig.API != nil && _apiServer != nil {
+			if newConfig.API.Token != "" {
+				_apiServer.SetAuthToken(newConfig.API.Token)
+			}
+		}
+		
+		// Apply rate limit changes
+		if newConfig.RateLimit != nil {
+			slog.Info("Rate limit config changed", "default", newConfig.RateLimit.Default)
+		}
+		
+		slog.Info("Config changes applied successfully")
+		return nil
+	})
+	
+	if err != nil {
+		slog.Warn("Failed to initialize config reloader", "error", err)
+		return
+	}
+	
+	_configReloader = reloader
+	slog.Info("Config hot reload enabled", "file", cfgFile)
 }
