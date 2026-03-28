@@ -79,6 +79,24 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.47) - RADIX TREE ROUTING
+
+### v3.19.47 - Radix Tree для маршрутизации
+- **proxy/router.go**: radix tree для O(log n) IP lookup
+  - `RoutingTable`: добавлено поле `ipTree (*radix.Tree)`
+  - `Update()`: строит radix tree при обновлении правил
+  - `Match()`: сначала radix tree (fast path), затем linear search
+  - `matchRuleNoIP()`: port-based matching после radix lookup
+- **go.mod**: добавлена зависимость `github.com/armon/go-radix v1.0.0`
+
+**Эффект**:
+- Маршрутизация по IP: O(n) → O(log n)
+- Для 1000 правил: ~10 сравнений вместо ~500 в среднем
+- Память: ~100 bytes на правило в radix tree
+- Совместимость: fallback на linear search для port-only правил
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
