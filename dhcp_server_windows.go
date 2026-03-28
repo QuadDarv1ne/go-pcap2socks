@@ -5,6 +5,8 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
@@ -13,12 +15,36 @@ import (
 )
 
 // createDHCPServer creates a DHCP server instance
-// Uses WinDivert for maximum compatibility and packet injection
+// Uses WinDivert if available, otherwise returns nil (DHCP disabled)
 func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig *device.NetworkConfig) (interface{}, error) {
 	// Enable Smart DHCP for device-based IP allocation
 	enableSmartDHCP := true
 	poolStart := dhcpConfig.FirstIP.String()
 	poolEnd := dhcpConfig.LastIP.String()
+
+	// Check if WinDivert.dll exists in current directory
+	winDivertAvailable := false
+	executable, _ := os.Executable()
+	execDir := filepath.Dir(executable)
+	winDivertPath := filepath.Join(execDir, "WinDivert.dll")
+	if _, err := os.Stat(winDivertPath); err == nil {
+		winDivertAvailable = true
+	} else {
+		// Also check current working directory
+		if _, err := os.Stat("WinDivert.dll"); err == nil {
+			winDivertAvailable = true
+		}
+	}
+
+	// WinDivert not available - return nil (DHCP will be disabled)
+	if !winDivertAvailable {
+		slog.Warn("WinDivert.dll not found - DHCP server disabled")
+		slog.Warn("To enable DHCP:")
+		slog.Warn("  1. Download WinDivert from https://reqrypt.org/download.html")
+		slog.Warn("  2. Copy WinDivert.dll to the application directory")
+		slog.Warn("  3. Or use static IP on your device")
+		return nil, nil
+	}
 
 	// Create WinDivert DHCP server
 	winDivertDHCP, err := windivert.NewDHCPServer(dhcpConfig, netConfig.LocalMAC, enableSmartDHCP, poolStart, poolEnd)
@@ -34,11 +60,9 @@ func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig 
 		return nil, err
 	}
 
-	slog.Info("WINDIVERT DHCP SERVER STARTED (MAXIMUM COMPATIBILITY)",
+	slog.Info("WINDIVERT DHCP SERVER STARTED",
 		"pool", fmt.Sprintf("%s-%s", dhcpConfig.FirstIP, dhcpConfig.LastIP),
 		"lease", fmt.Sprintf("%ds", cfg.DHCP.LeaseDuration),
-		"COMPATIBILITY", "ALL DEVICES (PS4/PS5/Xbox/Robots/Phones/etc.)",
-		"SmartDHCP", "enabled",
 		"engine", "WinDivert")
 
 	return winDivertDHCP, nil

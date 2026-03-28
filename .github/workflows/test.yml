@@ -1,0 +1,124 @@
+name: Go Test & Race Detection
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    name: Test & Race Detection
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        go: ['1.21', '1.22']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Run tests without race (fast)
+      run: go test -short -run '^(Test|Example)' -p 1 ./... -timeout=2m
+      env:
+        CGO_ENABLED: 0
+
+    - name: Run tests with race detection
+      run: go test -race -v ./... -timeout=5m
+      env:
+        CGO_ENABLED: 1
+
+    - name: Generate coverage report
+      if: always()
+      run: go test -v ./... -timeout=3m -coverprofile=coverage.out
+      env:
+        CGO_ENABLED: 0
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-${{ matrix.go }}
+
+  fuzz:
+    name: Fuzzing Tests
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache: true
+
+    - name: Run fuzzing (short)
+      run: |
+        go test -fuzz=Fuzz -fuzztime=30s ./dhcp/...
+        go test -fuzz=Fuzz -fuzztime=30s ./dns/...
+        go test -fuzz=Fuzz -fuzztime=30s ./cfg/...
+        go test -fuzz=Fuzz -fuzztime=30s ./transport/...
+      continue-on-error: true
+
+  lint:
+    name: Static Analysis
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache: true
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: latest
+        args: --timeout=5m
+
+  build:
+    name: Build Verification
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        go: ['1.21', '1.22']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+
+    - name: Build
+      run: go build -v -o pcap2socks${{ matrix.os == 'windows-latest' && '.exe' || '' }} .
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: pcap2socks-${{ matrix.os }}-go${{ matrix.go }}
+        path: pcap2socks${{ matrix.os == 'windows-latest' && '.exe' || '' }}

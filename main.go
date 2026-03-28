@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
 	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
+	"github.com/QuadDarv1ne/go-pcap2socks/health"
 	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
@@ -211,11 +213,36 @@ func main() {
 	// Optimize GOMAXPROCS for better performance
 	goroutine.OptimizeProcs()
 
+	// Tune GC for low-latency network processing
+	// Reduce GC pauses for better real-time packet handling
+	debug.SetGCPercent(20) // More frequent but shorter GC pauses
+	// Memory limit will be set based on system RAM (512MB default for now)
+	// debug.SetMemoryLimit(512 << 20) // Uncomment if memory pressure is observed
+	slog.Debug("GC tuned for low latency", "gc_percent", 20)
+
 	// Initialize shutdown manager
 	executable, _ := os.Executable()
 	stateFile := filepath.Join(filepath.Dir(executable), "state.json")
 	_shutdownManager = shutdown.NewManager(stateFile)
 	slog.Info("Shutdown manager initialized", "state_file", stateFile)
+
+	// Initialize health checker for network monitoring and recovery
+	_healthChecker = health.NewHealthChecker(&health.HealthCheckerConfig{
+		CheckInterval:     10 * time.Second,
+		RecoveryThreshold: 3,
+		OnRecoveryNeeded: func() {
+			slog.Warn("Network health check failed, attempting recovery...")
+			// Recovery logic will be implemented in run()
+		},
+		OnRecoveryComplete: func(err error) {
+			if err != nil {
+				slog.Error("Network recovery failed", "error", err)
+			} else {
+				slog.Info("Network recovery completed successfully")
+			}
+		},
+	})
+	slog.Info("Health checker initialized")
 
 	// Setup deferred recovery for graceful shutdown
 	defer func() {
@@ -230,6 +257,9 @@ func main() {
 			}
 			if _arpMonitor != nil {
 				_arpMonitor.Stop()
+			}
+			if _healthChecker != nil {
+				_healthChecker.Stop()
 			}
 			if asyncHandler != nil {
 				asyncHandler.Flush()
@@ -410,6 +440,9 @@ func main() {
 		"cache_size", config.DNS.CacheSize,
 		"cache_ttl", config.DNS.CacheTTL)
 
+	// Start DNS prefetch for proactive cache refresh
+	_dnsResolver.StartPrefetch()
+
 	// Run DNS benchmark in background
 	if config.DNS.AutoBench {
 		goroutine.SafeGo(func() {
@@ -417,6 +450,19 @@ func main() {
 			_dnsResolver.Benchmark(context.Background())
 		})
 	}
+
+	// Start health checker for network monitoring
+	_healthChecker.Start(context.Background())
+	
+	// Add DNS health probe
+	if len(config.DNS.Servers) > 0 {
+		dnsServer := config.DNS.Servers[0].Address
+		_healthChecker.AddProbe(health.NewDNSProbe("Primary DNS", dnsServer, "google.com", 5*time.Second))
+		slog.Info("Health checker: DNS probe added", "dns_server", dnsServer)
+	}
+	
+	// Add HTTP health probe
+	_healthChecker.AddProbe(health.NewHTTPProbe("Internet Connectivity", "https://www.google.com", 5*time.Second))
 
 	// Initialize DNS-over-HTTPS server
 	if config.DNS.Server != nil && config.DNS.Server.Enabled {
@@ -508,213 +554,214 @@ func main() {
 		}
 	})
 
-	// Start web UI server on port 8080
-	goroutine.SafeGo(func() {
-		slog.Info("Starting web UI server on :8080")
+	// Setup API server
+	slog.Info("Starting web UI server on :8080")
 
-		// Set start time for API
-		api.SetStartTime(time.Now())
+	// Set start time for API
+	api.SetStartTime(time.Now())
 
-		// Set running state checker for API
-		api.SetIsRunningFn(func() bool {
-			return _running
-		})
+	// Set running state checker for API
+	api.SetIsRunningFn(func() bool {
+		return _running
+	})
 
-		// Set interface list getter for API
-		api.SetInterfaceListFn(func() []interface{} {
-			interfaces := auto.GetInterfaceList()
-			result := make([]interface{}, len(interfaces))
-			for i, iface := range interfaces {
-				result[i] = map[string]interface{}{
-					"name":            iface.Name,
-					"ip":              iface.IP,
-					"mac":             iface.MAC,
-					"network":         iface.Network,
-					"netmask":         iface.Netmask,
-					"network_start":   iface.NetworkStart,
-					"recommended_mtu": iface.RecommendedMTU,
-					"has_internet":    iface.HasInternet,
-					"is_virtual":      iface.IsVirtual,
-				}
+	// Set interface list getter for API
+	api.SetInterfaceListFn(func() []interface{} {
+		interfaces := auto.GetInterfaceList()
+		result := make([]interface{}, len(interfaces))
+		for i, iface := range interfaces {
+			result[i] = map[string]interface{}{
+				"name":            iface.Name,
+				"ip":              iface.IP,
+				"mac":             iface.MAC,
+				"network":         iface.Network,
+				"netmask":         iface.Netmask,
+				"network_start":   iface.NetworkStart,
+				"recommended_mtu": iface.RecommendedMTU,
+				"has_internet":    iface.HasInternet,
+				"is_virtual":      iface.IsVirtual,
 			}
-			return result
-		})
+		}
+		return result
+	})
 
-		// Set DHCP leases getter for API
-		api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
-			if _dhcpServer == nil {
-				return nil
-			}
+	// Set DHCP leases getter for API
+	api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
+		if _dhcpServer == nil {
+			return nil
+		}
 
-			// Try to get leases from DHCP server
-			var leases []map[string]interface{}
+		// Try to get leases from DHCP server
+		var leases []map[string]interface{}
 
-			// Check if it's WinDivert DHCP server (Windows only)
-			if isWinDivertServer(_dhcpServer) {
-				leasesData := getWinDivertLeases(_dhcpServer)
-				if leasesData != nil {
-					if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
-						leases = make([]map[string]interface{}, 0, len(leasesList))
-						for mac, lease := range leasesList {
-							if leaseMap, ok := lease.(struct {
-								IP        net.IP
-								ExpiresAt time.Time
-							}); ok {
-								leases = append(leases, map[string]interface{}{
-									"mac":        mac,
-									"ip":         leaseMap.IP.String(),
-									"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
-								})
-							}
+		// Check if it's WinDivert DHCP server (Windows only)
+		if isWinDivertServer(_dhcpServer) {
+			leasesData := getWinDivertLeases(_dhcpServer)
+			if leasesData != nil {
+				if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
+					leases = make([]map[string]interface{}, 0, len(leasesList))
+					for mac, lease := range leasesList {
+						if leaseMap, ok := lease.(struct {
+							IP        net.IP
+							ExpiresAt time.Time
+						}); ok {
+							leases = append(leases, map[string]interface{}{
+								"mac":        mac,
+								"ip":         leaseMap.IP.String(),
+								"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
+							})
 						}
 					}
 				}
 			}
-
-			// Check if it's standard DHCP server
-			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
-				dhcpLeases := stdDHCP.GetLeases()
-				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-				for mac, lease := range dhcpLeases {
-					leases = append(leases, map[string]interface{}{
-						"mac":        mac,
-						"ip":         lease.IP.String(),
-						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-					})
-				}
-			}
-
-			// Check if it's simple DHCP server (npcap_dhcp)
-			if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-				dhcpLeases := simpleDHCP.GetLeases()
-				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-				for mac, lease := range dhcpLeases {
-					leaseMap := map[string]interface{}{
-						"mac":        mac,
-						"ip":         lease.IP.String(),
-						"hostname":   lease.Hostname,
-						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-					}
-					leases = append(leases, leaseMap)
-					
-					// Update hostname in stats store
-					if _statsStore != nil && lease.Hostname != "" {
-						_statsStore.SetHostname(mac, lease.Hostname)
-					}
-				}
-			}
-
-			return leases
-		})
-
-		// Set DHCP metrics getter for API
-		api.SetGetDHCPMetricsFn(func() map[string]interface{} {
-			if _dhcpServer == nil {
-				return map[string]interface{}{
-					"available": false,
-					"message":   "DHCP server not running",
-				}
-			}
-
-			// Try to get metrics from DHCP server
-			var metrics map[string]interface{}
-
-			// Check if it's standard DHCP server with metrics
-			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
-				metricsCollector := stdDHCP.GetMetrics()
-				if metricsCollector != nil {
-					snapshot := metricsCollector.GetMetrics()
-					metrics = map[string]interface{}{
-						"available":       true,
-						"uptime_seconds":  snapshot.UptimeSeconds,
-						"active_leases":   snapshot.ActiveLeases,
-						"total_allocations": snapshot.TotalAllocations,
-						"total_renewals":  snapshot.TotalRenewals,
-						"discover_count":  snapshot.DiscoverCount,
-						"offer_count":     snapshot.OfferCount,
-						"request_count":   snapshot.RequestCount,
-						"ack_count":       snapshot.AckCount,
-						"nak_count":       snapshot.NakCount,
-						"release_count":   snapshot.ReleaseCount,
-						"decline_count":   snapshot.DeclineCount,
-						"error_count":     snapshot.ErrorCount,
-						"last_request_mac": snapshot.LastRequestMAC,
-						"last_request_ip": snapshot.LastRequestIP,
-						"start_time":      snapshot.StartTime.Format(time.RFC3339),
-					}
-				}
-			}
-
-			if metrics == nil {
-				metrics = map[string]interface{}{
-					"available": false,
-					"message":   "DHCP metrics not available",
-				}
-			}
-
-			return metrics
-		})
-
-		// Set service control callbacks for API
-		api.SetServiceCallbacks(
-			func() error {
-				// Start service: set running flag and reset start time
-				if !_running {
-					_running = true
-					api.SetStartTime(time.Now())
-					slog.Info("Service started via API")
-					// Notify via system notification
-					notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
-				}
-				return nil
-			},
-			func() error {
-				// Stop service: clear running flag
-				if _running {
-					_running = false
-					slog.Info("Service stopped via API")
-					// Notify via system notification
-					notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
-				}
-				return nil
-			},
-		)
-
-		// Create API server with global stats store and profile manager
-		_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
-
-		// Set auth token from config if provided, otherwise use auto-generated token
-		if config.API != nil && config.API.Token != "" {
-			_apiServer.SetAuthToken(config.API.Token)
-			slog.Info("API authentication token loaded from config")
-		} else {
-			// Token was auto-generated in NewServer, log it for the user
-			slog.Info("API authentication token auto-generated. Set 'token' in config.json to use a custom token.", "token", _apiServer.GetAuthToken())
 		}
 
-		// Start real-time WebSocket updates (1 second interval)
-		_apiServer.StartRealTimeUpdates(1 * time.Second)
+		// Check if it's standard DHCP server
+		if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+			dhcpLeases := stdDHCP.GetLeases()
+			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+			for mac, lease := range dhcpLeases {
+				leases = append(leases, map[string]interface{}{
+					"mac":        mac,
+					"ip":         lease.IP.String(),
+					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+				})
+			}
+		}
 
+		// Check if it's simple DHCP server (npcap_dhcp)
+		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+			dhcpLeases := simpleDHCP.GetLeases()
+			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+			for mac, lease := range dhcpLeases {
+				leaseMap := map[string]interface{}{
+					"mac":        mac,
+					"ip":         lease.IP.String(),
+					"hostname":   lease.Hostname,
+					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+				}
+				leases = append(leases, leaseMap)
+
+				// Update hostname in stats store
+				if _statsStore != nil && lease.Hostname != "" {
+					_statsStore.SetHostname(mac, lease.Hostname)
+				}
+			}
+		}
+
+		return leases
+	})
+
+	// Set DHCP metrics getter for API
+	api.SetGetDHCPMetricsFn(func() map[string]interface{} {
+		if _dhcpServer == nil {
+			return map[string]interface{}{
+				"available": false,
+				"message":   "DHCP server not running",
+			}
+		}
+
+		// Try to get metrics from DHCP server
+		var metrics map[string]interface{}
+
+		// Check if it's standard DHCP server with metrics
+		if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+			metricsCollector := stdDHCP.GetMetrics()
+			if metricsCollector != nil {
+				snapshot := metricsCollector.GetMetrics()
+				metrics = map[string]interface{}{
+					"available":          true,
+					"uptime_seconds":     snapshot.UptimeSeconds,
+					"active_leases":      snapshot.ActiveLeases,
+					"total_allocations":  snapshot.TotalAllocations,
+					"total_renewals":     snapshot.TotalRenewals,
+					"discover_count":     snapshot.DiscoverCount,
+					"offer_count":        snapshot.OfferCount,
+					"request_count":      snapshot.RequestCount,
+					"ack_count":          snapshot.AckCount,
+					"nak_count":          snapshot.NakCount,
+					"release_count":      snapshot.ReleaseCount,
+					"decline_count":      snapshot.DeclineCount,
+					"error_count":        snapshot.ErrorCount,
+					"last_request_mac":   snapshot.LastRequestMAC,
+					"last_request_ip":    snapshot.LastRequestIP,
+					"start_time":         snapshot.StartTime.Format(time.RFC3339),
+				}
+			}
+		}
+
+		if metrics == nil {
+			metrics = map[string]interface{}{
+				"available": false,
+				"message":   "DHCP metrics not available",
+			}
+		}
+
+		return metrics
+	})
+
+	// Set service control callbacks for API
+	api.SetServiceCallbacks(
+		func() error {
+			// Start service: set running flag and reset start time
+			if !_running {
+				_running = true
+				api.SetStartTime(time.Now())
+				slog.Info("Service started via API")
+				// Notify via system notification
+				notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
+			}
+			return nil
+		},
+		func() error {
+			// Stop service: clear running flag
+			if _running {
+				_running = false
+				slog.Info("Service stopped via API")
+				// Notify via system notification
+				notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
+			}
+			return nil
+		},
+	)
+
+	// Create API server with global stats store and profile manager
+	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
+
+	// Set auth token from config if provided, otherwise use auto-generated token
+	if config.API != nil && config.API.Token != "" {
+		_apiServer.SetAuthToken(config.API.Token)
+		slog.Info("API authentication token loaded from config")
+	} else {
+		// Token was auto-generated in NewServer, log it for the user
+		slog.Info("API authentication token auto-generated. Set 'token' in config.json to use a custom token.", "token", _apiServer.GetAuthToken())
+	}
+
+	// Start real-time WebSocket updates (1 second interval)
+	_apiServer.StartRealTimeUpdates(1 * time.Second)
+
+	// Start API server in goroutine
+	goroutine.SafeGo(func() {
 		// Setup HTTPS if configured
 		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
 			httpsCfg := config.API.HTTPS
-			
+
 			// Generate self-signed certificate if AutoTLS is enabled
 			if httpsCfg.AutoTLS {
 				executable, _ := os.Executable()
 				certFile := httpsCfg.CertFile
 				keyFile := httpsCfg.KeyFile
-				
+
 				if certFile == "" {
 					certFile = path.Join(path.Dir(executable), "server.crt")
 				}
 				if keyFile == "" {
 					keyFile = path.Join(path.Dir(executable), "server.key")
 				}
-				
+
 				// Generate certificate if it doesn't exist
 				if !tlsutil.CertExists(certFile, keyFile) {
-					slog.Info("Generating self-signed TLS certificate", 
+					slog.Info("Generating self-signed TLS certificate",
 						"cert", certFile, "key", keyFile)
 					if err := tlsutil.GenerateSelfSignedCertToFile(certFile, keyFile, "localhost"); err != nil {
 						slog.Error("Failed to generate TLS certificate", slog.Any("err", err))
@@ -722,19 +769,19 @@ func main() {
 						slog.Info("Self-signed TLS certificate generated successfully")
 					}
 				}
-				
+
 				httpsCfg.CertFile = certFile
 				httpsCfg.KeyFile = keyFile
 			}
-			
+
 			// Start HTTPS server
 			if httpsCfg.CertFile != "" && httpsCfg.KeyFile != "" {
-				slog.Info("Starting HTTPS server", 
+				slog.Info("Starting HTTPS server",
 					"port", config.API.Port,
 					"url", fmt.Sprintf("https://localhost:%d", config.API.Port),
 					"cert", httpsCfg.CertFile,
 					"key", httpsCfg.KeyFile)
-				
+
 				// Optionally start HTTP server for redirect
 				if httpsCfg.ForceHTTPS {
 					goroutine.SafeGo(func() {
@@ -767,7 +814,7 @@ func main() {
 				slog.Error("HTTP server error", slog.Any("err", err))
 			}
 		}
-	}()
+	})
 
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
@@ -827,9 +874,30 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		return err
 	}
 
+	// Load DHCP leases from previous session
+	if dhcpServer != nil {
+		if simpleDHCP, ok := dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := simpleDHCP.LoadLeases(leasesFile); err != nil {
+				slog.Warn("Failed to load DHCP leases", "error", err)
+			}
+		}
+	}
+
+	// Convert dhcpServer to device.DHCPServer interface
+	var dhcpServerIface device.DHCPServer
+	if dhcpServer != nil {
+		var ok bool
+		dhcpServerIface, ok = dhcpServer.(device.DHCPServer)
+		if !ok {
+			slog.Warn("DHCP server does not implement device.DHCPServer interface")
+		}
+	}
+
 	_defaultDevice, err = device.OpenWithDHCP(cfg.Capture, ifce, netConfig, func() device.Stacker {
 		return _defaultStack
-	}, dhcpServer)
+	}, dhcpServerIface)
 	if err != nil {
 		return err
 	}
@@ -891,6 +959,9 @@ var (
 
 	// _shutdownManager holds the graceful shutdown manager
 	_shutdownManager *shutdown.Manager
+
+	// _healthChecker holds the health checker for network monitoring and recovery
+	_healthChecker *health.HealthChecker
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}
@@ -955,6 +1026,12 @@ func Stop() {
 		}
 	}
 
+	// Stop health checker
+	if _healthChecker != nil {
+		_healthChecker.Stop()
+		slog.Info("Health checker stopped")
+	}
+
 	// Stop proxy groups
 	for _, p := range _defaultProxy.(*proxy.Router).Proxies {
 		if group, ok := p.(*proxy.ProxyGroup); ok {
@@ -1008,12 +1085,28 @@ func Stop() {
 		slog.Info("UPnP manager stopped")
 	}
 
-	// Stop DHCP server
+	// Stop DHCP server and save leases
 	if _dhcpServer != nil {
+		// Save DHCP leases before stopping
+		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := simpleDHCP.SaveLeases(leasesFile); err != nil {
+				slog.Warn("Failed to save DHCP leases", "error", err)
+			}
+		}
+
+		// Stop DHCP server
 		if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
 			stopper.Stop()
 			slog.Info("DHCP server stopped")
 		}
+	}
+
+	// Stop DNS prefetch
+	if _dnsResolver != nil {
+		_dnsResolver.StopPrefetch()
+		slog.Info("DNS prefetch stopped")
 	}
 
 	// Stop DoH server
@@ -1677,167 +1770,168 @@ func autoConfigureAndStart() {
 		}
 	})
 
-	// Start web UI server on port 8080
-	goroutine.SafeGo(func() {
-		slog.Info("Starting web UI server on :8080")
+	// Setup API server
+	slog.Info("Starting web UI server on :8080")
 
-		// Set start time for API
-		api.SetStartTime(time.Now())
+	// Set start time for API
+	api.SetStartTime(time.Now())
 
-		// Set running state checker for API
-		api.SetIsRunningFn(func() bool {
-			return _running
-		})
+	// Set running state checker for API
+	api.SetIsRunningFn(func() bool {
+		return _running
+	})
 
-		// Set DHCP leases getter for API
-		api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
-			if _dhcpServer == nil {
-				return nil
-			}
+	// Set DHCP leases getter for API
+	api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
+		if _dhcpServer == nil {
+			return nil
+		}
 
-			var leases []map[string]interface{}
+		var leases []map[string]interface{}
 
-			// Check if it's WinDivert DHCP server (Windows only)
-			if isWinDivertServer(_dhcpServer) {
-				leasesData := getWinDivertLeases(_dhcpServer)
-				if leasesData != nil {
-					if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
-						leases = make([]map[string]interface{}, 0, len(leasesList))
-						for mac, lease := range leasesList {
-							if leaseMap, ok := lease.(struct {
-								IP        net.IP
-								ExpiresAt time.Time
-							}); ok {
-								leases = append(leases, map[string]interface{}{
-									"mac":        mac,
-									"ip":         leaseMap.IP.String(),
-									"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
-								})
-							}
+		// Check if it's WinDivert DHCP server (Windows only)
+		if isWinDivertServer(_dhcpServer) {
+			leasesData := getWinDivertLeases(_dhcpServer)
+			if leasesData != nil {
+				if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
+					leases = make([]map[string]interface{}, 0, len(leasesList))
+					for mac, lease := range leasesList {
+						if leaseMap, ok := lease.(struct {
+							IP        net.IP
+							ExpiresAt time.Time
+						}); ok {
+							leases = append(leases, map[string]interface{}{
+								"mac":        mac,
+								"ip":         leaseMap.IP.String(),
+								"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
+							})
 						}
 					}
 				}
 			}
-
-			// Check if it's standard DHCP server
-			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
-				dhcpLeases := stdDHCP.GetLeases()
-				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-				for mac, lease := range dhcpLeases {
-					leases = append(leases, map[string]interface{}{
-						"mac":        mac,
-						"ip":         lease.IP.String(),
-						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-					})
-				}
-			}
-
-			// Check if it's simple DHCP server (npcap_dhcp)
-			if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-				dhcpLeases := simpleDHCP.GetLeases()
-				leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-				for mac, lease := range dhcpLeases {
-					leaseMap := map[string]interface{}{
-						"mac":        mac,
-						"ip":         lease.IP.String(),
-						"hostname":   lease.Hostname,
-						"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-					}
-					leases = append(leases, leaseMap)
-
-					// Update hostname in stats store
-					if _statsStore != nil && lease.Hostname != "" {
-						_statsStore.SetHostname(mac, lease.Hostname)
-					}
-				}
-			}
-
-			return leases
-		})
-
-		// Set DHCP metrics getter for API
-		api.SetGetDHCPMetricsFn(func() map[string]interface{} {
-			if _dhcpServer == nil {
-				return map[string]interface{}{
-					"available": false,
-					"message":   "DHCP server not running",
-				}
-			}
-
-			var metrics map[string]interface{}
-
-			// Check if it's standard DHCP server with metrics
-			if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
-				metricsCollector := stdDHCP.GetMetrics()
-				if metricsCollector != nil {
-					snapshot := metricsCollector.GetMetrics()
-					metrics = map[string]interface{}{
-						"available":         true,
-						"uptime_seconds":    snapshot.UptimeSeconds,
-						"active_leases":     snapshot.ActiveLeases,
-						"total_allocations": snapshot.TotalAllocations,
-						"total_renewals":    snapshot.TotalRenewals,
-						"discover_count":    snapshot.DiscoverCount,
-						"offer_count":       snapshot.OfferCount,
-						"request_count":     snapshot.RequestCount,
-						"ack_count":         snapshot.AckCount,
-						"nak_count":         snapshot.NakCount,
-						"release_count":     snapshot.ReleaseCount,
-						"decline_count":     snapshot.DeclineCount,
-						"error_count":       snapshot.ErrorCount,
-						"last_request_mac":  snapshot.LastRequestMAC,
-						"last_request_ip":   snapshot.LastRequestIP,
-						"start_time":        snapshot.StartTime.Format(time.RFC3339),
-					}
-				}
-			}
-
-			if metrics == nil {
-				metrics = map[string]interface{}{
-					"available": false,
-					"message":   "DHCP metrics not available",
-				}
-			}
-
-			return metrics
-		})
-
-		// Set service control callbacks for API
-		api.SetServiceCallbacks(
-			func() error {
-				if !_running {
-					_running = true
-					api.SetStartTime(time.Now())
-					slog.Info("Service started via API")
-					notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
-				}
-				return nil
-			},
-			func() error {
-				if _running {
-					_running = false
-					slog.Info("Service stopped via API")
-					notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
-				}
-				return nil
-			},
-		)
-
-		// Create API server with global stats store and profile manager
-		_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
-
-		// Set auth token from config if provided, otherwise use auto-generated token
-		if config.API != nil && config.API.Token != "" {
-			_apiServer.SetAuthToken(config.API.Token)
-			slog.Info("API authentication token loaded from config")
-		} else {
-			_apiServer.SetAuthToken(_apiServer.GetAuthToken())
-			slog.Info("API authentication token auto-generated", "token", _apiServer.GetAuthToken())
 		}
 
-		// Start real-time WebSocket updates (1 second interval)
-		_apiServer.StartRealTimeUpdates(1 * time.Second)
+		// Check if it's standard DHCP server
+		if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+			dhcpLeases := stdDHCP.GetLeases()
+			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+			for mac, lease := range dhcpLeases {
+				leases = append(leases, map[string]interface{}{
+					"mac":        mac,
+					"ip":         lease.IP.String(),
+					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+				})
+			}
+		}
 
+		// Check if it's simple DHCP server (npcap_dhcp)
+		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+			dhcpLeases := simpleDHCP.GetLeases()
+			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
+			for mac, lease := range dhcpLeases {
+				leaseMap := map[string]interface{}{
+					"mac":        mac,
+					"ip":         lease.IP.String(),
+					"hostname":   lease.Hostname,
+					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+				}
+				leases = append(leases, leaseMap)
+
+				// Update hostname in stats store
+				if _statsStore != nil && lease.Hostname != "" {
+					_statsStore.SetHostname(mac, lease.Hostname)
+				}
+			}
+		}
+
+		return leases
+	})
+
+	// Set DHCP metrics getter for API
+	api.SetGetDHCPMetricsFn(func() map[string]interface{} {
+		if _dhcpServer == nil {
+			return map[string]interface{}{
+				"available": false,
+				"message":   "DHCP server not running",
+			}
+		}
+
+		var metrics map[string]interface{}
+
+		// Check if it's standard DHCP server with metrics
+		if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+			metricsCollector := stdDHCP.GetMetrics()
+			if metricsCollector != nil {
+				snapshot := metricsCollector.GetMetrics()
+				metrics = map[string]interface{}{
+					"available":         true,
+					"uptime_seconds":    snapshot.UptimeSeconds,
+					"active_leases":     snapshot.ActiveLeases,
+					"total_allocations": snapshot.TotalAllocations,
+					"total_renewals":    snapshot.TotalRenewals,
+					"discover_count":    snapshot.DiscoverCount,
+					"offer_count":       snapshot.OfferCount,
+					"request_count":     snapshot.RequestCount,
+					"ack_count":         snapshot.AckCount,
+					"nak_count":         snapshot.NakCount,
+					"release_count":     snapshot.ReleaseCount,
+					"decline_count":     snapshot.DeclineCount,
+					"error_count":       snapshot.ErrorCount,
+					"last_request_mac":  snapshot.LastRequestMAC,
+					"last_request_ip":   snapshot.LastRequestIP,
+					"start_time":        snapshot.StartTime.Format(time.RFC3339),
+				}
+			}
+		}
+
+		if metrics == nil {
+			metrics = map[string]interface{}{
+				"available": false,
+				"message":   "DHCP metrics not available",
+			}
+		}
+
+		return metrics
+	})
+
+	// Set service control callbacks for API
+	api.SetServiceCallbacks(
+		func() error {
+			if !_running {
+				_running = true
+				api.SetStartTime(time.Now())
+				slog.Info("Service started via API")
+				notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
+			}
+			return nil
+		},
+		func() error {
+			if _running {
+				_running = false
+				slog.Info("Service stopped via API")
+				notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
+			}
+			return nil
+		},
+	)
+
+	// Create API server with global stats store and profile manager
+	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
+
+	// Set auth token from config if provided, otherwise use auto-generated token
+	if config.API != nil && config.API.Token != "" {
+		_apiServer.SetAuthToken(config.API.Token)
+		slog.Info("API authentication token loaded from config")
+	} else {
+		_apiServer.SetAuthToken(_apiServer.GetAuthToken())
+		slog.Info("API authentication token auto-generated", "token", _apiServer.GetAuthToken())
+	}
+
+	// Start real-time WebSocket updates (1 second interval)
+	_apiServer.StartRealTimeUpdates(1 * time.Second)
+
+	// Start API server in goroutine
+	goroutine.SafeGo(func() {
 		// Setup HTTPS if configured
 		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
 			httpsCfg := config.API.HTTPS
@@ -1904,7 +1998,7 @@ func autoConfigureAndStart() {
 				slog.Error("HTTP server error", slog.Any("err", err))
 			}
 		}
-	}()
+	})
 
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
@@ -2482,7 +2576,7 @@ func createProxyGroup(outbound cfg.Outbound, proxies map[string]proxy.Proxy) (*p
 }
 
 // createDHCPServerIfNeeded creates DHCP server if enabled in configuration
-func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) (device.DHCPServer, error) {
+func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) (interface{}, error) {
 	if cfg.DHCP == nil || !cfg.DHCP.Enabled {
 		return nil, nil
 	}

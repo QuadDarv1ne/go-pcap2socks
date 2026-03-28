@@ -1,0 +1,188 @@
+# Options for analysis running.
+run:
+  # Timeout for analysis, default is 1m.
+  timeout: 5m
+  
+  # Exit code when linters find issues.
+  issues-exit-code: 1
+  
+  # Include test files or not.
+  tests: true
+  
+  # Allow multiple parallel golangci-lint processes running.
+  allow-parallel-runners: true
+
+# Output configuration
+output:
+  # Format: colored-line-number|line-number|json|tab|checkstyle|code-climate|junit-xml|github-actions
+  formats:
+    - format: colored-line-number
+  
+  # Print lines of code with issue.
+  print-issued-lines: true
+  
+  # Print linter name in the end of issue text.
+  print-linter-name: true
+  
+  # Make issues output unique by line.
+  uniq-by-line: true
+
+# All available linters
+linters:
+  enable:
+    # Security
+    - gosec              # Security issues
+    
+    # Bugs
+    - errcheck           # Unchecked errors
+    - govet              # Suspicious constructs
+    - ineffassign        # Ineffective assignments
+    - staticcheck        # Static checks
+    - unused             # Unused code
+    - gosimple           # Simplify code
+    
+    # Complexity
+    - gocognit           # Cognitive complexity
+    - gocyclo            # Cyclomatic complexity
+    - nestif             # Nested if statements
+    
+    # Style
+    - gofmt              # Formatting
+    - goimports          # Imports
+    - misspell           # Spelling
+    - nakedret           # Naked returns
+    - unconvert          # Unnecessary conversions
+    - unparam            # Unused parameters
+    
+    # Error handling
+    - err113             # Error wrapping
+    - errorlint          # Error wrapping in Go 1.13+
+    
+    # Best practices
+    - bodyclose          # HTTP response body close
+    - contextcheck       # Context passing
+    - nilnil             # Return nil, nil
+    - predeclared        # Shadowing predeclared identifiers
+    - tparallel          # Parallel tests
+  
+  disable-all: false
+  
+  # Run only fast linters (for IDE integration)
+  fast: false
+
+# Linter settings
+linters-settings:
+  gocognit:
+    # Minimal code complexity to report (default 30)
+    min-complexity: 25
+  
+  gocyclo:
+    # Minimal cyclomatic complexity to report (default 30)
+    min-complexity: 25
+  
+  nestif:
+    # Minimal complexity of if statements to report (default 5)
+    min-complexity: 6
+  
+  govet:
+    # Report about shadowed variables
+    check-shadowing: true
+  
+  gofmt:
+    # Simplify code: gofmt -s
+    simplify: true
+  
+  goimports:
+    # Put imports beginning with prefix after 3rd-party packages
+    local-prefixes: github.com/QuadDarv1ne/go-pcap2socks
+  
+  misspell:
+    # Correct spellings using locale preferences
+    locale: US
+  
+  unused:
+    # Treat code as used if exported
+    check-exported: false
+  
+  unparam:
+    # Report parameters even if they're used
+    check-exported: false
+  
+  nakedret:
+    # Maximum function lines to check for naked returns
+    max-func-lines: 30
+  
+  err113:
+    # Check error wrapping
+    check-error-wrapping: true
+  
+  nilnil:
+    # Check for nil, nil returns
+    check-error: true
+    check-map: true
+    check-func: true
+  
+  contextcheck:
+    # Check context passing
+    check-context-keys: true
+
+# Issues configuration
+issues:
+  # Maximum issues count per linter
+  max-issues-per-linter: 0
+  
+  # Maximum issues count total
+  max-same-issues: 0
+  
+  # Show only new issues
+  new: false
+  
+  # Include issues excluded by default
+  include:
+    - EXC0002  # Missing comments
+    - EXC0011  # Error wrapping
+    - EXC0012  # Error messages
+    - EXC0013  # Error types
+    - EXC0014  # Error names
+    - EXC0015  # Error wrapping in Go 1.13+
+  
+  # Exclude files
+  exclude-files:
+    - ".*\\.pb\\.go$"  # Protocol buffers
+    - ".*\\.gen\\.go$" # Generated code
+  
+  # Exclude directories
+  exclude-dirs:
+    - vendor
+    - testdata
+    - tmp
+  
+  # Exclude generated code
+  exclude-generated: strict
+  
+  # Fix found issues (for --fix option)
+  fix: false
+
+# Severity (requires golangci-lint >= 1.50)
+severity:
+  # Default severity
+  default: error
+  
+  # Rules for specific linters
+  rules:
+    - linters:
+        - gosec
+        - govet
+      severity: error
+    
+    - linters:
+        - gocognit
+        - gocyclo
+        - nestif
+      severity: warning
+    
+    - linters:
+        - gofmt
+        - goimports
+        - misspell
+      severity: info

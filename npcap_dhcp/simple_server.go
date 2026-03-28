@@ -2,9 +2,11 @@
 package npcap_dhcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -814,9 +816,146 @@ func (s *SimpleServer) GetLeases() map[string]*Lease {
 func (s *SimpleServer) GetHostname(mac string) string {
 	s.leaseMu.RLock()
 	defer s.leaseMu.RUnlock()
-	
+
 	if lease, exists := s.leases[mac]; exists {
 		return lease.Hostname
 	}
 	return ""
 }
+
+// SaveLeases saves DHCP leases to a JSON file for persistence across restarts
+func (s *SimpleServer) SaveLeases(filename string) error {
+	s.leaseMu.RLock()
+	defer s.leaseMu.RUnlock()
+
+	// Convert leases to serializable format
+	leasesData := make(map[string]map[string]interface{})
+	for mac, lease := range s.leases {
+		leasesData[mac] = map[string]interface{}{
+			"mac":            lease.MAC.String(),
+			"ip":             lease.IP.String(),
+			"hostname":       lease.Hostname,
+			"client_id":      lease.ClientID,
+			"vendor_class":   lease.VendorClass,
+			"parameter_list": lease.ParameterList,
+			"expires_at":     lease.ExpiresAt,
+		}
+	}
+
+	// Marshal to JSON
+	data, err := json.MarshalIndent(leasesData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal leases: %w", err)
+	}
+
+	// Write to temp file first (atomic write)
+	tempFile := filename + ".tmp"
+	if err := os.WriteFile(tempFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp leases file: %w", err)
+	}
+
+	// Rename temp file to actual file (atomic on most filesystems)
+	if err := os.Rename(tempFile, filename); err != nil {
+		return fmt.Errorf("failed to rename leases file: %w", err)
+	}
+
+	slog.Info("DHCP leases saved", "file", filename, "count", len(leasesData))
+	return nil
+}
+
+// LoadLeases loads DHCP leases from a JSON file
+func (s *SimpleServer) LoadLeases(filename string) error {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		slog.Info("No saved DHCP leases found")
+		return nil
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("failed to read leases file: %w", err)
+	}
+
+	var leasesData map[string]map[string]interface{}
+	if err := json.Unmarshal(data, &leasesData); err != nil {
+		return fmt.Errorf("failed to unmarshal leases: %w", err)
+	}
+
+	s.leaseMu.Lock()
+	defer s.leaseMu.Unlock()
+
+	loaded := 0
+	now := time.Now()
+	for macStr, leaseData := range leasesData {
+		mac, err := net.ParseMAC(macStr)
+		if err != nil {
+			slog.Warn("Invalid MAC in saved leases", "mac", macStr, "error", err)
+			continue
+		}
+
+		ip := net.ParseIP(getString(leaseData, "ip"))
+		if ip == nil {
+			slog.Warn("Invalid IP in saved leases", "mac", macStr)
+			continue
+		}
+
+		expiresAt, ok := leaseData["expires_at"].(string)
+		if !ok {
+			continue
+		}
+		expiresTime, err := time.Parse(time.RFC3339, expiresAt)
+		if err != nil {
+			slog.Warn("Invalid expires_at in saved leases", "mac", macStr, "error", err)
+			continue
+		}
+
+		// Skip expired leases
+		if now.After(expiresTime) {
+			slog.Debug("Skipping expired lease", "mac", macStr, "ip", ip.String())
+			continue
+		}
+
+		var parameterList []uint8
+		if pl, ok := leaseData["parameter_list"].([]interface{}); ok {
+			parameterList = make([]uint8, len(pl))
+			for i, v := range pl {
+				if fv, ok := v.(float64); ok {
+					parameterList[i] = uint8(fv)
+				}
+			}
+		}
+
+		s.leases[macStr] = &Lease{
+			MAC:           mac,
+			IP:            ip,
+			Hostname:      getString(leaseData, "hostname"),
+			ClientID:      getString(leaseData, "client_id"),
+			VendorClass:   getString(leaseData, "vendor_class"),
+			ParameterList: parameterList,
+			ExpiresAt:     expiresTime,
+		}
+		loaded++
+	}
+
+	slog.Info("DHCP leases loaded", "file", filename, "count", loaded, "total", len(s.leases))
+	return nil
+}
+
+// getString is a helper function to safely extract string values from lease data
+func getString(data map[string]interface{}, key string) string {
+	if v, ok := data[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// SaveLeasesForTest is a test helper function to manually set leases for testing
+// This method is only used in tests to populate the lease map
+func (s *SimpleServer) SaveLeasesForTest(leases map[string]*Lease) {
+	s.leaseMu.Lock()
+	defer s.leaseMu.Unlock()
+	
+	for mac, lease := range leases {
+		s.leases[mac] = lease
+	}
+}
+

@@ -31,6 +31,9 @@ const (
 	// DefaultDNSCacheTTL is the default TTL for DNS cache
 	DefaultDNSCacheTTL = 5 * time.Minute
 
+	// DefaultDNSPrefetchTTL is the TTL threshold for prefetching (30 seconds before expiry)
+	DefaultDNSPrefetchTTL = 30 * time.Second
+
 	// DefaultDNSCacheSize is the default size of DNS cache
 	DefaultDNSCacheSize = 1024
 
@@ -81,6 +84,7 @@ type Resolver struct {
 	cacheMu       sync.RWMutex
 	cacheSize     int
 	cacheTTL      time.Duration
+	prefetchTTL   time.Duration // TTL threshold for prefetching
 	httpClient    *http.Client
 	tlsConfig     *tls.Config
 	useSystemDNS  bool
@@ -88,6 +92,11 @@ type Resolver struct {
 	benchInterval time.Duration
 	lastBench     time.Time
 	bestServers   []string
+	
+	// Prefetch support
+	prefetchChan  chan string
+	stopPrefetch  chan struct{}
+	prefetchWG    sync.WaitGroup
 }
 
 // ResolverConfig holds resolver configuration
@@ -108,9 +117,12 @@ func NewResolver(config *ResolverConfig) *Resolver {
 		cache:         make(map[string]*CacheEntry),
 		cacheSize:     DefaultDNSCacheSize,
 		cacheTTL:      DefaultDNSCacheTTL,
+		prefetchTTL:   DefaultDNSPrefetchTTL,
 		useSystemDNS:  true,
 		autoBench:     true,
 		benchInterval: 10 * time.Minute,
+		prefetchChan:  make(chan string, 100),
+		stopPrefetch:  make(chan struct{}),
 	}
 
 	if config != nil {
@@ -190,6 +202,88 @@ func (r *Resolver) LookupIP(ctx context.Context, hostname string) ([]net.IP, err
 	r.setCached(hostname, ips)
 
 	return ips, nil
+}
+
+// StartPrefetch starts the background prefetch goroutine
+func (r *Resolver) StartPrefetch() {
+	r.prefetchWG.Add(1)
+	go func() {
+		defer r.prefetchWG.Done()
+		r.prefetchLoop()
+	}()
+	slog.Info("DNS prefetch started")
+}
+
+// StopPrefetch stops the prefetch goroutine
+func (r *Resolver) StopPrefetch() {
+	close(r.stopPrefetch)
+	r.prefetchWG.Wait()
+	slog.Info("DNS prefetch stopped")
+}
+
+// prefetchLoop periodically checks cache for entries needing refresh
+func (r *Resolver) prefetchLoop() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.stopPrefetch:
+			return
+		case hostname := <-r.prefetchChan:
+			// Immediate prefetch request
+			r.doPrefetch(hostname)
+		case <-ticker.C:
+			// Periodic check for expiring entries
+			r.checkExpiringCache()
+		}
+	}
+}
+
+// checkExpiringCache finds entries that need prefetching
+func (r *Resolver) checkExpiringCache() {
+	r.cacheMu.RLock()
+	now := time.Now()
+	threshold := now.Add(r.prefetchTTL)
+
+	var toPrefetch []string
+	for hostname, entry := range r.cache {
+		if entry.Expires.Before(threshold) && entry.Expires.After(now) {
+			toPrefetch = append(toPrefetch, hostname)
+		}
+	}
+	r.cacheMu.RUnlock()
+
+	// Prefetch expiring entries
+	for _, hostname := range toPrefetch {
+		slog.Debug("DNS prefetch triggered", "hostname", hostname)
+		r.doPrefetch(hostname)
+	}
+}
+
+// doPrefetch performs background DNS refresh
+func (r *Resolver) doPrefetch(hostname string) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultDNSTimeout)
+	defer cancel()
+
+	ips, err := r.lookupIPUncached(ctx, hostname)
+	if err != nil {
+		slog.Debug("DNS prefetch failed", "hostname", hostname, "error", err)
+		return
+	}
+
+	// Update cache with new TTL
+	r.setCached(hostname, ips)
+	slog.Debug("DNS prefetch completed", "hostname", hostname, "ips", len(ips))
+}
+
+// RequestPrefetch requests immediate prefetch for a hostname
+func (r *Resolver) RequestPrefetch(hostname string) {
+	select {
+	case r.prefetchChan <- hostname:
+	default:
+		// Channel full, skip
+	}
 }
 
 // lookupIPUncached performs DNS lookup without caching
