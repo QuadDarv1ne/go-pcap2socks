@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -95,7 +96,9 @@ func (tb *TokenBucket) Take(n int) int {
 			return int(taken / fixedPointMultiplier)
 		}
 
-		// CAS failed, retry (another goroutine updated tokens)
+		// CAS failed, retry with backoff to reduce contention
+		// Another goroutine updated tokens, yield processor
+		runtime.Gosched()
 	}
 }
 
