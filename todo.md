@@ -40,6 +40,23 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.45) - DHCP OPTIMIZATION
+
+### v3.19.45 - DHCP Performance Optimization
+- **dhcp/server.go**: добавлен `ipIndex sync.Map` (IP→MAC) для O(1) проверки
+  - Удалён O(n) `leases.Range()` loop из `allocateIP()`
+  - Обновлён `handleRelease()` для синхронизации ipIndex
+  - Обновлён `cleanupLeases()` для очистки ipIndex
+- **api/server.go**: удалена неиспользуемая `getGlobalStatsStore()`
+- **main.go**: константы `defaultAPIPort`/`defaultHTTPPort` вместо магических чисел
+
+**Эффект**:
+- DHCP allocateIP: O(n) → O(1) проверка IP
+- Удалено 9 строк неиспользуемого кода
+- Улучшено логирование портов
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
