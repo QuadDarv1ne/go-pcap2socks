@@ -17,7 +17,7 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
 - [x] Ветки: main/dev синхронизированы и отправлены ✅
 - [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `92a3144 feat: динамические иконки для tray icon` ✅
+- [x] Последний коммит: `f8ecb68 feat: MAC filtering API — управление MAC фильтрами` ✅
 - [x] govulncheck: уязвимостей нет ✅
 
 ---
@@ -689,23 +689,24 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 ### 🔴 Сессия 12: Tray Icon Улучшения (P1) — ✅ ЗАВЕРШЕНО
 - [x] ✅ Сгенерировать running.ico (зелёный) и stopped.ico (красный/серый)
 - [x] ✅ Интеграция динамических иконок в tray_ws.go (embed + updateUI)
-- [ ] Анимация иконки при изменении статуса
+- [ ] Анимация иконки при изменении статуса (отложено)
 
 ### 🟡 Сессия 11: Улучшения (P2) — ✅ ЗАВЕРШЕНО
 - [x] ✅ Config hot reload — перезагрузка конфига без рестарта (cfg/reload.go, main.go)
 - [x] ✅ Health check улучшения — добавить новые probe types (TCP, UDP) (health/checker.go, health/probe_test.go)
 - [x] ✅ Rate limit улучшения — adaptive rate limiting (ratelimit/adaptive.go, ratelimit/adaptive_test.go)
 
-### Производительность
-- [x] ✅ CPU profiling в production (pprof) — реализовано в v3.23.0+
+### 🔴 Сессия 15: MAC Filtering (P2) — ✅ ЗАВЕРШЕНО
+- [x] ✅ API endpoints — add/remove/list/check MAC filters (api/mac_filter.go)
+- [x] ✅ Тесты — полный набор тестов для MAC filter API (api/mac_filter_test.go)
+- [x] ✅ Интеграция — server.go dispatcher + callback (api/server.go)
 
-### Документация
+### 🟡 Сессия 16: Документация (P3) — СЛЕДУЮЩИЕ
 - [ ] Примеры конфигураций для разных сценариев
 - [ ] Troubleshooting guide
 - [ ] API документация (Swagger/OpenAPI)
 
 ### Функции
-- [x] ✅ MAC filtering UI (добавление/удаление правил) — api/mac_filter.go, api/mac_filter_test.go
 - [ ] Multi-WAN балансировка
 
 ---
