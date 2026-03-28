@@ -107,12 +107,6 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	executable, _ := os.Executable()
 	cfgFile := path.Join(path.Dir(executable), "config.json")
 
-	// Use provided stats store or get global one
-	if statsStore == nil {
-		// Will be set from main package
-		statsStore = getGlobalStatsStore()
-	}
-
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector(statsStore)
 
@@ -143,12 +137,6 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 
 	s.setupRoutes()
 	return s
-}
-
-// getGlobalStatsStore gets the global stats store from main package
-func getGlobalStatsStore() *stats.Store {
-	// This will be implemented via interface
-	return nil
 }
 
 func (s *Server) setupRoutes() {

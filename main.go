@@ -64,6 +64,12 @@ import (
 //go:embed config.json
 var configData string
 
+// API and HTTP server ports
+const (
+	defaultAPIPort  = 8080
+	defaultHTTPPort = 8085
+)
+
 // asyncHandler holds the async logger for graceful shutdown
 var asyncHandler *asynclogger.AsyncHandler
 
@@ -541,7 +547,7 @@ func main() {
 
 	// Setup HTTP server with graceful shutdown on port 8085
 	_httpServer = &http.Server{
-		Addr: ":8085",
+		Addr: fmt.Sprintf(":%d", defaultHTTPPort),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(msgs.HelloWorld))
 		}),
@@ -549,14 +555,14 @@ func main() {
 
 	// Start HTTP server in goroutine
 	goroutine.SafeGo(func() {
-		slog.Info("HTTP server starting on :8085")
+		slog.Info("HTTP server starting", "port", defaultHTTPPort)
 		if err := _httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server error", slog.Any("err", err))
 		}
 	})
 
 	// Setup API server
-	slog.Info("Starting web UI server on :8080")
+	slog.Info("Starting web UI server", "port", defaultAPIPort)
 
 	// Set start time for API
 	api.SetStartTime(time.Now())

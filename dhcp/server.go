@@ -19,6 +19,7 @@ import (
 type Server struct {
 	config         *ServerConfig
 	leases         sync.Map // map[string]*DHCPLease (MAC -> Lease)
+	ipIndex        sync.Map // map[string]string (IP -> MAC) for O(1) IP lookup
 	nextIP         atomic.Value // net.IP
 	stopChan       chan struct{}
 	reserved       sync.Map // map[string]bool
@@ -28,7 +29,7 @@ type Server struct {
 	deviceProfiles sync.Map // map[string]auto.DeviceProfile
 	leaseCount     atomic.Int32
 	wg             sync.WaitGroup // WaitGroup for graceful shutdown
-	
+
 	// Rate limiting for DHCP requests (protection against flood attacks)
 	requestCount   sync.Map // map[string]*requestCounter (MAC -> counter)
 	rateLimit      int      // max requests per minute per MAC
@@ -274,7 +275,9 @@ func (s *Server) handleRelease(msg *DHCPMessage) ([]byte, error) {
 	s.metrics.RecordRelease()
 
 	// Only decrement if lease actually existed
-	if _, exists := s.leases.Load(macStr); exists {
+	if lease, exists := s.leases.Load(macStr); exists {
+		ipStr := lease.(*DHCPLease).IP.String()
+		s.ipIndex.Delete(ipStr)  // Remove from IP index
 		s.leases.Delete(macStr)
 		s.leaseCount.Add(-1)
 
@@ -408,24 +411,15 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		currentIP := nextIP
 		ipStr := currentIP.String()
 
-		// Check if IP is reserved or already leased
+		// Check if IP is reserved or already leased (O(1) with ipIndex)
 		available := true
 		if _, ok := s.reserved.Load(ipStr); ok {
 			available = false
 		}
 
-		// Check all active leases
+		// Check IP index for O(1) lookup instead of O(n) Range
 		if available {
-			found := false
-			s.leases.Range(func(k, v any) bool {
-				lease := v.(*DHCPLease)
-				if lease.IP.Equal(currentIP) && time.Now().Before(lease.ExpiresAt) {
-					found = true
-					return false
-				}
-				return true
-			})
-			if found {
+			if _, ok := s.ipIndex.Load(ipStr); ok {
 				available = false
 			}
 		}
@@ -450,6 +444,7 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 				Transaction: 0,
 			}
 			s.leases.Store(macStr, lease)
+			s.ipIndex.Store(ipStr, macStr)  // Update IP index
 			s.leaseCount.Add(1)
 
 			// Save to persistent database
@@ -503,6 +498,8 @@ func (s *Server) cleanupLeases() {
 		mac := k.(string)
 		lease := v.(*DHCPLease)
 		if now.After(lease.ExpiresAt) {
+			ipStr := lease.IP.String()
+			s.ipIndex.Delete(ipStr)  // Remove from IP index
 			s.leases.Delete(mac)
 			deleted++
 			slog.Debug("DHCP lease expired", "mac", mac, "ip", lease.IP.String())
