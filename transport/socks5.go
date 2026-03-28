@@ -10,6 +10,8 @@ import (
 	"io"
 	"net"
 	"strconv"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 )
 
 // Pre-defined errors for SOCKS5 operations
@@ -182,7 +184,8 @@ type User struct {
 
 // ClientHandshake fast-tracks SOCKS initialization to get target address to connect on client side.
 func ClientHandshake(rw io.ReadWriter, addr Addr, command Command, user *User) (Addr, error) {
-	buf := make([]byte, MaxAddrLen)
+	buf := pool.GetAddr()
+	defer pool.PutAddr(buf)
 
 	var method uint8
 	if user != nil {
@@ -325,8 +328,9 @@ func SplitAddr(b []byte) Addr {
 // If a domain name is provided, AtypDomainName would be used first.
 func SerializeAddr(domainName string, dstIP net.IP, dstPort uint16) Addr {
 	var addr Addr
-	port := make([]byte, 2)
-	binary.BigEndian.PutUint16(port, dstPort)
+	// Use stack-allocated array for port to avoid allocation
+	var portBuf [2]byte
+	binary.BigEndian.PutUint16(portBuf[:], dstPort)
 
 	if domainName != "" /* Domain Name */ {
 		length := len(domainName)
@@ -335,19 +339,19 @@ func SerializeAddr(domainName string, dstIP net.IP, dstPort uint16) Addr {
 		addr[0] = AtypDomainName
 		addr[1] = uint8(length)
 		copy(addr[2:], domainName)
-		copy(addr[2+length:], port)
+		copy(addr[2+length:], portBuf[:])
 	} else if dstIP.To4() != nil /* IPv4 */ {
 		// ATYP(1) + IPv4(4) + port(2)
 		addr = make(Addr, 1+net.IPv4len+2)
 		addr[0] = AtypIPv4
 		copy(addr[1:], dstIP.To4())
-		copy(addr[1+net.IPv4len:], port)
+		copy(addr[1+net.IPv4len:], portBuf[:])
 	} else /* IPv6 */ {
 		// ATYP(1) + IPv6(16) + port(2)
 		addr = make(Addr, 1+net.IPv6len+2)
 		addr[0] = AtypIPv6
 		copy(addr[1:], dstIP.To16())
-		copy(addr[1+net.IPv6len:], port)
+		copy(addr[1+net.IPv6len:], portBuf[:])
 	}
 	return addr
 }
@@ -464,6 +468,14 @@ func EncodeUDPPacket(addr Addr, payload []byte) (packet []byte, err error) {
 	}
 	// RSV(2) + FRSAG(1) + addr + payload
 	headerLen := 3 + len(addr)
+	// Use pool for large packets, direct allocation for small ones
+	if headerLen+len(payload) > 1024 {
+		buf := pool.GetUDP()
+		buf = buf[:headerLen+len(payload)]
+		copy(buf[3:], addr)
+		copy(buf[headerLen:], payload)
+		return buf, nil
+	}
 	packet = make([]byte, headerLen+len(payload))
 	copy(packet[3:], addr)
 	copy(packet[headerLen:], payload)

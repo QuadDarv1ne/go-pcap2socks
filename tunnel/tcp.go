@@ -96,14 +96,18 @@ func applyMSSClamping(conn net.Conn, isIPv6 bool) {
 }
 
 // pipe copies data bidirectionally between two connections using goroutines
-// Optimized with atomic counters instead of channel for completion tracking
+// Optimized with separate buffers for each direction to avoid contention
 func pipe(origin, remote net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// Get buffer from pool
-	buf := pool.Get(tcpRelayBufferSize)
-	defer pool.Put(buf)
+	// Get separate buffers for each direction to avoid contention
+	bufOR := pool.Get(tcpRelayBufferSize) // origin->remote
+	bufRO := pool.Get(tcpRelayBufferSize) // remote->origin
+	defer func() {
+		pool.Put(bufOR)
+		pool.Put(bufRO)
+	}()
 
 	// Use atomic counters for error tracking (avoid channel allocation)
 	var errorsCount atomic.Int32
@@ -112,7 +116,7 @@ func pipe(origin, remote net.Conn) {
 	// Start both copy operations in separate goroutines
 	go func() {
 		defer wg.Done()
-		result := copyBuffer(remote, origin, "o->r", buf)
+		result := copyBuffer(remote, origin, "o->r", bufOR)
 		bytesCopied.Add(result.bytes)
 		if result.err != nil && !errors.Is(result.err, io.EOF) {
 			errorsCount.Add(1)
@@ -122,7 +126,7 @@ func pipe(origin, remote net.Conn) {
 
 	go func() {
 		defer wg.Done()
-		result := copyBuffer(origin, remote, "r->o", buf)
+		result := copyBuffer(origin, remote, "r->o", bufRO)
 		bytesCopied.Add(result.bytes)
 		if result.err != nil && !errors.Is(result.err, io.EOF) {
 			errorsCount.Add(1)
