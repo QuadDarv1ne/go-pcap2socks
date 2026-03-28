@@ -312,6 +312,21 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.56) - STATS STORE OPTIMIZATION
+
+### v3.19.56 - Stats Store Pre-allocation
+- **stats/store.go**: pre-allocate capacity для GetAllDevices()
+  - Использовать `deviceCount.Load()` для capacity
+  - Избежать множественных реаллокаций при append
+  - O(1) вместо O(log n) аллокаций
+
+**Эффект**:
+- Меньше аллокаций памяти при получении списка устройств
+- Быстрее работа API /status (используется в tray)
+- Меньше нагрузка на GC
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
