@@ -52,6 +52,7 @@ import (
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
+	"github.com/QuadDarv1ne/go-pcap2socks/validation"
 	"github.com/jackpal/gateway"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
@@ -337,6 +338,14 @@ func main() {
 		return
 	}
 	slog.Info("Config loaded", "file", cfgFile)
+
+	// Validate configuration
+	validator := validation.NewConfigValidator(config)
+	if err := validator.Validate(); err != nil {
+		slog.Error("config validation failed", slog.Any("err", err))
+		return
+	}
+	slog.Info("Config validation passed")
 
 	// Initialize localizer with language from config
 	localizer := i18n.NewLocalizer(i18n.Language(config.Language))

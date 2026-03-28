@@ -89,3 +89,53 @@ func (pm *PortMatcher) Matches(port uint16) bool {
 func (pm *PortMatcher) IsEmpty() bool {
 	return pm == nil || len(pm.ranges) == 0
 }
+
+// ParsePortRange parses a port range string and returns error if invalid
+// Format: "80,443,8000-9000"
+func ParsePortRange(spec string) error {
+	if spec == "" {
+		return nil
+	}
+
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+
+		if strings.Contains(part, "-") {
+			// Parse range
+			parts := strings.Split(part, "-")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid port range format: %s", part)
+			}
+
+			start, err := strconv.ParseUint(strings.TrimSpace(parts[0]), 10, 16)
+			if err != nil {
+				return fmt.Errorf("invalid port range start %s: %w", parts[0], err)
+			}
+
+			end, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 16)
+			if err != nil {
+				return fmt.Errorf("invalid port range end %s: %w", parts[1], err)
+			}
+
+			if start > end {
+				return fmt.Errorf("invalid port range %s: start > end", part)
+			}
+
+			if start == 0 || end > 65535 {
+				return fmt.Errorf("port must be 1-65535, got %d-%d", start, end)
+			}
+		} else {
+			// Parse single port
+			port, err := strconv.ParseUint(part, 10, 16)
+			if err != nil {
+				return fmt.Errorf("invalid port %s: %w", part, err)
+			}
+
+			if port == 0 || port > 65535 {
+				return fmt.Errorf("port must be 1-65535, got %d", port)
+			}
+		}
+	}
+
+	return nil
+}
