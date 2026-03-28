@@ -229,6 +229,22 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ---
 
+## ✅ Завершено (v3.19.52) - UPNP TIMEOUT & RETRY
+
+### v3.19.52 - UPnP Reliability
+- **upnp/manager.go**: timeout и retry для UPnP операций
+  - `Start()`: 30s timeout + 3 попытки с exponential backoff (1s, 2s)
+  - `GetExternalIP()`: 5s timeout
+  - `addPortMappingWithRetry()`: 2 попытки для каждого port mapping
+  - Better error messages с деталями (protocol, port, attempts)
+
+**Эффект**:
+- Устойчивость к временным ошибкам UPnP
+- Нет бесконечных hang при недоступности UPnP устройств
+- Понятные сообщения об ошибках
+
+---
+
 ## ✅ Завершено (v3.19.40-v3.19.43)
 
 ### v3.19.43 - ARP Cache
