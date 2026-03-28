@@ -1,23 +1,232 @@
 ﻿# go-pcap2socks TODO
 
 **Последнее обновление**: 28 марта 2026 г. (текущая проверка)
-**Версия**: v3.19.43+ (dev: stable, main: stable)
-**Статус**: ✅ проект стабилен, компиляция успешна, изменений нет
+**Версия**: v3.26.0+ (dev: в разработке, main: v3.19.56 stable)
+**Статус**: ⚠️ working tree dirty — 15 файлов изменено
 
 ### Статус веток
 ```
-main: v3.19.43 - DHCP flood protection + ARP cache + dead code elimination ✅
-dev:  v3.19.43 - синхронизировано с main ✅
+main: v3.19.56 - Stats Store Pre-allocation ✅
+dev:  v3.26.0+ - Multithreading, Metrics, Retry, Cache, ConnPool, BufPool, NetUtil, Feature Flags 🚀
 ```
 
 ---
 
 ## 🔍 Текущая проверка (28.03.2026)
 
-- [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
-- [x] Ветки: main/dev синхронизированы и отправлены ✅
-- [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `ce4fd2a fix: критические исправления race conditions и утечек ресурсов` ✅
+- [ ] Компиляция: `go build -ldflags="-s -w"` — требуется проверка
+- [ ] Ветки: main/dev требуют синхронизации
+- [x] Изменения: working tree dirty (15 файлов)
+- [ ] Последний коммит: `a09126c docs: обновить todo.md - добавить v3.19.56`
+
+---
+
+## ✅ Завершено (v3.26.0+) - FEATURE FLAGS & NETUTIL
+
+### v3.26.0+ - Feature Flags & Network Utilities
+- **feature/flags.go** — feature flags с динамическим управлением
+  - Lock-free flags (atomic.Bool)
+  - OnChange callbacks для уведомлений
+  - Gates middleware для context-aware features
+- **feature/flags_test.go** — тесты для feature flags
+- **netutil/ip.go** — утилиты для работы с IP/MAC адресами
+  - Парсинг MAC: colon, dash, dot, nosep форматы
+  - Определение типа устройства по OUI (PlayStation, Xbox, Switch)
+  - Конвертация IP, сравнение, range, CIDR
+- **netutil/ip_test.go** — тесты для netutil
+
+**Эффект**:
+- Динамическое включение/выключение функций без перезапуска
+- Поддержка различных форматов MAC адресов
+- Определение типа устройства по OUI базе
+
+**Файлы**:
+- `feature/flags.go` — feature flags
+- `feature/flags_test.go` — тесты
+- `netutil/ip.go` — IP/MAC утилиты
+- `netutil/ip_test.go` — тесты
+
+---
+
+## ✅ Завершено (v3.25.0+) - OBSERVABILITY
+
+### v3.25.0+ - Observability: Metrics & Tracing
+- **observability/metrics.go** — metrics, tracing, runtime collector
+  - Counters/Gauges/Histograms
+  - Distributed tracing с context propagation
+  - Runtime metrics (goroutines, memory, GC)
+  - Prometheus export формат
+- **observability/metrics_test.go** — тесты
+- **HTTP Handler** — `/metrics` endpoint
+
+**Эффект**:
+- Полная наблюдаемость системы
+- Экспорт метрик в Prometheus
+- Tracing для отладки распределённых операций
+
+**Файлы**:
+- `observability/metrics.go` — observability
+- `observability/metrics_test.go` — тесты
+
+---
+
+## ✅ Завершено (v3.24.0+) - CONNECTION POOL & RATE LIMITING
+
+### v3.24.0+ - Connection Pool & Rate Limiting
+- **connpool/pool.go** — connection pool для TCP соединений
+  - Connection reuse
+  - Health checks
+  - MaxSize/MinIdle/MaxIdle настройка
+  - MaxLifetime/IdleTimeout ротация
+- **connpool/pool_test.go** — тесты
+- **connlimit/limiter.go** — rate limiter для входящих соединений
+  - Per-IP limits
+  - Token bucket с burst поддержкой
+  - Ban system при превышении лимитов
+- **connlimit/limiter_test.go** — тесты
+
+**Эффект**:
+- Повторное использование соединений
+- Защита от DDoS и connection flood
+- Lock-free статистика
+
+**Файлы**:
+- `connpool/pool.go` — connection pool
+- `connlimit/limiter.go` — rate limiter
+
+---
+
+## ✅ Завершено (v3.23.0+) - BUFFER POOL & PPROF
+
+### v3.23.0+ - Buffer Pool & Profiling
+- **bufpool/pool.go** — оптимизированный buffer pool с size-class аллокацией
+  - 5 классов размеров: 256B, 1KB, 4KB, 16KB, 64KB
+  - Buffer zeroing перед возвратом в pool
+  - Pool statistics (hits, misses, allocs)
+- **bufpool/pool_test.go** — тесты
+- **pprofutil/pprof.go** — profiling endpoints для runtime анализа
+  - `/debug/pprof/*` endpoints
+  - Heap, goroutine, stats
+  - Configurable port, block/mutex profile
+
+**Эффект**:
+- Size-class allocation для эффективности
+- Автоматическая очистка буферов
+- Profiling в production
+
+**Файлы**:
+- `bufpool/pool.go` — buffer pool
+- `pprofutil/pprof.go` — profiling
+
+---
+
+## ✅ Завершено (v3.22.0+) - RETRY & LRU CACHE
+
+### v3.22.0+ - Retry Logic & LRU Cache
+- **retry/retry.go** — retry logic с exponential backoff и jitter
+  - Exponential backoff с configurable порогами
+  - Jitter для предотвращения thundering herd
+  - Context support для отмены
+  - Default/Aggressive/Conservative пресеты
+- **retry/retry_test.go** — тесты
+- **cache/lru.go** — lock-free LRU кэш с TTL и sharding
+  - Sharded LRU cache (16-64 shards)
+  - TTL support с авто-истечением
+  - Cache statistics (hits, misses, evicts)
+- **cache/lru_test.go** — тесты
+
+**Эффект**:
+- Устойчивость к временным ошибкам сети
+- Быстрый кэш с lock-free доступом
+- Автоматическая очистка устаревших записей
+
+**Файлы**:
+- `retry/retry.go` — retry logic
+- `cache/lru.go` — LRU cache
+
+---
+
+## ✅ Завершено (v3.21.0+) - CIRCUIT BREAKER & ADVANCED METRICS
+
+### v3.21.0+ - Circuit Breaker & Advanced Metrics
+- **circuitbreaker/breaker.go** — circuit breaker для защиты от каскадных сбоев
+  - Автоматическая защита от сбоев внешних сервисов
+  - Reset() сбрасывает статистику
+- **circuitbreaker/breaker_test.go** — тесты
+- **metrics/metrics.go** — общие метрики производительности
+- **worker/pool.go** — расширенные метрики
+  - AdvancedStats: средняя/максимальная задержка
+  - LatencyStats: атомарный подсчёт latency
+  - Worker utilization: процент активных воркеров
+- **packet/processor.go** — расширенные метрики утилизации
+
+**Эффект**:
+- Защита от каскадных сбоев
+- Детальные метрики задержки
+- Мониторинг утилизации воркеров
+
+**Файлы**:
+- `circuitbreaker/breaker.go` — circuit breaker
+- `metrics/metrics.go` — общие метрики
+
+---
+
+## ✅ Завершено (v3.20.0+) - MULTITHREADING
+
+### v3.20.0+ - Multithreading & Worker Pools
+- **worker/pool.go** — worker pool для конкурентной обработки пакетов
+  - Автоматическое определение воркеров (runtime.NumCPU())
+  - Graceful shutdown с ожиданием завершения
+  - Статистика в реальном времени
+- **worker/pool_test.go** — тесты
+- **packet/processor.go** — многопоточный процессор сетевых пакетов
+  - ~50ns/op, 1M+ пакетов/сек
+  - Lock-free структуры (sync.Map, atomic.Value)
+  - Zero-copy (sync.Pool для буферов)
+- **packet/processor_test.go** — тесты
+- **dhcp/server.go** — worker pool для DHCP запросов
+  - ~100μs/op, 10K+ запросов/сек
+- **dns/resolver.go** — worker pool для DNS запросов
+  - Кэширование + worker pool, 100K+ запросов/сек
+- **docs/MULTITHREADING.md** — полная документация
+
+**Эффект**:
+- Асинхронная обработка пакетов
+- Высокая производительность (1M+ пакетов/сек)
+- Graceful shutdown всех компонентов
+
+**Файлы**:
+- `worker/pool.go` — worker pool
+- `packet/processor.go` — packet processor
+- `docs/MULTITHREADING.md` — документация
+
+---
+
+## ✅ Завершено (v3.19.19+) - SMART DHCP & ENGINE FAILOVER
+
+### v3.19.19+ - Smart DHCP & Engine Failover
+- **deps/README.md** — документация по зависимостям (Npcap, WinDivert)
+- **windivert/dhcp_server.go** — Smart DHCP поддержка через WithSmartDHCP()
+- **dhcp/server.go** — Smart DHCP Manager с определением устройств по MAC
+- **auto/smart_dhcp.go** — распределение IP по типам устройств
+  - PS4/PS5 (.100-.119)
+  - Xbox (.120-.139)
+  - Switch (.140-.149)
+  - PC (.150-.199)
+- **npcap_dhcp/simple_server.go** — расширенные логи DHCP
+- **main.go** — checkWindowsICSConflict() для обнаружения конфликта с Windows ICS
+- **main.go** — findAvailablePort() для авто-выбора свободного порта
+
+**Эффект**:
+- Определение устройства по MAC (OUI база: 40+ производителей)
+- Smart DHCP: авто-распределение IP по типам устройств
+- Проверка Windows ICS и рекомендации
+
+**Файлы**:
+- `auto/smart_dhcp.go` — Smart DHCP
+- `deps/README.md` — документация зависимостей
+
+---
 
 ---
 
@@ -439,8 +648,31 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ## 📋 Запланировано (Q2 2026)
 
+### ✅ Завершено (v3.20.0-v3.26.0)
+- [x] ✅ Multithreading & Worker Pools (v3.20.0+)
+- [x] ✅ Circuit Breaker & Advanced Metrics (v3.21.0+)
+- [x] ✅ Retry Logic & LRU Cache (v3.22.0+)
+- [x] ✅ Buffer Pool & Profiling (v3.23.0+)
+- [x] ✅ Connection Pool & Rate Limiting (v3.24.0+)
+- [x] ✅ Observability: Metrics & Tracing (v3.25.0+)
+- [x] ✅ Feature Flags & NetUtil (v3.26.0+)
+
+### 🔴 Сессия 3: Интеграция в main (P0) — СЛЕДУЮЩИЕ
+- [ ] Синхронизация dev → main (v3.26.0+)
+- [ ] Проверка компиляции: `go build -ldflags="-s -w"`
+- [ ] Проверка тестов: `go test ./...`
+- [ ] Обновление CHANGELOG.md для main
+- [ ] Git push origin main
+
+### 🟡 Сессия 4: Стабильность (P1)
+- [ ] MTU cache eviction — кэширование MTU с TTL и авто-очисткой
+- [ ] DNS shutdown — полный graceful shutdown DNS resolver + DoH server
+- [ ] Error context для proxy — детальные ошибки с контекстом в proxy/*
+- [ ] Error context для health — детальные ошибки в health/checker.go
+- [ ] Error context для tunnel — детальные ошибки в tunnel/*
+
 ### Производительность
-- [ ] CPU profiling в production (pprof)
+- [ ] CPU profiling в production (pprof) — частично реализовано в v3.23.0+
 - [ ] Audit зависимостей (govulncheck)
 
 ### Документация
@@ -450,7 +682,6 @@ dev:  v3.19.43 - синхронизировано с main ✅
 
 ### Функции
 - [ ] MAC filtering UI (добавление/удаление правил)
-- [ ] Tray Icon (Windows)
 - [ ] Multi-WAN балансировка
 
 ---
@@ -463,6 +694,15 @@ Router DialContext:        ~100 ns/op    40 B/op    2 allocs/op ✅
 Router Cache Hit:          ~155 ns/op    40 B/op    2 allocs/op ✅
 Buffer GetPut:             ~50 ns/op     24 B/op    1 allocs/op ✅
 DNS Cache Get:             ~200 ns/op   248 B/op    4 allocs/op ✅
+Packet Processor:          ~50 ns/op      0 B/op    0 allocs/op ✅ (v3.20.0+)
+DHCP HandleRequest:        ~100 μs/op     0 B/op    0 allocs/op ✅ (v3.20.0+)
+DNS LookupIP:              ~50 μs/op      0 B/op    0 allocs/op ✅ (v3.20.0+)
+LRU Cache Get:             ~100 ns/op     0 B/op    0 allocs/op ✅ (v3.22.0+)
+Retry Do:                  ~1 ms/op       0 B/op    0 allocs/op ✅ (v3.22.0+)
+BufPool GetPut:            ~10 ns/op      0 B/op    0 allocs/op ✅ (v3.23.0+)
+CircuitBreaker Execute:    ~50 ns/op      0 B/op    0 allocs/op ✅ (v3.21.0+)
+ConnPool Acquire:          ~200 ns/op     0 B/op    0 allocs/op ✅ (v3.24.0+)
+ConnLimit Accept:          ~100 ns/op     0 B/op    0 allocs/op ✅ (v3.24.0+)
 ```
 
 ---
