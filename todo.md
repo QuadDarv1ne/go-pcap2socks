@@ -1,14 +1,38 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 28 марта 2026 г. (04:00)
-**Версия**: v3.19.41+ (dev: cleanup-optimizations, main: performance-optimizations)
-**Статус**: ✅ проект стабилен, все тесты проходят, 26/26 улучшений реализовано
+**Последнее обновление**: 28 марта 2026 г. (04:30)
+**Версия**: v3.19.42+ (dev: dhcp-rate-limit, main: cleanup-optimizations)
+**Статус**: ✅ проект стабилен, все тесты проходят, 27/27 улучшений реализовано
 
 ### Статус веток
 ```
-main: performance-optimizations v3.19.41 - 25 perf opt + dead code elimination ✅
-dev:  cleanup-optimizations - Dead code elimination ✅
+main: cleanup-optimizations v3.19.42 - Dead code elimination + DHCP rate limiting ✅
+dev:  dhcp-rate-limit - DHCP flood protection ✅
 ```
+
+---
+
+## ✅ Завершено (28.03.2026 04:30) - v3.19.42+ DHCP RATE LIMITING
+
+### Защита от DHCP flood атак
+
+#### 1. Rate Limiting для DHCP запросов (`dhcp/server.go`)
+- [x] **Добавлено**: `requestCount sync.Map` - подсчёт запросов по MAC
+- [x] **Добавлено**: `checkRateLimit()` - проверка лимита (10 запросов/мин)
+- [x] **Добавлено**: `requestCounter struct` - атомарный счётчик с reset
+- [x] **Интеграция**: `HandleRequest()` проверяет лимит перед обработкой
+- [x] **Эффект**: Защита от DHCP flood атак, silent drop превышающих лимит
+
+#### 2. Конфигурация rate limiting
+- [x] **defaultRateLimit**: 10 запросов в минуту на MAC
+- [x] **defaultRateLimitWindow**: 1 минута окно
+- [x] **Автоматический сброс**: counter reset после окна
+
+### Итоговый эффект v3.19.42+
+- **Безопасность**: Защита от DHCP flood
+- **Аллокаций**: 0 (используется sync.Map + atomic)
+- **Компиляция**: ✅ Успешна
+- **Прогресс**: 27/27 задач (100%)
 
 ---
 

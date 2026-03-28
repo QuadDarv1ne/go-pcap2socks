@@ -190,6 +190,10 @@ type PCAP struct {
 	Network          string `json:"network"`
 	LocalIP          string `json:"localIP"`
 	LocalMAC         string `json:"localMAC"`
+	// IPv6 поддержка
+	NetworkIPv6      string `json:"networkIPv6,omitempty"`
+	LocalIPv6        string `json:"localIPv6,omitempty"`
+	InterfaceGatewayIPv6 string `json:"interfaceGatewayIPv6,omitempty"`
 }
 
 // resolveEnv replaces ${VAR_NAME} patterns with environment variable values
@@ -290,6 +294,9 @@ type Rule struct {
 	DstPortMatcher *PortMatcher
 	SrcIPs         []net.IPNet
 	DstIPs         []net.IPNet
+	// IPv6 поддержка
+	SrcIPsIPv6     []net.IPNet
+	DstIPsIPv6     []net.IPNet
 }
 
 func (r *Rule) Normalize() error {
@@ -305,14 +312,25 @@ func (r *Rule) Normalize() error {
 		return fmt.Errorf("parse destination ports: %w", err)
 	}
 
-	r.SrcIPs, err = parseNetIPs(r.SrcIP)
+	r.SrcIPs, err = parseNetIPs(r.SrcIP, false)
 	if err != nil {
 		return fmt.Errorf("parse source IPs: %w", err)
 	}
 
-	r.DstIPs, err = parseNetIPs(r.DstIP)
+	r.DstIPs, err = parseNetIPs(r.DstIP, false)
 	if err != nil {
 		return fmt.Errorf("parse destination IPs: %w", err)
+	}
+
+	// IPv6 поддержка
+	r.SrcIPsIPv6, err = parseNetIPs(r.SrcIP, true)
+	if err != nil {
+		return fmt.Errorf("parse source IPv6: %w", err)
+	}
+
+	r.DstIPsIPv6, err = parseNetIPs(r.DstIP, true)
+	if err != nil {
+		return fmt.Errorf("parse destination IPv6: %w", err)
 	}
 
 	return nil
@@ -446,7 +464,7 @@ type PortMapping struct {
 	Description  string `json:"description,omitempty"`
 }
 
-func parseNetIPs(addrs []string) ([]net.IPNet, error) {
+func parseNetIPs(addrs []string, ipv6Only bool) ([]net.IPNet, error) {
 	ips := make([]net.IPNet, 0, len(addrs))
 
 	if len(addrs) == 0 {
@@ -455,12 +473,36 @@ func parseNetIPs(addrs []string) ([]net.IPNet, error) {
 
 	for _, addr := range addrs {
 		if !strings.Contains(addr, "/") {
-			addr += "/32"
+			// Add appropriate suffix based on IP version
+			ip := net.ParseIP(addr)
+			if ip == nil {
+				continue // Skip invalid IPs
+			}
+			if ip.To4() != nil {
+				if ipv6Only {
+					continue // Skip IPv4 when IPv6 only requested
+				}
+				addr += "/32"
+			} else {
+				if !ipv6Only {
+					continue // Skip IPv6 when IPv4 only requested
+				}
+				addr += "/128"
+			}
 		}
 
 		_, ipNet, err := net.ParseCIDR(addr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid ip %s: %w", addr, err)
+		}
+
+		// Filter by IP version
+		isIPv4 := ipNet.IP.To4() != nil
+		if ipv6Only && isIPv4 {
+			continue
+		}
+		if !ipv6Only && !isIPv4 {
+			continue
 		}
 
 		ips = append(ips, *ipNet)
@@ -568,6 +610,15 @@ type DHCP struct {
 	PoolStart     string `json:"poolStart"`
 	PoolEnd       string `json:"poolEnd"`
 	LeaseDuration int    `json:"leaseDuration"` // seconds
+	// IPv6 поддержка
+	IPv6Enabled   bool   `json:"ipv6Enabled,omitempty"`
+	IPv6PoolStart string `json:"ipv6PoolStart,omitempty"`
+	IPv6PoolEnd   string `json:"ipv6PoolEnd,omitempty"`
+	IPv6Prefix    string `json:"ipv6Prefix,omitempty"` // IPv6 префикс для SLAAC/DHCPv6
+	// Расширенные DHCP опции
+	DNSServers    []string `json:"dnsServers,omitempty"`
+	NTPServers    []string `json:"ntpServers,omitempty"`
+	WPADURL       string   `json:"wpadURL,omitempty"`
 }
 
 // Validate validates the DHCP configuration
@@ -611,6 +662,68 @@ func (c *Config) validateDHCP() error {
 	}
 	if !network.Contains(poolEnd) {
 		return fmt.Errorf("dhcp.poolEnd (%s) is not within pcap.network (%s)", c.DHCP.PoolEnd, c.PCAP.Network)
+	}
+
+	// Validate IPv6 configuration if enabled
+	if c.DHCP.IPv6Enabled {
+		if err := c.validateDHCPv6(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateDHCPv6 validates IPv6 DHCP configuration
+func (c *Config) validateDHCPv6() error {
+	// Validate IPv6 prefix
+	if c.DHCP.IPv6Prefix == "" {
+		c.DHCP.IPv6Prefix = "fd00::/64" // Default ULA prefix
+	}
+
+	_, ipv6Net, err := net.ParseCIDR(c.DHCP.IPv6Prefix)
+	if err != nil {
+		return fmt.Errorf("%w: invalid ipv6Prefix: %s", ErrInvalidNetwork, c.DHCP.IPv6Prefix)
+	}
+
+	// Validate IPv6 pool if specified
+	if c.DHCP.IPv6PoolStart != "" {
+		poolStart := net.ParseIP(c.DHCP.IPv6PoolStart)
+		if poolStart == nil || poolStart.To4() != nil {
+			return fmt.Errorf("%w: invalid ipv6PoolStart: %s", ErrInvalidDHCPPool, c.DHCP.IPv6PoolStart)
+		}
+		if !ipv6Net.Contains(poolStart) {
+			return fmt.Errorf("dhcp.ipv6PoolStart (%s) is not within ipv6Prefix (%s)", c.DHCP.IPv6PoolStart, c.DHCP.IPv6Prefix)
+		}
+	}
+
+	if c.DHCP.IPv6PoolEnd != "" {
+		poolEnd := net.ParseIP(c.DHCP.IPv6PoolEnd)
+		if poolEnd == nil || poolEnd.To4() != nil {
+			return fmt.Errorf("%w: invalid ipv6PoolEnd: %s", ErrInvalidDHCPPool, c.DHCP.IPv6PoolEnd)
+		}
+		if !ipv6Net.Contains(poolEnd) {
+			return fmt.Errorf("dhcp.ipv6PoolEnd (%s) is not within ipv6Prefix (%s)", c.DHCP.IPv6PoolEnd, c.DHCP.IPv6Prefix)
+		}
+	}
+
+	// Validate IPv6 network if specified
+	if c.PCAP.NetworkIPv6 != "" {
+		_, ipv6Net, err := net.ParseCIDR(c.PCAP.NetworkIPv6)
+		if err != nil {
+			return fmt.Errorf("%w: %s: %w", ErrInvalidNetwork, c.PCAP.NetworkIPv6, err)
+		}
+
+		// Validate LocalIPv6 is within network
+		if c.PCAP.LocalIPv6 != "" {
+			localIPv6 := net.ParseIP(c.PCAP.LocalIPv6)
+			if localIPv6 == nil || localIPv6.To4() != nil {
+				return fmt.Errorf("%w: %s", ErrInvalidLocalIP, c.PCAP.LocalIPv6)
+			}
+			if !ipv6Net.Contains(localIPv6) {
+				return fmt.Errorf("pcap.localIPv6 %s is not within pcap.networkIPv6 %s", c.PCAP.LocalIPv6, c.PCAP.NetworkIPv6)
+			}
+		}
 	}
 
 	return nil

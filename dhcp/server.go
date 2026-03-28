@@ -28,7 +28,22 @@ type Server struct {
 	deviceProfiles sync.Map // map[string]auto.DeviceProfile
 	leaseCount     atomic.Int32
 	wg             sync.WaitGroup // WaitGroup for graceful shutdown
+	
+	// Rate limiting for DHCP requests (protection against flood attacks)
+	requestCount   sync.Map // map[string]*requestCounter (MAC -> counter)
+	rateLimit      int      // max requests per minute per MAC
+	rateLimitWindow time.Duration // time window for rate limiting
 }
+
+type requestCounter struct {
+	count     atomic.Int32
+	resetTime atomic.Int64 // nanoseconds
+}
+
+const (
+	defaultRateLimit = 10 // 10 requests per minute per MAC
+	defaultRateLimitWindow = time.Minute
+)
 
 // ServerOption is a function that configures the server
 type ServerOption func(*Server)
@@ -57,9 +72,11 @@ func WithSmartDHCP(poolStart, poolEnd string) ServerOption {
 // NewServer creates a new DHCP server
 func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 	s := &Server{
-		config:   config,
-		stopChan: make(chan struct{}),
-		metrics:  NewMetricsCollector(),
+		config:          config,
+		stopChan:        make(chan struct{}),
+		metrics:         NewMetricsCollector(),
+		rateLimit:       defaultRateLimit,
+		rateLimitWindow: defaultRateLimitWindow,
 	}
 	s.nextIP.Store(config.FirstIP)
 
@@ -101,12 +118,55 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 	return s
 }
 
+// checkRateLimit checks if the MAC address has exceeded the rate limit
+// Returns true if request should be allowed, false if rate limited
+func (s *Server) checkRateLimit(mac string) bool {
+	now := time.Now().UnixNano()
+	windowNanos := int64(s.rateLimitWindow)
+	
+	// Get or create counter for this MAC
+	val, _ := s.requestCount.Load(mac)
+	counter, ok := val.(*requestCounter)
+	if !ok {
+		counter = &requestCounter{}
+		counter.resetTime.Store(now)
+		s.requestCount.Store(mac, counter)
+	}
+	
+	// Check if we need to reset the counter
+	resetTime := counter.resetTime.Load()
+	if now-resetTime > windowNanos {
+		// Reset counter for new window
+		counter.count.Store(0)
+		counter.resetTime.Store(now)
+		resetTime = now
+	}
+	
+	// Check if rate limit exceeded
+	count := counter.count.Load()
+	if count >= int32(s.rateLimit) {
+		return false // Rate limited
+	}
+	
+	// Increment counter
+	counter.count.Add(1)
+	return true // Allowed
+}
+
 // HandleRequest processes a DHCP request and returns a response packet
 // Optimized with sync.Map for lock-free lease access
 func (s *Server) HandleRequest(data []byte) ([]byte, error) {
 	msg, err := ParseDHCPMessage(data)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check rate limit to protect against flood attacks
+	macStr := msg.ClientHardware.String()
+	if !s.checkRateLimit(macStr) {
+		s.metrics.RecordError()
+		slog.Warn("DHCP request rate limited", "mac", macStr)
+		return nil, nil // Silently drop rate-limited requests
 	}
 
 	messageType := msg.Options[OptionDHCPMessageType]
