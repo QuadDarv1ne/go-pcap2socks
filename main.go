@@ -812,7 +812,17 @@ func main() {
 				port = config.API.Port
 			}
 			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
-			if err := http.ListenAndServe(fmt.Sprintf(":%d", port), _apiServer); err != nil {
+			
+			// Create HTTP server with timeouts for DoS protection
+			apiHTTPServer := &http.Server{
+				Addr:         fmt.Sprintf(":%d", port),
+				Handler:      _apiServer,
+				ReadTimeout:  15 * time.Second,
+				WriteTimeout: 60 * time.Second,  // Increased for log/traffic export
+				IdleTimeout:  120 * time.Second,
+			}
+			
+			if err := apiHTTPServer.ListenAndServe(); err != nil {
 				slog.Error("HTTP server error", slog.Any("err", err))
 			}
 		}
@@ -2109,7 +2119,17 @@ func autoConfigureAndStart() {
 				port = config.API.Port
 			}
 			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
-			if err := http.ListenAndServe(fmt.Sprintf(":%d", port), _apiServer); err != nil {
+			
+			// Create HTTP server with timeouts for DoS protection
+			apiHTTPServer := &http.Server{
+				Addr:         fmt.Sprintf(":%d", port),
+				Handler:      _apiServer,
+				ReadTimeout:  15 * time.Second,
+				WriteTimeout: 60 * time.Second,
+				IdleTimeout:  120 * time.Second,
+			}
+			
+			if err := apiHTTPServer.ListenAndServe(); err != nil {
 				slog.Error("HTTP server error", slog.Any("err", err))
 			}
 		}

@@ -4,6 +4,7 @@ package tunnel
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"sync"
@@ -192,7 +193,12 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 
 	// Get buffer from pool instead of allocating
 	buf := udpBufferPool.Get().([]byte)
-	defer udpBufferPool.Put(buf)
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Debug("UDP pipe panic recovered", "recover", r)
+		}
+		udpBufferPool.Put(buf)  // Ensure buffer is returned even on panic
+	}()
 
 	// Set deadlines ONCE at session start to avoid syscall overhead
 	// Updating deadline on every packet is expensive (2000+ syscalls/sec for gaming traffic)
