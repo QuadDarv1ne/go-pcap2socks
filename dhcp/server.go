@@ -109,6 +109,13 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 		s.cleanupLoop()
 	}()
 
+	// Start rate limit cache cleanup goroutine
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.cleanupRateLimitCache()
+	}()
+
 	// Start metrics logging goroutine
 	s.wg.Add(1)
 	go func() {
@@ -514,6 +521,31 @@ func (s *Server) cleanupLeases() {
 		// Sync with persistent database
 		if s.leaseDB != nil {
 			s.leaseDB.CleanupExpired()
+		}
+	}
+}
+
+// cleanupRateLimitCache removes stale rate limit counters older than 5 minutes
+func (s *Server) cleanupRateLimitCache() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now().UnixNano()
+			windowNanos := int64(s.rateLimitWindow)
+
+			s.requestCount.Range(func(k, v any) bool {
+				counter := v.(*requestCounter)
+				if now-counter.resetTime.Load() > 5*windowNanos {
+					s.requestCount.Delete(k.(string))
+				}
+				return true
+			})
+			slog.Debug("DHCP rate limit cache cleaned")
+		case <-s.stopChan:
+			return
 		}
 	}
 }
