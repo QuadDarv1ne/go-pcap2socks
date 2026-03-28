@@ -432,8 +432,12 @@ func (s *Store) GetDeviceStats(ip string) *DeviceStats {
 
 // GetAllDevices returns all device statistics
 // Optimized with sync.Map Range for lock-free iteration
+// Pre-allocates capacity using deviceCount to avoid slice reallocations
 func (s *Store) GetAllDevices() []*DeviceStats {
-	var devices []*DeviceStats
+	// Pre-allocate capacity to avoid reallocations during append
+	count := s.deviceCount.Load()
+	devices := make([]*DeviceStats, 0, count)
+	
 	s.devices.Range(func(k, v any) bool {
 		devices = append(devices, v.(*DeviceStats))
 		return true
