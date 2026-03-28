@@ -17,7 +17,26 @@ dev:  v3.19.43 - синхронизировано с main ✅
 - [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
 - [x] Ветки: main/dev синхронизированы и отправлены ✅
 - [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `8e9e945 docs: сократить todo.md` ✅
+- [x] Последний коммит: `ce4fd2a fix: критические исправления race conditions и утечек ресурсов` ✅
+
+---
+
+## ✅ Завершено (v3.19.44) - КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ
+
+### v3.19.44 - Race Conditions & Resource Leaks
+- **main.go**: `_running bool` → `atomic.Bool` (thread-safe доступ из API)
+- **api/server.go**: исправлена утечка ticker в StartRealTimeUpdates
+- **proxy/socks5.go**: SafeGo + pool.Get для UDP association goroutine
+- **ratelimit/limiter.go**: ErrRateLimitExceeded теперь error (не string)
+- **common/pool/pool.go**: удалена неиспользуемая константа MaxSegmentSize
+- **go.mod**: исправлена версия Go с 1.25.0 на 1.21.0
+
+**Эффект**:
+- Устранена race condition с `_running` переменной
+- Устранена утечка ticker (resource leak)
+- Улучшена обработка паник в горутинах
+- Снижено использование памяти (buffer pool вместо аллокации)
+- Удалён мёртвый код
 
 ---
 
