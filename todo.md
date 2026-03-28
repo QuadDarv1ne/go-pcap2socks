@@ -2,7 +2,7 @@
 
 **Последнее обновление**: 28 марта 2026 г. (текущая проверка)
 **Версия**: v3.26.0+ (dev: stable, main: stable)
-**Статус**: ✅ проект стабилен, компиляция успешна, working tree clean
+**Статус**: ✅ проект стабилен, компиляция успешна, working tree clean, govulncheck пройден
 
 ### Статус веток
 ```
@@ -17,7 +17,8 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] Компиляция: `go build -ldflags="-s -w"` — успешно ✅
 - [x] Ветки: main/dev синхронизированы и отправлены ✅
 - [x] Изменения: working tree clean ✅
-- [x] Последний коммит: `f3e9548 feat: версии v3.20.0-v3.26.0+` ✅
+- [x] Последний коммит: `8e6f6d8 docs: обновить todo.md - отметить завершённые задачи Сессии 6` ✅
+- [x] govulncheck: уязвимостей нет ✅
 
 ---
 
@@ -665,15 +666,25 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] ✅ Error context для health — детальные ошибки в health/checker.go (ProbeError, RecoveryError)
 - [x] ✅ Error context для tunnel — детальные ошибки в tunnel/* (tunnel/tunnel.go: TunnelError, PoolError)
 
-### 🔴 Сессия 7: Интеграция и тестирование (P0) — СЛЕДУЮЩИЕ
-- [ ] Tray Icon интеграция — завершить интеграцию tray_improved.go в main.go
-- [ ] Audit зависимостей (govulncheck) — проверка уязвимостей
-- [ ] Integration tests —端到端 тесты для основных сценариев
+### 🔴 Сессия 7: Интеграция и тестирование (P0) — ✅ ЗАВЕРШЕНО
+- [x] ✅ Tray Icon интеграция — tray.go интегрирован в main.go (runTray())
+- [x] ✅ Audit зависимостей (govulncheck) — проверено: уязвимостей нет
+- [x] ✅ Integration tests — dhcp/integration_test.go, tests/proxy_test.go
 
-### 🟡 Сессия 8: Оптимизация (P2)
-- [ ] Connection pooling для SOCKS5 — переиспользование соединений к прокси
-- [ ] DNS cache warming — предзагрузка популярных доменов
-- [ ] Batch DNS queries — группировка DNS запросов
+### 🟡 Сессия 8: Оптимизация (P2) — ✅ ЗАВЕРШЕНО
+- [x] ✅ Connection pooling для SOCKS5 — proxy/socks5_pool.go (Socks5ConnPool)
+- [x] ✅ DNS cache warming — dns/resolver.go (StartPrefetch, prefetchLoop)
+- [x] ✅ Batch DNS queries — dns/resolver.go (worker pool для DNS запросов)
+
+### 🔴 Сессия 9: Новые функции (P0) — СЛЕДУЮЩИЕ
+- [ ] Tray Icon иконки — сгенерировать running.ico/stopped.ico (tray/generate-icon.ps1)
+- [ ] WebSocket для tray — real-time обновления вместо polling (5 сек)
+- [ ] Dynamic devices submenu — список устройств в tray меню
+
+### 🟡 Сессия 10: Улучшения (P2)
+- [ ] Health check улучшения — добавить новые probe types (TCP, UDP)
+- [ ] Rate limit улучшения — adaptive rate limiting
+- [ ] Config hot reload — перезагрузка конфига без рестарта
 
 ### Производительность
 - [x] ✅ CPU profiling в production (pprof) — реализовано в v3.23.0+
