@@ -1,10 +1,14 @@
 #!/bin/bash
 # Race Detection Test Script
-# Run this script to test for data races locally
+# WARNING: This script consumes HIGH MEMORY and may cause system lag
+# Use test.sh for faster local testing
 
 set -e
 
 echo "=== Race Detection Test Suite ==="
+echo "WARNING: This may consume high memory and slow down your system!"
+echo "For faster tests, use: test.sh"
+echo ""
 echo "Go version: $(go version)"
 echo ""
 
@@ -15,7 +19,8 @@ echo "Running tests with race detection..."
 echo ""
 
 # Run tests with race detection for all packages
-echo "Testing all packages with -race..."
+# -race: enables data race detector (10x memory, 20x slower)
+# -timeout: 5 minutes max
 go test -race -v -timeout=5m ./... 2>&1 | tee race-test-output.log
 
 echo ""

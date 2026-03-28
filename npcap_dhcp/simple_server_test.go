@@ -2,6 +2,7 @@ package npcap_dhcp_test
 
 import (
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -184,5 +185,147 @@ func TestSimpleDHCP_MessageTypes(t *testing.T) {
 	}
 	if DHCPRelease != 7 {
 		t.Error("DHCPRelease should be 7")
+	}
+}
+
+// TestSimpleDHCP_SaveAndLoadLeases tests DHCP lease persistence
+func TestSimpleDHCP_SaveAndLoadLeases(t *testing.T) {
+	config := &dhcp.ServerConfig{
+		ServerIP:      net.ParseIP("192.168.137.1"),
+		FirstIP:       net.ParseIP("192.168.137.100"),
+		LastIP:        net.ParseIP("192.168.137.110"),
+		LeaseDuration: 3600 * time.Second,
+	}
+
+	server, err := npcap_dhcp.NewSimpleServer(config, nil, true, "192.168.137.100", "192.168.137.110")
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	// Add some test leases manually
+	mac1, _ := net.ParseMAC("AA:BB:CC:DD:EE:01")
+	mac2, _ := net.ParseMAC("AA:BB:CC:DD:EE:02")
+	
+	now := time.Now()
+	server.SaveLeasesForTest(map[string]*npcap_dhcp.Lease{
+		"AA:BB:CC:DD:EE:01": {
+			MAC:       mac1,
+			IP:        net.ParseIP("192.168.137.101"),
+			Hostname:  "test-device-1",
+			ExpiresAt: now.Add(1 * time.Hour),
+		},
+		"AA:BB:CC:DD:EE:02": {
+			MAC:       mac2,
+			IP:        net.ParseIP("192.168.137.102"),
+			Hostname:  "test-device-2",
+			ExpiresAt: now.Add(2 * time.Hour),
+		},
+	})
+
+	// Save leases to file
+	testFile := "test_dhcp_leases.json"
+	defer os.Remove(testFile) // Cleanup
+
+	err = server.SaveLeases(testFile)
+	if err != nil {
+		t.Fatalf("Failed to save leases: %v", err)
+	}
+
+	// Verify file exists
+	if _, err := os.Stat(testFile); os.IsNotExist(err) {
+		t.Fatal("Leases file was not created")
+	}
+
+	// Create new server and load leases
+	server2, err := npcap_dhcp.NewSimpleServer(config, nil, true, "192.168.137.100", "192.168.137.110")
+	if err != nil {
+		t.Fatalf("Failed to create server2: %v", err)
+	}
+
+	err = server2.LoadLeases(testFile)
+	if err != nil {
+		t.Fatalf("Failed to load leases: %v", err)
+	}
+
+	// Verify leases were loaded
+	leases := server2.GetLeases()
+	if len(leases) != 2 {
+		t.Fatalf("Expected 2 leases, got %d", len(leases))
+	}
+
+	// Verify lease data
+	lease1, ok := leases["AA:BB:CC:DD:EE:01"]
+	if !ok {
+		t.Error("Lease for MAC AA:BB:CC:DD:EE:01 not found")
+	} else {
+		if lease1.IP.String() != "192.168.137.101" {
+			t.Errorf("Expected IP 192.168.137.101, got %s", lease1.IP.String())
+		}
+		if lease1.Hostname != "test-device-1" {
+			t.Errorf("Expected hostname test-device-1, got %s", lease1.Hostname)
+		}
+	}
+
+	lease2, ok := leases["AA:BB:CC:DD:EE:02"]
+	if !ok {
+		t.Error("Lease for MAC AA:BB:CC:DD:EE:02 not found")
+	} else {
+		if lease2.IP.String() != "192.168.137.102" {
+			t.Errorf("Expected IP 192.168.137.102, got %s", lease2.IP.String())
+		}
+		if lease2.Hostname != "test-device-2" {
+			t.Errorf("Expected hostname test-device-2, got %s", lease2.Hostname)
+		}
+	}
+}
+
+// TestSimpleDHCP_LoadNonExistentFile tests loading from non-existent file
+func TestSimpleDHCP_LoadNonExistentFile(t *testing.T) {
+	config := &dhcp.ServerConfig{
+		ServerIP:      net.ParseIP("192.168.137.1"),
+		FirstIP:       net.ParseIP("192.168.137.100"),
+		LastIP:        net.ParseIP("192.168.137.110"),
+		LeaseDuration: 3600 * time.Second,
+	}
+
+	server, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	// Load from non-existent file should not error
+	err = server.LoadLeases("non_existent_file.json")
+	if err != nil {
+		t.Errorf("Expected no error for non-existent file, got: %v", err)
+	}
+}
+
+// TestSimpleDHCP_LoadInvalidJSON tests loading invalid JSON
+func TestSimpleDHCP_LoadInvalidJSON(t *testing.T) {
+	config := &dhcp.ServerConfig{
+		ServerIP:      net.ParseIP("192.168.137.1"),
+		FirstIP:       net.ParseIP("192.168.137.100"),
+		LastIP:        net.ParseIP("192.168.137.110"),
+		LeaseDuration: 3600 * time.Second,
+	}
+
+	server, err := npcap_dhcp.NewSimpleServer(config, nil, false, "", "")
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	// Create invalid JSON file
+	testFile := "test_invalid.json"
+	defer os.Remove(testFile)
+
+	err = os.WriteFile(testFile, []byte("invalid json"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Load should fail with invalid JSON
+	err = server.LoadLeases(testFile)
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
 	}
 }

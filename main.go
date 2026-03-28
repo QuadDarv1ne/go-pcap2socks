@@ -874,9 +874,30 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		return err
 	}
 
+	// Load DHCP leases from previous session
+	if dhcpServer != nil {
+		if simpleDHCP, ok := dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := simpleDHCP.LoadLeases(leasesFile); err != nil {
+				slog.Warn("Failed to load DHCP leases", "error", err)
+			}
+		}
+	}
+
+	// Convert dhcpServer to device.DHCPServer interface
+	var dhcpServerIface device.DHCPServer
+	if dhcpServer != nil {
+		var ok bool
+		dhcpServerIface, ok = dhcpServer.(device.DHCPServer)
+		if !ok {
+			slog.Warn("DHCP server does not implement device.DHCPServer interface")
+		}
+	}
+
 	_defaultDevice, err = device.OpenWithDHCP(cfg.Capture, ifce, netConfig, func() device.Stacker {
 		return _defaultStack
-	}, dhcpServer)
+	}, dhcpServerIface)
 	if err != nil {
 		return err
 	}
@@ -1064,8 +1085,18 @@ func Stop() {
 		slog.Info("UPnP manager stopped")
 	}
 
-	// Stop DHCP server
+	// Stop DHCP server and save leases
 	if _dhcpServer != nil {
+		// Save DHCP leases before stopping
+		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := simpleDHCP.SaveLeases(leasesFile); err != nil {
+				slog.Warn("Failed to save DHCP leases", "error", err)
+			}
+		}
+
+		// Stop DHCP server
 		if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
 			stopper.Stop()
 			slog.Info("DHCP server stopped")
@@ -2545,7 +2576,7 @@ func createProxyGroup(outbound cfg.Outbound, proxies map[string]proxy.Proxy) (*p
 }
 
 // createDHCPServerIfNeeded creates DHCP server if enabled in configuration
-func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) (device.DHCPServer, error) {
+func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) (interface{}, error) {
 	if cfg.DHCP == nil || !cfg.DHCP.Enabled {
 		return nil, nil
 	}

@@ -1,8 +1,12 @@
 @echo off
 REM Race Detection Test Script for Windows
-REM Run this script to test for data races locally
+REM WARNING: This script consumes HIGH MEMORY and may cause system lag
+REM Use test.bat for faster local testing
 
 echo === Race Detection Test Suite ===
+echo WARNING: This may consume high memory and slow down your system!
+echo For faster tests, use: test.bat
+echo.
 go version
 echo.
 
@@ -13,7 +17,8 @@ echo Running tests with race detection...
 echo.
 
 REM Run tests with race detection for all packages
-echo Testing all packages with -race...
+REM -race: enables data race detector (10x memory, 20x slower)
+REM -timeout: 5 minutes max
 go test -race -v -timeout=5m ./... 2>&1 | tee race-test-output.log
 
 echo.
