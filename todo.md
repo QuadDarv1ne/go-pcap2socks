@@ -676,12 +676,17 @@ dev:  v3.26.0+ - синхронизировано с main ✅
 - [x] ✅ DNS cache warming — dns/resolver.go (StartPrefetch, prefetchLoop)
 - [x] ✅ Batch DNS queries — dns/resolver.go (worker pool для DNS запросов)
 
-### 🔴 Сессия 9: Новые функции (P0) — СЛЕДУЮЩИЕ
-- [ ] Tray Icon иконки — сгенерировать running.ico/stopped.ico (tray/generate-icon.ps1)
-- [ ] WebSocket для tray — real-time обновления вместо polling (5 сек)
-- [ ] Dynamic devices submenu — список устройств в tray меню
+### 🔴 Сессия 9: Новые функции (P0) — ✅ ЗАВЕРШЕНО
+- [x] ✅ Tray Icon иконки — app.ico встроен через go:embed (tray/icons/app.ico)
+- [x] ✅ WebSocket для tray — real-time обновления вместо polling (tray/tray_ws.go)
+- [x] ✅ Dynamic devices submenu — список устройств в tray меню (реализовано в tray.go)
 
-### 🟡 Сессия 10: Улучшения (P2)
+### 🔴 Сессия 10: Интеграция (P0) — СЛЕДУЮЩИЕ
+- [ ] Интеграция tray_ws.go в main.go — переключение на WebSocket режим
+- [ ] Тестирование tray с WebSocket — проверка reconnect и fallback
+- [ ] Generate running/stopped иконки — разные цвета для статуса
+
+### 🟡 Сессия 11: Улучшения (P2)
 - [ ] Health check улучшения — добавить новые probe types (TCP, UDP)
 - [ ] Rate limit улучшения — adaptive rate limiting
 - [ ] Config hot reload — перезагрузка конфига без рестарта
