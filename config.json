@@ -44,7 +44,9 @@
       "google.com",
       "cloudflare.com",
       "github.com"
-    ]
+    ],
+    "persistentCache": false,
+    "cacheFile": "dns_cache.json"
   },
   "routing": {
     "rules": [

@@ -441,8 +441,11 @@ func main() {
 			CacheSize:     config.DNS.CacheSize,
 			CacheTTL:      config.DNS.CacheTTL,
 			// Pre-warming cache for faster startup
-			PreWarmCache:  config.DNS.PreWarmCache,
-			PreWarmDomains: config.DNS.PreWarmDomains,
+			PreWarmCache:    config.DNS.PreWarmCache,
+			PreWarmDomains:  config.DNS.PreWarmDomains,
+			// Persistent cache on disk
+			PersistentCache: config.DNS.PersistentCache,
+			CacheFile:       config.DNS.CacheFile,
 		})
 		slog.Info("DNS resolver initialized (fallback)")
 	}

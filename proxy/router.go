@@ -288,6 +288,10 @@ type Router struct {
 	macFilter    *cfg.MACFilter
 	routeCache   *routeCache
 	stopCleanup  chan struct{}
+
+	// Connection error metrics
+	connErrors  atomic.Uint64
+	connSuccess atomic.Uint64
 }
 
 // NewRouter creates a new Router with the given rules and proxies.
@@ -338,6 +342,19 @@ func (r *Router) Stop() {
 // GetCacheStats returns routing cache statistics for monitoring
 func (r *Router) GetCacheStats() (hits, misses uint64, hitRatio float64, size int32) {
 	return r.routeCache.GetStats()
+}
+
+// GetConnectionStats returns connection statistics for monitoring
+func (r *Router) GetConnectionStats() (success, errors uint64, errorRate float64) {
+	success = r.connSuccess.Load()
+	errors = r.connErrors.Load()
+
+	total := success + errors
+	if total > 0 {
+		errorRate = float64(errors) / float64(total) * 100
+	}
+
+	return success, errors, errorRate
 }
 
 // UpdateRules atomically updates routing rules without locking
@@ -393,14 +410,22 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 	cacheKey := d.routeCache.buildKey("tcp:", metadata.SrcIP, metadata.DstIP, metadata.SrcPort, metadata.DstPort)
 	selectedTag, err := d.route(cacheKey, metadata)
 	if err != nil {
+		d.connErrors.Add(1)
 		return nil, err
 	}
 
 	// Dial using selected proxy
 	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
-		return proxy.DialContext(ctx, metadata)
+		conn, err := proxy.DialContext(ctx, metadata)
+		if err != nil {
+			d.connErrors.Add(1)
+		} else {
+			d.connSuccess.Add(1)
+		}
+		return conn, err
 	}
 
+	d.connErrors.Add(1)
 	return nil, ErrProxyNotFound
 }
 
