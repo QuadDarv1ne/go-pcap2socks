@@ -1,0 +1,217 @@
+{
+  "_comment": "Конфигурация для домашних игр (PS5/Xbox/Switch)",
+  "_version": "3.28.0+",
+  "_description": "Оптимальные настройки для гейминга с минимальной задержкой",
+
+  "pcap": {
+    "interfaceGateway": "192.168.137.1",
+    "network": "192.168.137.0/24",
+    "mtu": 1486,
+    "bufferSize": 65535
+  },
+
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.137.100",
+    "poolEnd": "192.168.137.200",
+    "leaseDuration": 86400,
+    "dns": [
+      "8.8.8.8",
+      "1.1.1.1"
+    ],
+    "gateway": "192.168.137.1",
+    "smartDhcp": {
+      "enabled": true,
+      "profiles": {
+        "playstation": {
+          "rangeStart": "192.168.137.100",
+          "rangeEnd": "192.168.137.119",
+          "priority": "high"
+        },
+        "xbox": {
+          "rangeStart": "192.168.137.120",
+          "rangeEnd": "192.168.137.139",
+          "priority": "high"
+        },
+        "switch": {
+          "rangeStart": "192.168.137.140",
+          "rangeEnd": "192.168.137.149",
+          "priority": "medium"
+        },
+        "pc": {
+          "rangeStart": "192.168.137.150",
+          "rangeEnd": "192.168.137.199",
+          "priority": "normal"
+        }
+      }
+    }
+  },
+
+  "dns": {
+    "servers": [
+      {
+        "address": "8.8.8.8:53",
+        "protocol": "udp",
+        "priority": 1
+      },
+      {
+        "address": "1.1.1.1:53",
+        "protocol": "udp",
+        "priority": 2
+      },
+      {
+        "address": "9.9.9.9:53",
+        "protocol": "tcp",
+        "priority": 3
+      }
+    ],
+    "cache": {
+      "enabled": true,
+      "size": 10000,
+      "ttl": 300
+    },
+    "prefetch": {
+      "enabled": true,
+      "interval": 300
+    }
+  },
+
+  "outbounds": [
+    {
+      "tag": "direct",
+      "direct": {}
+    },
+    {
+      "tag": "socks-proxy",
+      "socks": {
+        "address": "proxy.example.com:1080",
+        "user": "username",
+        "password": "password"
+      }
+    }
+  ],
+
+  "routing": {
+    "rules": [
+      {
+        "name": "Gaming Traffic - Direct",
+        "dstPorts": "3074,3075,9000-9999,27015-27030",
+        "protocol": "udp",
+        "outboundTag": "direct",
+        "priority": 100
+      },
+      {
+        "name": "PlayStation Network",
+        "dstIPs": [
+          "0.0.0.0/0"
+        ],
+        "srcIPs": [
+          "192.168.137.100-192.168.137.119"
+        ],
+        "outboundTag": "socks-proxy",
+        "priority": 90
+      },
+      {
+        "name": "Xbox Live",
+        "dstIPs": [
+          "0.0.0.0/0"
+        ],
+        "srcIPs": [
+          "192.168.137.120-192.168.137.139"
+        ],
+        "outboundTag": "socks-proxy",
+        "priority": 90
+      },
+      {
+        "name": "Default - Proxy",
+        "outboundTag": "socks-proxy",
+        "priority": 1
+      }
+    ]
+  },
+
+  "upnp": {
+    "enabled": true,
+    "games": [
+      {
+        "name": "Call of Duty",
+        "tcpPorts": "3074,3075",
+        "udpPorts": "3074,3075"
+      },
+      {
+        "name": "Fortnite",
+        "tcpPorts": "5222,5795-5840",
+        "udpPorts": "5222,5795-5840"
+      },
+      {
+        "name": "Apex Legends",
+        "tcpPorts": "9960-9969,37000-37999",
+        "udpPorts": "9960-9969,37000-37999"
+      }
+    ]
+  },
+
+  "bandwidth": {
+    "enabled": false,
+    "global": {
+      "upload": 0,
+      "download": 0
+    },
+    "perClient": {
+      "enabled": false,
+      "upload": 0,
+      "download": 0
+    }
+  },
+
+  "healthCheck": {
+    "enabled": true,
+    "interval": 30,
+    "timeout": 5,
+    "target": "8.8.8.8:53",
+    "retries": 3
+  },
+
+  "api": {
+    "enabled": true,
+    "port": 8080,
+    "auth": {
+      "enabled": true,
+      "token": ""
+    }
+  },
+
+  "webUI": {
+    "enabled": true,
+    "port": 8085,
+    "https": {
+      "enabled": false,
+      "certFile": "",
+      "keyFile": ""
+    }
+  },
+
+  "log": {
+    "level": "info",
+    "format": "text",
+    "output": "file",
+    "file": "logs/go-pcap2socks.log",
+    "maxSize": 10,
+    "maxBackups": 3,
+    "maxAge": 7
+  },
+
+  "hotkey": {
+    "enabled": true,
+    "bindings": [
+      {
+        "key": "F12",
+        "action": "toggle_proxy"
+      },
+      {
+        "key": "F11",
+        "action": "restart_service"
+      }
+    ]
+  }
+}

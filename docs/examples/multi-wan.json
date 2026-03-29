@@ -1,0 +1,221 @@
+{
+  "_comment": "Конфигурация Multi-WAN балансировки",
+  "_version": "3.28.0+",
+  "_description": "Продвинутая балансировка между несколькими прокси с health checks",
+
+  "pcap": {
+    "interfaceGateway": "192.168.137.1",
+    "network": "192.168.137.0/24",
+    "mtu": 1486
+  },
+
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.137.100",
+    "poolEnd": "192.168.137.200",
+    "leaseDuration": 86400,
+    "dns": [
+      "1.1.1.1",
+      "8.8.8.8"
+    ],
+    "gateway": "192.168.137.1"
+  },
+
+  "dns": {
+    "servers": [
+      {
+        "address": "1.1.1.1:53",
+        "protocol": "udp"
+      },
+      {
+        "address": "8.8.8.8:53",
+        "protocol": "udp"
+      }
+    ],
+    "cache": {
+      "enabled": true,
+      "size": 10000,
+      "ttl": 300
+    }
+  },
+
+  "outbounds": [
+    {
+      "tag": "direct",
+      "direct": {}
+    },
+    {
+      "tag": "us-proxy",
+      "socks": {
+        "address": "us-proxy.example.com:1080",
+        "user": "user1",
+        "password": "pass1"
+      }
+    },
+    {
+      "tag": "eu-proxy",
+      "socks": {
+        "address": "eu-proxy.example.com:1080",
+        "user": "user1",
+        "password": "pass1"
+      }
+    },
+    {
+      "tag": "asia-proxy",
+      "socks": {
+        "address": "asia-proxy.example.com:1080",
+        "user": "user1",
+        "password": "pass1"
+      }
+    }
+  ],
+
+  "wanBalancer": {
+    "enabled": true,
+    "policy": "least-latency",
+    "uplinks": [
+      {
+        "tag": "us-proxy",
+        "weight": 1,
+        "priority": 1,
+        "description": "US Endpoint - Low latency for Americas"
+      },
+      {
+        "tag": "eu-proxy",
+        "weight": 1,
+        "priority": 1,
+        "description": "EU Endpoint - Low latency for Europe"
+      },
+      {
+        "tag": "asia-proxy",
+        "weight": 1,
+        "priority": 1,
+        "description": "Asia Endpoint - Low latency for Asia-Pacific"
+      }
+    ],
+    "healthCheck": {
+      "enabled": true,
+      "interval": "5s",
+      "timeout": "3s",
+      "target": "8.8.8.8:53",
+      "failThreshold": 2,
+      "recoverThreshold": 3,
+      "method": "tcp"
+    },
+    "metrics": {
+      "enabled": true,
+      "collectInterval": "10s",
+      "reportInterval": "60s"
+    }
+  },
+
+  "routing": {
+    "rules": [
+      {
+        "name": "Gaming - Least Latency",
+        "dstPorts": "27015-27030,3074,9000-9999",
+        "protocol": "udp",
+        "outboundTag": "",
+        "priority": 100
+      },
+      {
+        "name": "Streaming - EU Proxy",
+        "dstIPs": [
+          "0.0.0.0/0"
+        ],
+        "dstPorts": "443,1935",
+        "outboundTag": "eu-proxy",
+        "priority": 90
+      },
+      {
+        "name": "Local Traffic - Direct",
+        "dstIPs": [
+          "192.168.0.0/16",
+          "10.0.0.0/8",
+          "172.16.0.0/12"
+        ],
+        "outboundTag": "direct",
+        "priority": 95
+      },
+      {
+        "name": "Default - WAN Balance",
+        "outboundTag": "",
+        "priority": 1
+      }
+    ]
+  },
+
+  "connectionPool": {
+    "enabled": true,
+    "maxSize": 100,
+    "minIdle": 10,
+    "maxIdle": 30,
+    "maxLifetime": 300,
+    "idleTimeout": 60
+  },
+
+  "circuitBreaker": {
+    "enabled": true,
+    "failureThreshold": 5,
+    "successThreshold": 3,
+    "timeout": 30,
+    "halfOpenRequests": 3
+  },
+
+  "bandwidth": {
+    "enabled": false
+  },
+
+  "macFilter": {
+    "enabled": false
+  },
+
+  "healthCheck": {
+    "enabled": true,
+    "interval": 30,
+    "timeout": 5,
+    "target": "8.8.8.8:53",
+    "retries": 3
+  },
+
+  "api": {
+    "enabled": true,
+    "port": 8080,
+    "auth": {
+      "enabled": true,
+      "token": ""
+    }
+  },
+
+  "webUI": {
+    "enabled": true,
+    "port": 8085,
+    "https": {
+      "enabled": false
+    }
+  },
+
+  "log": {
+    "level": "debug",
+    "format": "json",
+    "output": "file",
+    "file": "logs/go-pcap2socks.log",
+    "maxSize": 50,
+    "maxBackups": 5,
+    "maxAge": 14
+  },
+
+  "tray": {
+    "enabled": true,
+    "showTraffic": true,
+    "showDevices": true,
+    "showUplinkStatus": true
+  },
+
+  "updater": {
+    "enabled": true,
+    "checkInterval": 86400,
+    "autoDownload": false,
+    "autoInstall": false
+  }
+}

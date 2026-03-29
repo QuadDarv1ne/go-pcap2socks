@@ -1,0 +1,221 @@
+{
+  "_comment": "Конфигурация для офиса с балансировкой нагрузки",
+  "_version": "3.28.0+",
+  "_description": "Multi-WAN балансировка для офиса с несколькими прокси",
+
+  "pcap": {
+    "interfaceGateway": "192.168.100.1",
+    "network": "192.168.100.0/24",
+    "mtu": 1500,
+    "bufferSize": 65535
+  },
+
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.100.50",
+    "poolEnd": "192.168.100.250",
+    "leaseDuration": 43200,
+    "dns": [
+      "8.8.8.8",
+      "8.8.4.4"
+    ],
+    "gateway": "192.168.100.1"
+  },
+
+  "dns": {
+    "servers": [
+      {
+        "address": "8.8.8.8:53",
+        "protocol": "udp",
+        "priority": 1
+      },
+      {
+        "address": "8.8.4.4:53",
+        "protocol": "udp",
+        "priority": 2
+      }
+    ],
+    "cache": {
+      "enabled": true,
+      "size": 50000,
+      "ttl": 600
+    }
+  },
+
+  "outbounds": [
+    {
+      "tag": "direct",
+      "direct": {}
+    },
+    {
+      "tag": "proxy-primary",
+      "socks": {
+        "address": "proxy1.example.com:1080",
+        "user": "office_user",
+        "password": "secure_password_1"
+      }
+    },
+    {
+      "tag": "proxy-backup",
+      "socks": {
+        "address": "proxy2.example.com:1080",
+        "user": "office_user",
+        "password": "secure_password_2"
+      }
+    },
+    {
+      "tag": "proxy-premium",
+      "socks": {
+        "address": "premium-proxy.example.com:1080",
+        "user": "premium_user",
+        "password": "premium_password"
+      }
+    }
+  ],
+
+  "wanBalancer": {
+    "enabled": true,
+    "policy": "weighted",
+    "uplinks": [
+      {
+        "tag": "proxy-primary",
+        "weight": 5,
+        "priority": 1,
+        "description": "Основной прокси (50% трафика)"
+      },
+      {
+        "tag": "proxy-backup",
+        "weight": 3,
+        "priority": 2,
+        "description": "Резервный прокси (30% трафика)"
+      },
+      {
+        "tag": "proxy-premium",
+        "weight": 2,
+        "priority": 1,
+        "description": "Премиум для критичных сервисов (20% трафика)"
+      }
+    ],
+    "healthCheck": {
+      "enabled": true,
+      "interval": "10s",
+      "timeout": "5s",
+      "target": "8.8.8.8:53",
+      "failThreshold": 3,
+      "recoverThreshold": 2
+    }
+  },
+
+  "routing": {
+    "rules": [
+      {
+        "name": "Video Conferences - Premium",
+        "dstPorts": "443,3478-3481,8801-8810",
+        "protocol": "udp",
+        "outboundTag": "proxy-premium",
+        "priority": 100
+      },
+      {
+        "name": "Corporate Services - Direct",
+        "dstIPs": [
+          "10.0.0.0/8",
+          "172.16.0.0/12",
+          "192.168.0.0/16"
+        ],
+        "outboundTag": "direct",
+        "priority": 95
+      },
+      {
+        "name": "Streaming - Backup",
+        "dstPorts": "443,1935,8554",
+        "protocol": "tcp",
+        "outboundTag": "proxy-backup",
+        "priority": 80
+      },
+      {
+        "name": "General Web - Primary",
+        "dstPorts": "80,443",
+        "outboundTag": "proxy-primary",
+        "priority": 50
+      },
+      {
+        "name": "Default - Weighted Balance",
+        "outboundTag": "",
+        "priority": 1
+      }
+    ]
+  },
+
+  "bandwidth": {
+    "enabled": true,
+    "global": {
+      "upload": 100000000,
+      "download": 500000000
+    },
+    "perClient": {
+      "enabled": true,
+      "upload": 5000000,
+      "download": 20000000
+    }
+  },
+
+  "macFilter": {
+    "enabled": true,
+    "mode": "allow",
+    "list": [
+      {
+        "mac": "AA:BB:CC:DD:EE:01",
+        "description": "Office PC 1",
+        "profile": "full-access"
+      },
+      {
+        "mac": "AA:BB:CC:DD:EE:02",
+        "description": "Office PC 2",
+        "profile": "full-access"
+      }
+    ]
+  },
+
+  "healthCheck": {
+    "enabled": true,
+    "interval": 30,
+    "timeout": 5,
+    "target": "8.8.8.8:53",
+    "retries": 3
+  },
+
+  "api": {
+    "enabled": true,
+    "port": 8080,
+    "auth": {
+      "enabled": true,
+      "token": ""
+    }
+  },
+
+  "webUI": {
+    "enabled": true,
+    "port": 8085,
+    "https": {
+      "enabled": true,
+      "certFile": "certs/server.crt",
+      "keyFile": "certs/server.key"
+    }
+  },
+
+  "log": {
+    "level": "info",
+    "format": "json",
+    "output": "file",
+    "file": "logs/go-pcap2socks.log",
+    "maxSize": 100,
+    "maxBackups": 10,
+    "maxAge": 30
+  },
+
+  "tray": {
+    "enabled": true,
+    "showTraffic": true,
+    "showDevices": true
+  }
+}

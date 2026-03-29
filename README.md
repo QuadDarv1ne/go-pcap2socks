@@ -56,15 +56,31 @@ go-pcap2socks — это прозрачный сетевой прокси для
 
 ## 📚 Документация
 
+### Основное
+
 | Документ | Описание |
 |----------|----------|
 | [QUICK_START.md](QUICK_START.md) | Подробный быстрый старт |
 | [SETUP_RU.md](SETUP_RU.md) | Настройка устройств (PS4, Xbox, Switch) |
 | [AUTO-START.md](AUTO-START.md) | Автозагрузка как сервис Windows |
-| [HTTP3.md](docs/HTTP3.md) | Руководство по HTTP/3 (QUIC) |
-| [SECURITY.md](SECURITY.md) | Рекомендации по безопасности |
-| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Решение проблем |
 | [CHANGELOG.md](CHANGELOG.md) | История изменений |
+
+### Продвинутое
+
+| Документ | Описание |
+|----------|----------|
+| [docs/API.md](docs/API.md) | REST API и WebSocket документация |
+| [docs/HTTP3.md](docs/HTTP3.md) | Руководство по HTTP/3 (QUIC) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Архитектура проекта |
+| [docs/MULTITHREADING.md](docs/MULTITHREADING.md) | Многопоточность и производительность |
+
+### Примеры и решение проблем
+
+| Документ | Описание |
+|----------|----------|
+| [docs/examples/](docs/examples/) | Примеры конфигураций (home, office, multi-wan) |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Решение проблем и диагностика |
+| [SECURITY.md](SECURITY.md) | Рекомендации по безопасности |
 
 ## ⚙️ Конфигурация
 
