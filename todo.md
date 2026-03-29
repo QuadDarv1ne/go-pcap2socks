@@ -184,8 +184,8 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Создан init_parallel.go для параллельного запуска
   * [x] Profile Manager, UPnP Manager, DNS Resolver — параллельно
   * [x] Создан startup_bench_test.go для измерений
-  * [ ] Интеграция в main.go
-  * [ ] Замер производительности
+  * [x] Интеграция в main.go ✅
+  * [ ] Замер производительности (benchmark)
 
 ---
 
