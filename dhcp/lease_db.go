@@ -246,6 +246,14 @@ func (db *LeaseDB) save() {
 
 // Close saves the database and stops the saver goroutine
 func (db *LeaseDB) Close() error {
+	slog.Info("Saving DHCP lease database...", "path", db.dbPath)
+
+	// Save current leases before closing
+	db.save()
+
+	// Stop background saver
 	close(db.stopChan)
+
+	slog.Info("DHCP lease database saved", "path", db.dbPath)
 	return nil
 }

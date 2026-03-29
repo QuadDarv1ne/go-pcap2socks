@@ -1205,8 +1205,9 @@ func performGracefulShutdown() {
 	if _dhcpServer != nil {
 		switch server := _dhcpServer.(type) {
 		case *dhcp.Server:
+			slog.Info("Saving DHCP leases before shutdown...")
 			server.Stop()
-			slog.Info("DHCP server stopped")
+			slog.Info("DHCP server stopped, leases saved")
 		}
 	}
 
