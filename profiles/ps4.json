@@ -1,0 +1,34 @@
+{
+  "name": "PS4 Gaming",
+  "description": "Optimized for PlayStation 4 with low latency and UPnP",
+  "config": {
+    "pcap": {
+      "mtu": 1472
+    },
+    "dns": {
+      "useSystemDNS": false,
+      "autoBench": true,
+      "cacheSize": 1024,
+      "cacheTTL": 300,
+      "preWarmCache": true,
+      "preWarmDomains": [
+        "playstation.com",
+        "playstation.net",
+        "sonyentertainmentnetwork.com",
+        "google.com",
+        "cloudflare.com"
+      ],
+      "persistentCache": true,
+      "cacheFile": "dns_cache.json"
+    },
+    "upnp": {
+      "enabled": true,
+      "autoForward": true,
+      "leaseDuration": 3600
+    },
+    "dhcp": {
+      "enabled": true,
+      "ipv6Enabled": true
+    }
+  }
+}
