@@ -255,7 +255,13 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] interfaces/interfaces.go — интерфейсы для основных компонентов
   * [x] pool/pool.go — общие пулы буферов
   * [x] PACKAGE_ANALYSIS.md — документ с анализом архитектуры
-- [ ] Интеграционные тесты для основных сценариев
+- [x] **Улучшение #5: Интеграционные тесты**
+  * [x] dns/resolver_integration_test.go — тесты DNS resolver
+  * [x] dhcp/server_integration_test.go — тесты DHCP server
+  * [x] proxy/router_integration_test.go — тесты proxy router
+  * [x] api/server_integration_test.go — тесты Web UI API
+  * [x] Тесты покрывают: кэш, pre-warming, persistent cache, concurrent access
+  * [x] Бенчмарки для производительности
 
 ---
 
