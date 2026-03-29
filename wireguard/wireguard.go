@@ -7,17 +7,19 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
 // Config represents WireGuard configuration.
 type Config struct {
-	PrivateKey       string
-	PublicKey        string
-	PeerPublicKey    string
-	PeerEndpoint     string
-	PeerAllowedIPs   []string
-	MTU              int
-	KeepAlive        time.Duration
+	PrivateKey     string
+	PublicKey      string
+	PeerPublicKey  string
+	PeerEndpoint   string
+	PeerAllowedIPs []string
+	MTU            int
+	KeepAlive      time.Duration
 }
 
 // Proxy implements a WireGuard-based proxy.
@@ -45,7 +47,10 @@ func New(tag string, config Config) (*Proxy, error) {
 	if config.KeepAlive == 0 {
 		config.KeepAlive = 25 * time.Second
 	}
-	return &Proxy{tag: tag, config: config}, nil
+	return &Proxy{
+		tag:    tag,
+		config: config,
+	}, nil
 }
 
 // Start initializes the WireGuard interface.
@@ -69,36 +74,46 @@ func (p *Proxy) Stop() error {
 }
 
 // DialContext establishes a TCP connection through WireGuard.
-func (p *Proxy) DialContext(ctx context.Context, metadata *Metadata) (net.Conn, error) {
+func (p *Proxy) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if !p.started {
 		return nil, fmt.Errorf("wireguard not started")
 	}
-	return nil, fmt.Errorf("not implemented")
+	// TODO: Implement WireGuard TCP dial
+	return nil, fmt.Errorf("wireguard TCP dial not implemented")
 }
 
 // DialUDP establishes a UDP connection through WireGuard.
-func (p *Proxy) DialUDP(metadata *Metadata) (net.PacketConn, error) {
+func (p *Proxy) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if !p.started {
 		return nil, fmt.Errorf("wireguard not started")
 	}
-	return nil, fmt.Errorf("not implemented")
+	// TODO: Implement WireGuard UDP dial
+	return nil, fmt.Errorf("wireguard UDP dial not implemented")
 }
 
 // Addr returns the endpoint address.
-func (p *Proxy) Addr() string { return p.config.PeerEndpoint }
+func (p *Proxy) Addr() string {
+	return p.config.PeerEndpoint
+}
 
 // Mode returns the proxy mode.
-func (p *Proxy) Mode() string { return "wireguard" }
+func (p *Proxy) Mode() string {
+	return "wireguard"
+}
 
 // Tag returns the proxy tag.
-func (p *Proxy) Tag() string { return p.tag }
+func (p *Proxy) Tag() string {
+	return p.tag
+}
 
 // Close releases resources.
-func (p *Proxy) Close() error { return p.Stop() }
+func (p *Proxy) Close() error {
+	return p.Stop()
+}
 
 // Status returns proxy status.
 func (p *Proxy) Status() ProxyStatus {
@@ -108,12 +123,6 @@ func (p *Proxy) Status() ProxyStatus {
 		Mode:  "wireguard",
 		Alive: p.started,
 	}
-}
-
-// Metadata for connection info
-type Metadata struct {
-	DstIP   net.IP
-	DstPort uint16
 }
 
 // ProxyStatus for health info
@@ -128,7 +137,9 @@ type ProxyStatus struct {
 type Factory struct{}
 
 // NewFactory creates a new factory
-func NewFactory() *Factory { return &Factory{} }
+func NewFactory() *Factory {
+	return &Factory{}
+}
 
 // Create creates a proxy from config
 func (f *Factory) Create(tag string, config Config) (*Proxy, error) {

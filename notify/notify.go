@@ -9,11 +9,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/discord"
+	"github.com/QuadDarv1ne/go-pcap2socks/telegram"
 )
 
 // Pre-defined errors for notifications
 var (
-	ErrNotificationFailed = errors.New("failed to send notification")
+	ErrNotificationFailed    = errors.New("failed to send notification")
 	ErrPowerShellUnavailable = errors.New("PowerShell is unavailable")
 )
 
@@ -21,6 +25,13 @@ var (
 	lastNotification sync.Map // map[string]int64 (key -> timestamp nanoseconds)
 	minInterval      int64 = 30 * int64(time.Second) // Минимальный интервал между одинаковыми уведомлениями
 	notifyCount      atomic.Int64
+
+	// telegramBot holds Telegram bot instance
+	telegramBot *telegram.Bot
+	// discordWebhook holds Discord webhook client
+	discordWebhook *discord.WebhookClient
+	// externalEnabled indicates if external notifications are enabled
+	externalEnabled atomic.Bool
 )
 
 // Notification types
@@ -30,6 +41,25 @@ const (
 	NotifyError   = "error"
 	NotifySuccess = "success"
 )
+
+// InitExternal initializes Telegram and Discord notifications
+func InitExternal(telegramCfg *cfg.Telegram, discordCfg *cfg.Discord) {
+	if telegramCfg != nil && telegramCfg.Enabled && telegramCfg.Token != "" {
+		telegramBot = telegram.NewBot(telegramCfg.Token, telegramCfg.ChatID)
+		if telegramBot != nil {
+			externalEnabled.Store(true)
+			slog.Info("Telegram notifications enabled")
+		}
+	}
+
+	if discordCfg != nil && discordCfg.WebhookURL != "" {
+		discordWebhook = discord.NewWebhookClient(discordCfg.WebhookURL)
+		if discordWebhook != nil {
+			externalEnabled.Store(true)
+			slog.Info("Discord notifications enabled")
+		}
+	}
+}
 
 // Show отправляет уведомление пользователю
 // Optimized with sync.Map for lock-free rate limiting
@@ -54,6 +84,63 @@ func Show(title, message, notifyType string) {
 
 	// Показываем Windows toast уведомление
 	showToastNotification(title, message, notifyType)
+
+	// Отправляем внешние уведомления (Telegram/Discord)
+	if externalEnabled.Load() {
+		go sendExternalNotification(title, message, notifyType)
+	}
+}
+
+// sendExternalNotification sends notification to Telegram and Discord
+func sendExternalNotification(title, message, notifyType string) {
+	// Send to Telegram
+	if telegramBot != nil {
+		text := formatMessage(title, message, notifyType)
+		_ = telegramBot.SendMessage(text)
+	}
+
+	// Send to Discord
+	if discordWebhook != nil {
+		embed := formatDiscordEmbed(title, message, notifyType)
+		_ = discordWebhook.SendEmbed(embed)
+	}
+}
+
+// formatMessage formats message for Telegram
+func formatMessage(title, message, notifyType string) string {
+	prefix := "📢"
+	switch notifyType {
+	case NotifyError:
+		prefix = "❌"
+	case NotifyWarning:
+		prefix = "⚠️"
+	case NotifySuccess:
+		prefix = "✅"
+	}
+	return prefix + " *" + title + "*\n" + message
+}
+
+// formatDiscordEmbed formats embed for Discord
+func formatDiscordEmbed(title, message, notifyType string) discord.Embed {
+	color := 0x3b82f6 // Blue
+	switch notifyType {
+	case NotifyError:
+		color = 0xef4444 // Red
+	case NotifyWarning:
+		color = 0xf59e0b // Orange
+	case NotifySuccess:
+		color = 0x22c55e // Green
+	}
+
+	return discord.Embed{
+		Title:       title,
+		Description: message,
+		Color:       color,
+		Footer: discord.EmbedFooter{
+			Text: "go-pcap2socks",
+		},
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
 }
 
 func logNotification(title, message, notifyType string) {

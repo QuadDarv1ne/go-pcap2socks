@@ -96,11 +96,17 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [x] Telegram бот (`telegram/bot.go` — команды /status, /traffic, /devices)
 - [x] Discord webhook (`discord/webhook.go` — уведомления о событиях)
 
-### 🟢 Сессия 22: Интеграция (P1) — НОВАЯ
-- [ ] Интеграция WireGuard в proxy router
-- [ ] Авто-конфигурация UPnP при старте
+### ✅ Сессия 22: Интеграция (P1) — ЗАВЕРШЕНА
+- [x] Интеграция WireGuard в proxy router (`wireguard/wireguard.go` — совместимость с proxy.Dialer)
+- [x] Авто-конфигурация UPnP при старте (`upnp/manager.go` — retry logic)
+- [x] Telegram/Discord уведомления (`notify/notify.go` — InitExternal, Show)
 - [ ] Web UI API endpoints (полная интеграция)
-- [ ] Telegram/Discord — отправка уведомлений о событиях
+
+### 🟢 Сессия 23: Web UI (P2) — НОВАЯ
+- [ ] REST API endpoints для Web UI
+- [ ] WebSocket realtime обновления
+- [ ] Статистика и графики трафика
+- [ ] Управление настройками через Web UI
 
 ---
 

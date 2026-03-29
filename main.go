@@ -905,6 +905,9 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		return err
 	}
 
+	// Initialize Telegram and Discord notifications
+	notify.InitExternal(cfg.Telegram, cfg.Discord)
+
 	// Load DHCP leases from previous session
 	if dhcpServer != nil {
 		if simpleDHCP, ok := dhcpServer.(*npcap_dhcp.SimpleServer); ok {
