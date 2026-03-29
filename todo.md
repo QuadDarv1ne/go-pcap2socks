@@ -194,12 +194,24 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [ ] Улучшение структуры пакетов (анализ зависимостей)
 - [ ] Дополнительные метрики для мониторинга
 
-### 🟢 Сессия 32: Будущие улучшения (P2) — НОВАЯ
-- [ ] Интеграционные тесты для основных сценариев
-- [ ] Улучшение структуры пакетов (анализ зависимостей)
-- [ ] Дополнительные метрики для мониторинга
-- [ ] Оптимизация времени холодного старта DNS
-- [ ] Кэширование результатов инициализации
+### ✅ Сессия 32: DNS Metrics & Persistent Cache + API (P2) — ЗАВЕРШЕНА
+- [x] Дополнительные метрики для мониторинга (DNS cache hit/miss, connection errors)
+- [x] Оптимизация времени холодного старта DNS (pre-warming, persistent cache)
+- [x] Интеграция в API (/api/metrics/performance)
+- [x] Web UI страница настройки PS4 (/ps4-setup)
+- [x] Улучшение структуры пакетов (DI контейнер, интерфейсы, пулы)
+- [x] Интеграционные тесты для DNS, DHCP, Proxy, API
+
+### 🟢 Сессия 33: Оптимизация и полировка (P1) — В ПРОЦЕССЕ
+- [x] **Улучшение #1: Per-client Bandwidth Limiting**
+  * [x] bandwidth.BandwidthLimiter интегрирован в proxy.Router
+  * [x] Метод SetBandwidthLimit() для установки лимитов по MAC/IP
+  * [x] Методы GetBandwidthStats(), GetTotalBandwidthStats() (placeholder)
+  * [x] Default лимит 10Mbps для всех клиентов
+- [ ] Graceful Shutdown улучшения (сохранение DHCP leases)
+- [ ] Connection Pooling с лимитами (защита от DoS)
+- [ ] Бенчмарки для bandwidth limiting
+- [ ] Интеграционные тесты для bandwidth limiting
 
 ---
 
