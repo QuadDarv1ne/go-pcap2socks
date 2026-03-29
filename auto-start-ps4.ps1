@@ -59,7 +59,7 @@ foreach ($iface in $activeInterfaces) {
     $gwAddress = if ($gateway) { $gateway.NextHop } else { "Нет шлюза" }
     
     Write-Host "  [$index] $($iface.InterfaceAlias)" -ForegroundColor White
-    Write-Host "      Статус: $($iface.Status), Скорость: $([math]::Round($iface.Speed/1Mbps, 1)) Mbps" -ForegroundColor Gray
+    Write-Host "      Статус: $($iface.Status), Скорость: $([math]::Round($iface.Speed/1000000, 1)) Mbps" -ForegroundColor Gray
     Write-Host "      IP: $ipAddress, Шлюз: $gwAddress" -ForegroundColor Gray
     
     $interfaceMap[$index] = @{
