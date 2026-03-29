@@ -246,70 +246,110 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 func (d *dnsConn) asyncExchange(ctx context.Context, msg *dns.Msg, responseCh chan<- *dns.Msg, errCh chan<- error) {
 	var lastErr error
 
-	for _, server := range d.cfg.Servers {
-		select {
-		case <-ctx.Done():
-			errCh <- ctx.Err()
-			return
-		default:
-		}
+	// Retry configuration with exponential backoff
+	const maxRetries = 2
+	baseTimeout := 2 * time.Second
 
-		// Handle local DNS
-		if server.Address == "local" {
-			localClient := localdns.NewLocalClient(d.interfaceName)
-			response, err := localClient.Exchange(msg)
+	for _, server := range d.cfg.Servers {
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			select {
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			default:
+			}
+
+			// Calculate timeout with exponential backoff
+			timeout := baseTimeout * time.Duration(1<<uint(attempt))
+			if timeout > 8*time.Second {
+				timeout = 8 * time.Second
+			}
+
+			exchangeCtx, cancel := context.WithTimeout(ctx, timeout)
+			
+			// Handle local DNS
+			if server.Address == "local" {
+				localClient := localdns.NewLocalClient(d.interfaceName)
+				response, err := localClient.ExchangeWithContext(exchangeCtx, msg)
+				cancel()
+				if err == nil {
+					responseCh <- response
+					return
+				}
+				lastErr = err
+				slog.Debug("Local DNS exchange failed", "attempt", attempt+1, "err", err)
+				if attempt < maxRetries {
+					time.Sleep(time.Duration(attempt*50) * time.Millisecond)
+				}
+				continue
+			}
+
+			// Handle DoH (DNS-over-HTTPS)
+			if server.Type == "https" {
+				if client, ok := d.dohClients[server.Address]; ok {
+					response, err := client.ExchangeWithContext(exchangeCtx, msg)
+					cancel()
+					if err == nil {
+						responseCh <- response
+						return
+					}
+					lastErr = err
+					slog.Debug("DoH exchange failed", "server", server.Address, "attempt", attempt+1, "err", err)
+					if attempt < maxRetries {
+						time.Sleep(time.Duration(attempt*50) * time.Millisecond)
+					}
+					continue
+				}
+			}
+
+			// Handle DoT (DNS-over-TLS)
+			if server.Type == "tls" {
+				if client, ok := d.dotClients[server.Address]; ok {
+					response, err := client.ExchangeWithContext(exchangeCtx, msg)
+					cancel()
+					if err == nil {
+						responseCh <- response
+						return
+					}
+					lastErr = err
+					slog.Debug("DoT exchange failed", "server", server.Address, "attempt", attempt+1, "err", err)
+					if attempt < maxRetries {
+						time.Sleep(time.Duration(attempt*50) * time.Millisecond)
+					}
+					continue
+				}
+			}
+
+			// Handle plain DNS (default)
+			// Try TCP pool first if available
+			if pool, ok := d.tcpPools[server.Address]; ok {
+				response, err := pool.Exchange(msg)
+				cancel()
+				if err == nil {
+					responseCh <- response
+					return
+				}
+				lastErr = err
+				slog.Debug("TCP pool exchange failed, falling back to UDP", "server", server.Address, "err", err)
+				if attempt < maxRetries {
+					time.Sleep(time.Duration(attempt*50) * time.Millisecond)
+				}
+				continue
+			}
+
+			// Fallback to UDP
+			response, _, err := d.dnsClient.ExchangeContext(exchangeCtx, msg, server.Address)
+			cancel()
 			if err == nil {
 				responseCh <- response
 				return
 			}
-			slog.Debug("Local DNS exchange failed", "err", err)
-			continue
-		}
-
-		// Handle DoH (DNS-over-HTTPS)
-		if server.Type == "https" {
-			if client, ok := d.dohClients[server.Address]; ok {
-				response, lastErr := client.Exchange(msg)
-				if lastErr == nil {
-					responseCh <- response
-					return
-				}
-				slog.Debug("DoH exchange failed", "server", server.Address, "err", lastErr)
-				continue
+			lastErr = err
+			slog.Debug("Plain DNS exchange failed", "server", server.Address, "attempt", attempt+1, "err", err)
+			if attempt < maxRetries {
+				time.Sleep(time.Duration(attempt*50) * time.Millisecond)
 			}
 		}
-
-		// Handle DoT (DNS-over-TLS)
-		if server.Type == "tls" {
-			if client, ok := d.dotClients[server.Address]; ok {
-				response, lastErr := client.Exchange(msg)
-				if lastErr == nil {
-					responseCh <- response
-					return
-				}
-				slog.Debug("DoT exchange failed", "server", server.Address, "err", lastErr)
-				continue
-			}
-		}
-
-		// Handle plain DNS (default)
-		// Try TCP pool first if available
-		if pool, ok := d.tcpPools[server.Address]; ok {
-			response, lastErr := pool.Exchange(msg)
-			if lastErr == nil {
-				responseCh <- response
-				return
-			}
-			slog.Debug("TCP pool exchange failed, falling back to UDP", "server", server.Address, "err", lastErr)
-		}
-
-		// Fallback to UDP
-		response, _, lastErr := d.dnsClient.ExchangeContext(ctx, msg, server.Address)
-		if lastErr == nil {
-			responseCh <- response
-			return
-		}
-		slog.Debug("Plain DNS exchange failed", "server", server.Address, "err", lastErr)
 	}
 
 	if lastErr != nil {

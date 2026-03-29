@@ -46,16 +46,18 @@ func NewDoHClient(serverURL string) (*DoHClient, error) {
 
 // Exchange sends a DNS query and returns the response
 func (c *DoHClient) Exchange(msg *dns.Msg) (*dns.Msg, error) {
+	return c.ExchangeWithContext(context.Background(), msg)
+}
+
+// ExchangeWithContext sends a DNS query with context and returns the response
+func (c *DoHClient) ExchangeWithContext(ctx context.Context, msg *dns.Msg) (*dns.Msg, error) {
 	// Pack the DNS message
 	msgBytes, err := msg.Pack()
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack DNS message: %w", err)
 	}
 
-	// Create HTTP request
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
+	// Create HTTP request with provided context
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.serverURL.String(), bytes.NewReader(msgBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
@@ -138,7 +140,12 @@ func NewDoTClient(server string, tlsConfig *TLSConfig) (*DoTClient, error) {
 
 // Exchange sends a DNS query and returns the response
 func (c *DoTClient) Exchange(msg *dns.Msg) (*dns.Msg, error) {
-	response, _, err := c.dnsClient.Exchange(msg, c.server)
+	return c.ExchangeWithContext(context.Background(), msg)
+}
+
+// ExchangeWithContext sends a DNS query with context and returns the response
+func (c *DoTClient) ExchangeWithContext(ctx context.Context, msg *dns.Msg) (*dns.Msg, error) {
+	response, _, err := c.dnsClient.ExchangeContext(ctx, msg, c.server)
 	if err != nil {
 		return nil, fmt.Errorf("DoT exchange failed: %w", err)
 	}

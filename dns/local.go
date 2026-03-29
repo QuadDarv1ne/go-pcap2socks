@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 type LocalClient interface {
 	Exchange(msg *dns.Msg) (*dns.Msg, error)
+	ExchangeWithContext(ctx context.Context, msg *dns.Msg) (*dns.Msg, error)
 }
 
 type localClient struct {
@@ -30,6 +32,10 @@ func NewLocalClient(interfaceName string) LocalClient {
 }
 
 func (lc *localClient) Exchange(msg *dns.Msg) (*dns.Msg, error) {
+	return lc.ExchangeWithContext(context.Background(), msg)
+}
+
+func (lc *localClient) ExchangeWithContext(ctx context.Context, msg *dns.Msg) (*dns.Msg, error) {
 	config, err := lc.getConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get DNS config: %w", err)
@@ -50,11 +56,18 @@ func (lc *localClient) Exchange(msg *dns.Msg) (*dns.Msg, error) {
 			serverAddr = server + ":53"
 		}
 
-		response, _, err := lc.client.Exchange(msg, serverAddr)
+		response, _, err := lc.client.ExchangeContext(ctx, msg, serverAddr)
 		if err == nil {
 			return response, nil
 		}
 		lastErr = err
+		
+		// Check if context was cancelled
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 	}
 
 	if lastErr == nil {
