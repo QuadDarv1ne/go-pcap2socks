@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -63,6 +64,7 @@ type PoolStats struct {
 	WaitCount    uint64        // Number of times acquire had to wait
 	WaitTime     time.Duration // Total wait time
 	MaxUsed      int           // Maximum connections used simultaneously
+	Rejected     uint64        // Number of connections rejected due to DoS protection
 }
 
 // PooledConn represents a connection in the pool
@@ -173,10 +175,21 @@ func (p *Pool) SetHealthChecker(checker HealthChecker) {
 	p.healthCheck = checker
 }
 
-// Acquire gets a connection from the pool
+// Acquire gets a connection from the pool with DoS protection
 func (p *Pool) Acquire(ctx context.Context) (net.Conn, error) {
 	if p.closed.Load() {
 		return nil, ErrPoolClosed
+	}
+
+	// DoS protection: Check if pool is under heavy load
+	if p.currentSize >= p.config.MaxSize && len(p.idleConns) == 0 {
+		p.statsMu.Lock()
+		p.stats.Rejected++
+		p.statsMu.Unlock()
+		// Log warning for potential DoS attack
+		slog.Warn("Connection pool DoS protection triggered",
+			"current_size", p.currentSize,
+			"max_size", p.config.MaxSize)
 	}
 
 	startWait := time.Now()
