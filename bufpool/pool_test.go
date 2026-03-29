@@ -1,11 +1,16 @@
 package bufpool
 
 import (
+	"runtime"
 	"sync"
 	"testing"
 )
 
 func TestBufferPoolBasic(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// Test small buffer
@@ -13,20 +18,24 @@ func TestBufferPoolBasic(t *testing.T) {
 	if len(buf) != SizeSmall {
 		t.Errorf("Expected small buffer size %d, got %d", SizeSmall, len(buf))
 	}
-	
+
 	initialCap := cap(buf)
 	mp.PutSmall(buf)
-	
+
 	// Get again - should reuse
 	buf2 := mp.GetSmall()
 	if cap(buf2) != initialCap {
 		t.Errorf("Expected same capacity %d, got %d", initialCap, cap(buf2))
 	}
-	
+
 	mp.PutSmall(buf2)
 }
 
 func TestBufferPoolGet(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// Test size-based routing
@@ -62,6 +71,10 @@ func TestBufferPoolGet(t *testing.T) {
 }
 
 func TestBufferPoolPut(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// Test routing based on capacity
@@ -73,6 +86,10 @@ func TestBufferPoolPut(t *testing.T) {
 }
 
 func TestBufferPoolStats(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// Initial stats should be zero
@@ -100,6 +117,10 @@ func TestBufferPoolStats(t *testing.T) {
 }
 
 func TestBufferPoolHitRatio(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// First allocation - miss
@@ -111,21 +132,25 @@ func TestBufferPoolHitRatio(t *testing.T) {
 	mp.PutMedium(buf)
 
 	ratio := mp.HitRatio()
-	
+
 	// Should have at least some hits
 	if ratio < 0 {
 		t.Errorf("Expected positive hit ratio, got %.1f%%", ratio)
 	}
-	
+
 	t.Logf("Hit ratio: %.1f%%", ratio)
 }
 
 func TestBufferPoolConcurrent(t *testing.T) {
-	mp := NewMultiPool()
+	t.Cleanup(func() {
+		runtime.GC()
+	})
 	
+	mp := NewMultiPool()
+
 	var wg sync.WaitGroup
 	iterations := 1000
-	
+
 	// Concurrent get/put
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -152,6 +177,10 @@ func TestBufferPoolConcurrent(t *testing.T) {
 }
 
 func TestBufferPoolZeroing(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// Get buffer and write data
@@ -159,7 +188,7 @@ func TestBufferPoolZeroing(t *testing.T) {
 	for i := range buf {
 		buf[i] = 0xFF
 	}
-	
+
 	mp.PutMedium(buf)
 
 	// Get again - should be zeroed
@@ -170,11 +199,15 @@ func TestBufferPoolZeroing(t *testing.T) {
 			break
 		}
 	}
-	
+
 	mp.PutMedium(buf2)
 }
 
 func TestBufferPoolMaxActive(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// Get multiple buffers without returning
@@ -203,6 +236,10 @@ func TestBufferPoolMaxActive(t *testing.T) {
 }
 
 func TestBufferPoolReset(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	// Generate some stats
@@ -225,6 +262,10 @@ func TestBufferPoolReset(t *testing.T) {
 }
 
 func TestDefaultPool(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	// Test global default pool functions
 	buf := Get(1024)
 	Put(buf)
@@ -239,6 +280,10 @@ func TestDefaultPool(t *testing.T) {
 }
 
 func TestBufferPoolSizes(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	mp := NewMultiPool()
 
 	sizes := []int{SizeSmall, SizeMedium, SizeLarge, SizeHuge, SizeMax}
@@ -256,6 +301,9 @@ func TestBufferPoolSizes(t *testing.T) {
 // BenchmarkBufferPoolGet benchmarks buffer allocation
 func BenchmarkBufferPoolGet(b *testing.B) {
 	mp := NewMultiPool()
+	b.Cleanup(func() {
+		runtime.GC()
+	})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -267,6 +315,9 @@ func BenchmarkBufferPoolGet(b *testing.B) {
 // BenchmarkBufferPoolGetSmall benchmarks small buffer allocation
 func BenchmarkBufferPoolGetSmall(b *testing.B) {
 	mp := NewMultiPool()
+	b.Cleanup(func() {
+		runtime.GC()
+	})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -278,6 +329,9 @@ func BenchmarkBufferPoolGetSmall(b *testing.B) {
 // BenchmarkBufferPoolGetMax benchmarks max buffer allocation
 func BenchmarkBufferPoolGetMax(b *testing.B) {
 	mp := NewMultiPool()
+	b.Cleanup(func() {
+		runtime.GC()
+	})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -289,6 +343,9 @@ func BenchmarkBufferPoolGetMax(b *testing.B) {
 // BenchmarkBufferPoolConcurrent benchmarks concurrent access
 func BenchmarkBufferPoolConcurrent(b *testing.B) {
 	mp := NewMultiPool()
+	b.Cleanup(func() {
+		runtime.GC()
+	})
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -301,6 +358,10 @@ func BenchmarkBufferPoolConcurrent(b *testing.B) {
 
 // BenchmarkBufferPoolGetDefault benchmarks default pool
 func BenchmarkBufferPoolGetDefault(b *testing.B) {
+	b.Cleanup(func() {
+		runtime.GC()
+	})
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		buf := Get(1024)

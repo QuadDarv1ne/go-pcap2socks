@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"net"
+	"runtime"
 	"testing"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
@@ -37,7 +38,10 @@ func BenchmarkRouterDialContext(b *testing.B) {
 	}
 
 	router := NewRouter(rules, proxies)
-	defer router.Stop()
+	b.Cleanup(func() {
+		router.Stop()
+		runtime.GC()
+	})
 
 	metadata := M.GetMetadata()
 	metadata.Network = M.TCP
@@ -79,7 +83,10 @@ func BenchmarkRouterDialContextCacheHit(b *testing.B) {
 	}
 
 	router := NewRouter(rules, proxies)
-	defer router.Stop()
+	b.Cleanup(func() {
+		router.Stop()
+		runtime.GC()
+	})
 
 	metadata := M.GetMetadata()
 	metadata.Network = M.TCP
