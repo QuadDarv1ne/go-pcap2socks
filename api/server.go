@@ -206,6 +206,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/ws", s.rateLimitMiddleware(s.authMiddleware(s.handleWebSocket)))
 	s.mux.HandleFunc("/api/metrics/performance", s.rateLimitMiddleware(s.authMiddleware(s.handlePerformanceMetrics)))
 	s.mux.HandleFunc("/api/metrics/dhcp", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPMetrics)))
+	s.mux.HandleFunc("/api/health", s.rateLimitMiddleware(s.authMiddleware(s.handleHealth)))
 }
 
 // Stop gracefully stops the API server and releases resources
@@ -285,6 +286,7 @@ var getIsRunningFn func() bool
 var getProxyConnectionStatsFn func() (success, errors uint64, errorRate float64, ok bool)
 var getDNSMetricsFn func() (hits, misses uint64, hitRatio float64, ok bool)
 var getDHCPMetricsFn func() (map[string]interface{}, bool)
+var getProxyHealthFn func() (map[string]interface{}, bool)
 
 // SetIsRunningFn sets the function to check if service is running
 func SetIsRunningFn(fn func() bool) {
@@ -304,6 +306,11 @@ func SetDNSMetricsFn(fn func() (hits, misses uint64, hitRatio float64, ok bool))
 // SetDHCPMetricsFn sets the function to get DHCP metrics
 func SetDHCPMetricsFn(fn func() (map[string]interface{}, bool)) {
 	getDHCPMetricsFn = fn
+}
+
+// SetProxyHealthFn sets the function to get proxy health status
+func SetProxyHealthFn(fn func() (map[string]interface{}, bool)) {
+	getProxyHealthFn = fn
 }
 
 // handleStart handles the /api/start endpoint to start the service
@@ -1492,6 +1499,32 @@ func (s *Server) handlePerformanceMetrics(w http.ResponseWriter, r *http.Request
 	}
 
 	s.sendSuccess(w, metrics)
+}
+
+// handleHealth returns health status of all proxies
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	health := make(map[string]interface{})
+
+	// Get proxy health status
+	if getProxyHealthFn != nil {
+		if proxyHealth, ok := getProxyHealthFn(); ok {
+			health["proxies"] = proxyHealth
+			health["available"] = true
+		} else {
+			health["available"] = false
+			health["message"] = "Proxy health not available"
+		}
+	} else {
+		health["available"] = false
+		health["message"] = "Proxy health not initialized"
+	}
+
+	s.sendSuccess(w, health)
 }
 
 // handleWebSocket handles WebSocket connections for real-time updates

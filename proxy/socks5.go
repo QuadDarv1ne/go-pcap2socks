@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
@@ -35,6 +36,42 @@ type Socks5 struct {
 
 	// unix indicates if socks5 over UDS is enabled.
 	unix bool
+	
+	// Health check fields
+	healthCheckInterval time.Duration
+	lastHealthCheck     time.Time
+	lastHealthStatus    bool
+	healthCheckMu       sync.RWMutex
+}
+
+// HealthStatus returns the last known health status of the SOCKS5 proxy
+func (ss *Socks5) HealthStatus() (bool, time.Time) {
+	ss.healthCheckMu.RLock()
+	defer ss.healthCheckMu.RUnlock()
+	return ss.lastHealthStatus, ss.lastHealthCheck
+}
+
+// CheckHealth performs a health check by attempting to connect to the proxy
+func (ss *Socks5) CheckHealth() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	start := time.Now()
+	conn, err := dialer.DialContext(ctx, "tcp", ss.Addr())
+	if err != nil {
+		ss.healthCheckMu.Lock()
+		ss.lastHealthStatus = false
+		ss.lastHealthCheck = start
+		ss.healthCheckMu.Unlock()
+		return false
+	}
+	conn.Close()
+	
+	ss.healthCheckMu.Lock()
+	ss.lastHealthStatus = true
+	ss.lastHealthCheck = start
+	ss.healthCheckMu.Unlock()
+	return true
 }
 
 func NewSocks5(addr, user, pass string) (*Socks5, error) {

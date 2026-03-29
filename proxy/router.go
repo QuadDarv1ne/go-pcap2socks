@@ -296,6 +296,89 @@ type Router struct {
 	// Connection error metrics
 	connErrors  atomic.Uint64
 	connSuccess atomic.Uint64
+	
+	// Health check fields
+	healthCheckInterval time.Duration
+	healthCheckTicker   *time.Ticker
+	healthCheckStop     chan struct{}
+	healthCheckWg       sync.WaitGroup
+}
+
+// HealthStatus returns health status for all proxies
+func (r *Router) HealthStatus() map[string]map[string]interface{} {
+	status := make(map[string]map[string]interface{})
+	
+	for tag, proxy := range r.Proxies {
+		proxyStatus := make(map[string]interface{})
+		
+		// Check if proxy supports health checks
+		if healthChecker, ok := proxy.(interface{ HealthStatus() (bool, time.Time) }); ok {
+			healthy, lastCheck := healthChecker.HealthStatus()
+			proxyStatus["healthy"] = healthy
+			proxyStatus["last_check"] = lastCheck.Format(time.RFC3339)
+		} else {
+			proxyStatus["healthy"] = true
+			proxyStatus["last_check"] = "N/A"
+		}
+		
+		status[tag] = proxyStatus
+	}
+	
+	return status
+}
+
+// StartHealthChecks starts periodic health checks for all proxies
+func (r *Router) StartHealthChecks(interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Second // Default interval
+	}
+	
+	r.healthCheckInterval = interval
+	r.healthCheckStop = make(chan struct{})
+	r.healthCheckTicker = time.NewTicker(interval)
+	
+	r.healthCheckWg.Add(1)
+	go func() {
+		defer r.healthCheckWg.Done()
+		
+		slog.Info("Proxy health checker started", "interval", interval)
+		
+		for {
+			select {
+			case <-r.healthCheckTicker.C:
+				r.performHealthChecks()
+			case <-r.healthCheckStop:
+				slog.Info("Proxy health checker stopped")
+				return
+			}
+		}
+	}()
+}
+
+// performHealthChecks performs health checks on all proxies
+func (r *Router) performHealthChecks() {
+	for tag, proxy := range r.Proxies {
+		// Check if proxy supports health checks
+		if healthChecker, ok := proxy.(interface{ CheckHealth() bool }); ok {
+			go func(t string, p interface{ CheckHealth() bool }) {
+				healthy := p.CheckHealth()
+				if healthy {
+					slog.Debug("Proxy health check passed", "proxy", t)
+				} else {
+					slog.Warn("Proxy health check failed", "proxy", t)
+				}
+			}(tag, healthChecker)
+		}
+	}
+}
+
+// StopHealthChecks stops periodic health checks
+func (r *Router) StopHealthChecks() {
+	if r.healthCheckTicker != nil {
+		r.healthCheckTicker.Stop()
+		close(r.healthCheckStop)
+		r.healthCheckWg.Wait()
+	}
 }
 
 // NewRouter creates a new Router with the given rules and proxies.

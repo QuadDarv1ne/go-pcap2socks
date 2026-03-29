@@ -963,6 +963,24 @@ func main() {
 		return nil, false
 	})
 
+	// Set proxy health getter for API
+	api.SetProxyHealthFn(func() (map[string]interface{}, bool) {
+		if _defaultProxy == nil {
+			return nil, false
+		}
+		// Try to get health status from Router
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			health := router.HealthStatus()
+			// Convert map[string]map[string]interface{} to map[string]interface{}
+			result := make(map[string]interface{})
+			for k, v := range health {
+				result[k] = v
+			}
+			return result, true
+		}
+		return nil, false
+	})
+
 	// Set service control callbacks for API
 	api.SetServiceCallbacks(
 		func() error {
@@ -1253,6 +1271,12 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	} else {
 		_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
 		proxy.SetDialer(_defaultProxy)
+		
+		// Start health checks for proxies
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			router.StartHealthChecks(30 * time.Second)
+			slog.Info("Proxy health checks started", "interval", "30s")
+		}
 	}
 
 	// Set MAC filter if configured
@@ -2533,6 +2557,24 @@ func autoConfigureAndStart() {
 		// Try to get metrics from WinDivert DHCP server
 		if dhcpServer, ok := _dhcpServer.(*windivert.DHCPServer); ok {
 			return dhcpServer.GetMetrics(), true
+		}
+		return nil, false
+	})
+
+	// Set proxy health getter for API
+	api.SetProxyHealthFn(func() (map[string]interface{}, bool) {
+		if _defaultProxy == nil {
+			return nil, false
+		}
+		// Try to get health status from Router
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			health := router.HealthStatus()
+			// Convert map[string]map[string]interface{} to map[string]interface{}
+			result := make(map[string]interface{})
+			for k, v := range health {
+				result[k] = v
+			}
+			return result, true
 		}
 		return nil, false
 	})
