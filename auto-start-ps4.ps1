@@ -214,8 +214,9 @@ $config.upnp.enabled = $true
 $config.upnp.autoForward = $true
 $config.upnp.leaseDuration = 3600
 
-# Сохраняем конфигурацию
-$config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
+# Сохраняем конфигурацию в UTF-8 без BOM
+$jsonContent = $config | ConvertTo-Json -Depth 10
+[System.IO.File]::WriteAllText($configPath, $jsonContent, [System.Text.UTF8Encoding]::new($false))
 Write-Host "[OK] Конфигурация обновлена" -ForegroundColor Green
 Write-Host ""
 
