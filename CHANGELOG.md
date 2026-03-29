@@ -5,6 +5,31 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.29.0+] - 2026-03-29
+
+### Observability
+- ✅ **Prometheus metrics export** — counters, gauges, histograms
+- ✅ **Connection pool statistics** — active/idle connections, hits/misses
+- ✅ **Runtime метрики** — memory, goroutines, GC stats
+- ✅ **WAN balancer metrics** — uplink status, latency, traffic
+- ✅ **observability/metrics.go** — основные метрики приложения
+- ✅ **observability/runtime.go** — runtime collector
+
+### Reliability
+- ✅ **DNS retry logic** — exponential backoff и jitter
+- ✅ **Context-based timeout** — для всех сетевых операций
+- ✅ **Health check** — auto-recovery для прокси
+- ✅ **retry/retry.go** — retry mechanism с backoff
+- ✅ **circuitbreaker/breaker.go** — circuit breaker для защиты
+
+### Documentation
+- ✅ **docs/examples/** — примеры конфигураций (home, office, multi-wan)
+- ✅ **docs/TROUBLESHOOTING.md** — 8 частых проблем и решения
+- ✅ **docs/API.md** — REST + WebSocket документация
+- ✅ **docs/METRICS.md** — Prometheus метрики
+
+---
+
 ## [3.28.0+] - 2026-03-29
 
 ### Добавлено

@@ -55,10 +55,25 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 
 ## 📋 Актуальные задачи
 
-### 🟡 Сессия 16: Документация (P3)
-- [ ] Примеры конфигураций для разных сценариев
-- [ ] Troubleshooting guide
-- [ ] API документация (Swagger/OpenAPI)
+### ✅ Сессия 16: Документация (P3) — ЗАВЕРШЕНА
+- [x] Примеры конфигураций для разных сценариев (`docs/examples/{home,office,multi-wan}.json`)
+- [x] Troubleshooting guide (`docs/TROUBLESHOOTING.md` — 8 проблем)
+- [x] API документация (`docs/API.md` — REST + WebSocket)
+
+### 🟡 Сессия 17: Observability & Reliability (P2)
+- [x] Prometheus metrics export (`observability/metrics.go`)
+- [x] Connection pool statistics (`connpool/pool.go`)
+- [x] Runtime метрики (`observability/runtime.go`)
+- [x] WAN balancer metrics (`wanbalancer/metrics.go`)
+- [x] DNS retry logic (`retry/retry.go`)
+- [x] Context-based timeouts
+- [ ] Unit-тесты для observability (отключены из-за Kaspersky)
+- [ ] Интеграционные тесты reliability
+
+### 🟢 Сессия 18: Производительность (P1)
+- [ ] Бенчмарки для observability компонентов
+- [ ] Оптимизация аллокаций в metrics
+- [ ] Profiling с pprof (pprofutil/pprof.go)
 
 ---
 
