@@ -1,17 +1,37 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 29 марта 2026 г. (Сессия 37)
-**Версия**: v3.37.0 (Security & Code Quality Fix)
-**Статус**: ✅ стабилен, сборка успешна (25.7 MB), working tree clean
+**Последнее обновление**: 29 марта 2026 г. (Сессия 38)
+**Версия**: v3.38.0 (Health Checks for Proxies)
+**Статус**: ✅ стабилен, сборка успешна (25.8 MB), working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
-**🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics — ожидает подключения устройства
+**🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks — ожидает подключения устройства
 **📊 Мониторинг**: API /api/metrics/dhcp + Web UI /dhcp-metrics
+**🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
 **🔒 Безопасность**: config 0600, pprof отключен, ExecuteOnStart whitelist
 
 ---
 
 ## 📈 Последние улучшения
+
+### v3.38.0 - Health Checks for Proxies (29 марта 2026)
+
+**Часть 1: Health Checks Implementation**
+- ✅ Added HealthStatus() and CheckHealth() methods to Socks5 proxy
+- ✅ Router.StartHealthChecks() for periodic health monitoring
+- ✅ Health check interval: 30 seconds (configurable)
+- ✅ Thread-safe health status with sync.RWMutex
+- ✅ Async health checks to prevent blocking
+
+**Часть 2: API Integration**
+- ✅ New endpoint: /api/health (JSON response)
+- ✅ SetProxyHealthFn callback registration
+- ✅ handleHealth handler with auth + rate limiting
+- ✅ Returns health status for all configured proxies
+
+**Часть 3: Graceful Shutdown**
+- ✅ StopHealthChecks() for cleanup
+- ✅ Auto-start on router initialization
 
 ### v3.37.0 - Security & Code Quality Fix (29 марта 2026)
 
@@ -477,7 +497,26 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] go build: ✅ (25.7 MB)
   * [x] Sync: dev → main → origin
 
-### ⏳ Сессия 38: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 38: Health Checks for Proxies (P2) — ЗАВЕРШЕНА
+- [x] **Health Checks Implementation**
+  * [x] Added HealthStatus() and CheckHealth() methods to Socks5 proxy
+  * [x] Router.StartHealthChecks() for periodic health monitoring
+  * [x] Health check interval: 30 seconds (configurable)
+  * [x] Thread-safe health status with sync.RWMutex
+  * [x] Async health checks to prevent blocking
+- [x] **API Integration**
+  * [x] New endpoint: /api/health (JSON response)
+  * [x] SetProxyHealthFn callback registration
+  * [x] handleHealth handler with auth + rate limiting
+  * [x] Returns health status for all configured proxies
+- [x] **Graceful Shutdown**
+  * [x] StopHealthChecks() for cleanup
+  * [x] Auto-start on router initialization
+- [x] **Code Quality**
+  * [x] go build: ✅ (25.8 MB)
+  * [x] Sync: dev → main → origin
+
+### ⏳ Сессия 39: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
