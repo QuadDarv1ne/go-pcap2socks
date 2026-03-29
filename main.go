@@ -54,6 +54,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	"github.com/QuadDarv1ne/go-pcap2socks/validation"
+	"github.com/QuadDarv1ne/go-pcap2socks/wanbalancer"
 	"github.com/jackpal/gateway"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
@@ -735,7 +736,7 @@ func main() {
 	)
 
 	// Create API server with global stats store and profile manager
-	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
+	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager, _wanBalancerDialer)
 
 	// Set auth token from config if provided, otherwise use auto-generated token
 	if config.API != nil && config.API.Token != "" {
@@ -875,7 +876,20 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		return err
 	}
 
-	_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
+	// Create WAN balancer if enabled
+	_wanBalancerDialer, err = createWANBalancer(cfg, proxies)
+	if err != nil {
+		slog.Warn("WAN balancer creation failed", "error", err)
+	}
+
+	// Use WAN balancer as default dialer if enabled, otherwise use router
+	if _wanBalancerDialer != nil {
+		proxy.SetDialer(_wanBalancerDialer)
+		slog.Info("WAN balancer enabled as default dialer")
+	} else {
+		_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
+		proxy.SetDialer(_defaultProxy)
+	}
 
 	// Set MAC filter if configured
 	if cfg.MACFilter != nil {
@@ -884,8 +898,6 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			slog.Info("MAC filter configured", "mode", cfg.MACFilter.Mode, "entries", len(cfg.MACFilter.List))
 		}
 	}
-
-	proxy.SetDialer(_defaultProxy)
 
 	// Initialize DHCP server if enabled
 	dhcpServer, err := createDHCPServerIfNeeded(cfg, netConfig)
@@ -984,6 +996,9 @@ var (
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}
+
+	// _wanBalancerDialer holds the WAN balancer dialer for Multi-WAN load balancing
+	_wanBalancerDialer *wanbalancer.WANBalancerDialer
 )
 
 // GetStatsStore returns the global statistics store
@@ -1229,6 +1244,12 @@ func Stop() {
 	if _upnpManager != nil {
 		_upnpManager.Stop()
 		slog.Info("UPnP manager stopped")
+	}
+
+	// Stop WAN balancer
+	if _wanBalancerDialer != nil {
+		_wanBalancerDialer.Stop()
+		slog.Info("WAN balancer stopped")
 	}
 
 	// Stop DHCP server and save leases
@@ -2062,7 +2083,7 @@ func autoConfigureAndStart() {
 	)
 
 	// Create API server with global stats store and profile manager
-	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager)
+	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager, _wanBalancerDialer)
 
 	// Set auth token from config if provided, otherwise use auto-generated token
 	if config.API != nil && config.API.Token != "" {
@@ -2353,7 +2374,7 @@ func runWebServer() {
 	}
 
 	// Create API server with profile manager (UPnP not available in standalone mode)
-	apiServer := api.NewServer(statsStore, profileMgr, nil, nil)
+	apiServer := api.NewServer(statsStore, profileMgr, nil, nil, nil)
 
 	// Start HTTP server
 	addr := fmt.Sprintf(":%d", port)
@@ -2382,7 +2403,7 @@ func runAPIServer() {
 	}
 
 	// Create API server with profile manager (UPnP not available in standalone mode)
-	apiServer := api.NewServer(statsStore, profileMgr, nil, nil)
+	apiServer := api.NewServer(statsStore, profileMgr, nil, nil, nil)
 
 	// Start HTTP server
 	err = http.ListenAndServe(":8081", apiServer)
@@ -2729,6 +2750,90 @@ func createProxyGroup(outbound cfg.Outbound, proxies map[string]proxy.Proxy) (*p
 	slog.Info("Created proxy group", "name", outbound.Tag, "policy", policy.String(), "proxies", len(groupProxies))
 
 	return group, nil
+}
+
+// createWANBalancer creates WAN load balancer if enabled in configuration
+func createWANBalancer(cfg *cfg.Config, proxies map[string]proxy.Proxy) (*wanbalancer.WANBalancerDialer, error) {
+	if cfg.WANBalancer == nil || !cfg.WANBalancer.Enabled {
+		return nil, nil
+	}
+
+	// Convert config uplinks to balancer uplinks
+	uplinks := make([]*wanbalancer.Uplink, 0, len(cfg.WANBalancer.Uplinks))
+	for _, u := range cfg.WANBalancer.Uplinks {
+		uplink := &wanbalancer.Uplink{
+			Tag:      u.Tag,
+			Weight:   u.Weight,
+			Priority: u.Priority,
+		}
+		if uplink.Weight <= 0 {
+			uplink.Weight = 1
+		}
+		uplinks = append(uplinks, uplink)
+	}
+
+	// Convert policy string to balancer policy
+	policy := wanbalancer.PolicyRoundRobin
+	switch cfg.WANBalancer.Policy {
+	case "weighted":
+		policy = wanbalancer.PolicyWeighted
+	case "least-conn":
+		policy = wanbalancer.PolicyLeastConn
+	case "least-latency":
+		policy = wanbalancer.PolicyLeastLatency
+	case "failover":
+		policy = wanbalancer.PolicyFailover
+	}
+
+	// Convert health check config
+	var healthCheck *wanbalancer.HealthCheckConfig
+	if cfg.WANBalancer.HealthCheck != nil && cfg.WANBalancer.HealthCheck.Enabled {
+		interval, _ := time.ParseDuration(cfg.WANBalancer.HealthCheck.Interval)
+		if interval <= 0 {
+			interval = 10 * time.Second
+		}
+		timeout, _ := time.ParseDuration(cfg.WANBalancer.HealthCheck.Timeout)
+		if timeout <= 0 {
+			timeout = 5 * time.Second
+		}
+		healthCheck = &wanbalancer.HealthCheckConfig{
+			Enabled:       true,
+			Interval:      interval,
+			Timeout:       timeout,
+			Target:        cfg.WANBalancer.HealthCheck.Target,
+			FailThreshold: cfg.WANBalancer.HealthCheck.FailThreshold,
+			PassThreshold: cfg.WANBalancer.HealthCheck.PassThreshold,
+		}
+		if healthCheck.Target == "" {
+			healthCheck.Target = "8.8.8.8:53"
+		}
+		if healthCheck.FailThreshold <= 0 {
+			healthCheck.FailThreshold = 3
+		}
+		if healthCheck.PassThreshold <= 0 {
+			healthCheck.PassThreshold = 2
+		}
+	}
+
+	// Create balancer
+	balancer, err := wanbalancer.NewBalancer(wanbalancer.BalancerConfig{
+		Uplinks:     uplinks,
+		Policy:      policy,
+		HealthCheck: healthCheck,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create WAN balancer: %w", err)
+	}
+
+	// Create dialer
+	dialer := wanbalancer.NewWANBalancerDialer(wanbalancer.WANBalancerDialerConfig{
+		Balancer: balancer,
+		Proxies:  proxies,
+	})
+
+	slog.Info("WAN balancer created", "policy", policy, "uplinks", len(uplinks))
+
+	return dialer, nil
 }
 
 // createDHCPServerIfNeeded creates DHCP server if enabled in configuration

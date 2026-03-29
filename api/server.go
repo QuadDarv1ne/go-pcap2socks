@@ -22,6 +22,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
+	"github.com/QuadDarv1ne/go-pcap2socks/wanbalancer"
 )
 
 // Pre-defined errors for API operations
@@ -50,10 +51,11 @@ type Server struct {
 	wsHub         *WebSocketHub
 	hotkeyManager *hotkey.Manager
 	macFilterAPI  *MACFilterAPI
+	wanBalancerAPI *WANBalancerAPI
 	mu            sync.RWMutex
 	enabled       bool
 	stopChan      chan struct{} // For stopping background goroutines
-	
+
 	// Status cache for frequently accessed /api/status endpoint
 	statusCache     Status
 	statusCacheMu   sync.RWMutex
@@ -104,7 +106,7 @@ func generateSecureToken() string {
 	return base64.URLEncoding.EncodeToString(b)
 }
 
-func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager, hotkeyMgr *hotkey.Manager) *Server {
+func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager, hotkeyMgr *hotkey.Manager, wanBalancerDialer *wanbalancer.WANBalancerDialer) *Server {
 	executable, _ := os.Executable()
 	cfgFile := path.Join(path.Dir(executable), "config.json")
 
@@ -136,6 +138,11 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 
 	// Initialize MAC filter API
 	s.macFilterAPI = NewMACFilterAPI(nil, cfgFile, s.updateMACFilter)
+
+	// Initialize WAN balancer API
+	if wanBalancerDialer != nil {
+		s.wanBalancerAPI = NewWANBalancerAPI(wanBalancerDialer.GetBalancer(), wanBalancerDialer)
+	}
 
 	slog.Info("API server initialized with auto-generated authentication token", "token_length", len(s.authToken))
 
@@ -179,6 +186,16 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/macfilter/check", s.rateLimitMiddleware(s.authMiddleware(s.macFilterAPI.HandleCheck)))
 	s.mux.HandleFunc("/api/macfilter/mode", s.rateLimitMiddleware(s.authMiddleware(s.macFilterAPI.HandleMode)))
 	s.mux.HandleFunc("/api/macfilter/clear", s.rateLimitMiddleware(s.authMiddleware(s.macFilterAPI.HandleClear)))
+	// WAN balancer endpoints
+	if s.wanBalancerAPI != nil {
+		s.mux.HandleFunc("/api/wan/status", s.rateLimitMiddleware(s.authMiddleware(s.wanBalancerAPI.HandleWANStatus)))
+		s.mux.HandleFunc("/api/wan/select", s.rateLimitMiddleware(s.authMiddleware(s.wanBalancerAPI.HandleWANSelect)))
+		s.mux.HandleFunc("/api/wan/update", s.rateLimitMiddleware(s.authMiddleware(s.wanBalancerAPI.HandleWANUpdate)))
+		s.mux.HandleFunc("/api/wan/reset", s.rateLimitMiddleware(s.authMiddleware(s.wanBalancerAPI.HandleWANReset)))
+		s.mux.HandleFunc("/api/wan/health", s.rateLimitMiddleware(s.authMiddleware(s.wanBalancerAPI.HandleWANHealth)))
+		s.mux.HandleFunc("/api/wan/enable", s.rateLimitMiddleware(s.authMiddleware(s.wanBalancerAPI.HandleWANEnable)))
+		s.mux.HandleFunc("/api/wan/disable", s.rateLimitMiddleware(s.authMiddleware(s.wanBalancerAPI.HandleWANDisable)))
+	}
 	s.mux.HandleFunc("/api/devices/names", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceNames)))
 	s.mux.HandleFunc("/api/devices/ratelimit", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceRateLimit)))
 	s.mux.HandleFunc("/api/interfaces", s.rateLimitMiddleware(s.authMiddleware(s.handleInterfaces)))

@@ -16,7 +16,7 @@ import (
 // createTestServer создаёт тестовый сервер с установленным токеном
 func createTestServer() *Server {
 	statsStore := stats.NewStore()
-	server := NewServer(statsStore, nil, nil, nil)
+	server := NewServer(statsStore, nil, nil, nil, nil)
 	server.SetAuthToken("test-token-123")
 	return server
 }

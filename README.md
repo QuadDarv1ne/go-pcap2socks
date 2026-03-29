@@ -240,43 +240,20 @@ GOOS=linux GOARCH=amd64 go build -o go-pcap2socks-linux .
 
 ## 🧪 Тестирование
 
-### ⚡ Быстрые тесты (рекомендуется для разработки)
+> **⚠️ ВНИМАНИЕ:** Тесты временно отключены из-за ложных срабатываний антивируса (Kaspersky определяет тестовые бинарники Go как `HackTool.Convagent`).
 
-```bash
-# Linux/macOS
-./test.sh
+### Отключено
 
-# Windows
-.\test.bat
-```
+Следующие скрипты были переименованы и не могут быть запущены случайно:
+- `DISABLED_test.bat` / `DISABLED_test.sh` — быстрые тесты
+- `DISABLED_test-race.bat` / `DISABLED_test-race.sh` — тесты с race detector
+- `DISABLED_bench.bat` / `DISABLED_bench.sh` — бенчмарки
 
-✅ Без race detector — низкое потребление памяти (~100MB)  
-✅ Только unit-тесты, без бенчмарков  
-✅ Ограниченная параллельность
+CI/CD workflow также отключены в `.github/workflows/`.
 
-### 🔍 Тесты с race detector (только для CI/серверов)
+### При необходимости включения
 
-```bash
-# Linux/macOS
-./test-race.sh
-
-# Windows
-.\test-race.bat
-```
-
-⚠️ **Внимание:** Race detector увеличивает потребление памяти в **10 раз** и замедляет тесты в **20 раз**.  
-⚠️ **Требования:** 16GB+ RAM, запускать на стабильной системе.  
-⚠️ **Не рекомендуется** для локальной разработки на машинах с <16GB RAM.
-
-### 📊 Бенчмарки
-
-```bash
-# Linux/macOS
-./bench.sh 1s ./proxy
-
-# Windows
-.\bench.bat 1s ./proxy
-```
+Переименуйте скрипты обратно (удалите префикс `DISABLED_`) и добавьте папку проекта в исключения антивируса.
 
 Память ограничена: `GOMEMLIMIT=2GB` для предотвращения OOM.
 
