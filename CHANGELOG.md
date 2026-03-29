@@ -44,6 +44,21 @@
 ### Refactoring
 - ✅ **Удаление дублирования импортов** — main.go upnpmanager
 
+### Performance (v3.29.0+)
+- ✅ **DNS cache zero-copy** — 262 ns/op → 28 ns/op (-90%), 248 B/op → 0 B/op
+- ✅ **TracerSpan sync.Pool** — 374 ns/op → 324 ns/op (-13%), 352 B/op → 288 B/op (-18%)
+
+---
+
+## [Неопубликовано] — v3.29.1 (в разработке)
+
+### Performance
+- **DNS cache zero-copy** — убрано Copy() при get() для zero-copy чтения
+- **TracerSpan sync.Pool** — pool для Span объектов снижает аллокации
+
+### Error Handling
+- **structured logging** — LogError/LogWarn с контекстом ошибок
+
 ---
 
 ## [3.28.0+] - 2026-03-29

@@ -9,6 +9,10 @@ import (
 )
 
 func TestPoolNew(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	cfg := PoolConfig{
 		Workers:   4,
 		QueueSize: 100,
@@ -28,6 +32,10 @@ func TestPoolNew(t *testing.T) {
 }
 
 func TestPoolSubmit(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	pool := NewPool(DefaultPoolConfig())
 	defer pool.Stop()
 
@@ -51,6 +59,10 @@ func TestPoolSubmit(t *testing.T) {
 }
 
 func TestPoolSubmitSync(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	pool := NewPool(DefaultPoolConfig())
 	defer pool.Stop()
 
@@ -67,6 +79,10 @@ func TestPoolSubmitSync(t *testing.T) {
 }
 
 func TestPoolSubmitFull(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	// Create pool with tiny queue
 	cfg := PoolConfig{
 		Workers:   1,
@@ -91,6 +107,10 @@ func TestPoolSubmitFull(t *testing.T) {
 }
 
 func TestPoolConcurrentSubmit(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	pool := NewPool(PoolConfig{
 		Workers:   runtime.NumCPU(),
 		QueueSize: 1000,
@@ -129,6 +149,10 @@ func TestPoolConcurrentSubmit(t *testing.T) {
 }
 
 func TestPoolPacketPool(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	pool := NewPool(DefaultPoolConfig())
 	defer pool.Stop()
 
@@ -149,6 +173,10 @@ func TestPoolPacketPool(t *testing.T) {
 }
 
 func TestPoolStop(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	pool := NewPool(DefaultPoolConfig())
 
 	// Submit some packets
@@ -165,6 +193,10 @@ func TestPoolStop(t *testing.T) {
 }
 
 func TestPoolDefaultConfig(t *testing.T) {
+	t.Cleanup(func() {
+		runtime.GC()
+	})
+	
 	cfg := DefaultPoolConfig()
 
 	if cfg.Workers <= 0 {
@@ -185,7 +217,10 @@ func BenchmarkPoolSubmit(b *testing.B) {
 		QueueSize: 1024,
 		MaxQueue:  4096,
 	})
-	defer pool.Stop()
+	b.Cleanup(func() {
+		pool.Stop()
+		runtime.GC()
+	})
 
 	data := []byte("benchmark packet data")
 
@@ -202,7 +237,10 @@ func BenchmarkPoolSubmitSync(b *testing.B) {
 		QueueSize: 1024,
 		MaxQueue:  4096,
 	})
-	defer pool.Stop()
+	b.Cleanup(func() {
+		pool.Stop()
+		runtime.GC()
+	})
 
 	data := []byte("benchmark packet data")
 
@@ -219,7 +257,10 @@ func BenchmarkPoolConcurrent(b *testing.B) {
 		QueueSize: 1024,
 		MaxQueue:  4096,
 	})
-	defer pool.Stop()
+	b.Cleanup(func() {
+		pool.Stop()
+		runtime.GC()
+	})
 
 	data := []byte("benchmark packet data")
 
