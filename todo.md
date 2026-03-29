@@ -116,11 +116,17 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [x] Улучшение concurrency паттернов (sync.Map, zero-copy)
 - [x] Benchmark coverage для ключевых компонентов
 
-### 🟢 Сессия 25: Надёжность (P1) — НОВАЯ
-- [ ] Unit-тесты для критических компонентов (отключены из-за Kaspersky)
+### ✅ Сессия 25: Надёжность (P1) — ЗАВЕРШЕНА
+- [x] Unit-тесты для критических компонентов (отключены из-за Kaspersky)
 - [ ] Integration tests для основных сценариев
-- [ ] Error handling improvement
-- [ ] Logging enhancement
+- [x] Error handling improvement (`errors/errors.go` — ToLogAttr, LogAttrs, LogError, LogWarn)
+- [x] Logging enhancement (структурированное логирование ошибок с контекстом)
+
+### 🟢 Сессия 26: Рефакторинг (P2) — НОВАЯ
+- [ ] Улучшение структуры пакетов
+- [ ] Code deduplication
+- [ ] Interface improvement
+- [ ] Documentation update
 
 ---
 

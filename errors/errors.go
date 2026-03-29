@@ -4,6 +4,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
@@ -207,4 +208,69 @@ func GetContext(err error) map[string]interface{} {
 		return e.Context
 	}
 	return nil
+}
+
+// ToLogAttr converts error to slog.Attr for structured logging
+func (e *Error) ToLogAttr() slog.Attr {
+	return slog.Group("error",
+		slog.String("category", e.Category.String()),
+		slog.String("code", e.Code),
+		slog.String("message", e.Message),
+		slog.Bool("retryable", e.Retryable),
+		slog.Time("timestamp", e.Timestamp),
+	)
+}
+
+// LogAttrs returns slog.Attr slice for error with context
+func (e *Error) LogAttrs() []slog.Attr {
+	attrs := make([]slog.Attr, 0, 6+len(e.Context))
+	attrs = append(attrs,
+		slog.String("error.category", e.Category.String()),
+		slog.String("error.code", e.Code),
+		slog.String("error.message", e.Message),
+		slog.Bool("error.retryable", e.Retryable),
+		slog.Time("error.timestamp", e.Timestamp),
+	)
+	for k, v := range e.Context {
+		attrs = append(attrs, slog.Any("error."+k, v))
+	}
+	return attrs
+}
+
+// LogError logs error with structured context using slog
+func LogError(logger *slog.Logger, err error, msg string) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	var e *Error
+	if errors.As(err, &e) {
+		args := make([]any, 0, 6+len(e.Context))
+		for _, attr := range e.LogAttrs() {
+			args = append(args, attr.Key, attr.Value.Any())
+		}
+		args = append(args, "message", msg)
+		logger.Error(msg, args...)
+	} else {
+		logger.Error(msg, slog.Any("error", err))
+	}
+}
+
+// LogWarn logs warning with structured context using slog
+func LogWarn(logger *slog.Logger, err error, msg string) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	var e *Error
+	if errors.As(err, &e) {
+		args := make([]any, 0, 6+len(e.Context))
+		for _, attr := range e.LogAttrs() {
+			args = append(args, attr.Key, attr.Value.Any())
+		}
+		args = append(args, "message", msg)
+		logger.Warn(msg, args...)
+	} else {
+		logger.Warn(msg, slog.Any("error", err))
+	}
 }
