@@ -5,6 +5,8 @@ go 1.25.0
 require (
 	github.com/anacrolix/log v0.17.0
 	github.com/anacrolix/upnp v0.1.4
+	github.com/armon/go-radix v1.0.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/getlantern/systray v1.2.2
 	github.com/gopacket/gopacket v1.5.0
 	github.com/gorilla/websocket v1.5.3
@@ -24,9 +26,7 @@ require (
 
 require (
 	github.com/anacrolix/generics v0.1.0 // indirect
-	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v0.0.0-20190325191628-abdb3e3e36f7 // indirect
 	github.com/getlantern/golog v0.0.0-20190830074920-4ef2e798c2d7 // indirect

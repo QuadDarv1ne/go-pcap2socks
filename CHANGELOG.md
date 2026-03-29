@@ -28,6 +28,22 @@
 - ✅ **docs/API.md** — REST + WebSocket документация
 - ✅ **docs/METRICS.md** — Prometheus метрики
 
+### Integrations
+- ✅ **Telegram бот** — уведомления и управление (/status, /traffic, /devices)
+- ✅ **Discord webhook** — уведомления о событиях
+- ✅ **notify.InitExternal()** — инициализация внешних уведомлений
+
+### Performance
+- ✅ **DNS cache zero-copy** — 262 ns/op → 28 ns/op (-90%), 0 B/op
+- ✅ **WireGuard совместимость** — интеграция с proxy.Dialer
+
+### Error Handling
+- ✅ **errors.LogError/LogWarn** — структурированное логирование
+- ✅ **ToLogAttr/LogAttrs** — конвертация ошибок в slog.Attr
+
+### Refactoring
+- ✅ **Удаление дублирования импортов** — main.go upnpmanager
+
 ---
 
 ## [3.28.0+] - 2026-03-29
