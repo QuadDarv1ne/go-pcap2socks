@@ -72,18 +72,19 @@ type Config struct {
 	Routing        struct {
 		Rules []Rule `json:"rules"`
 	} `json:"routing"`
-	Outbounds []Outbound `json:"outbounds"`
-	Capture   Capture    `json:"capture,omitempty"`
-	Language  string     `json:"language,omitempty"`
-	API       *API       `json:"api,omitempty"`
-	Telegram  *Telegram  `json:"telegram,omitempty"`
-	Discord   *Discord   `json:"discord,omitempty"`
-	Hotkey    *Hotkey    `json:"hotkey,omitempty"`
-	UPnP      *UPnP      `json:"upnp,omitempty"`
-	MTU       *MTU       `json:"mtu,omitempty"`
-	MACFilter *MACFilter `json:"macFilter,omitempty"`
-	WinDivert *WinDivert `json:"windivert,omitempty"`
-	RateLimit *RateLimit `json:"rateLimit,omitempty"`
+	Outbounds    []Outbound    `json:"outbounds"`
+	WANBalancer  *WANBalancer  `json:"wanBalancer,omitempty"`
+	Capture      Capture       `json:"capture,omitempty"`
+	Language     string        `json:"language,omitempty"`
+	API          *API          `json:"api,omitempty"`
+	Telegram     *Telegram     `json:"telegram,omitempty"`
+	Discord      *Discord      `json:"discord,omitempty"`
+	Hotkey       *Hotkey       `json:"hotkey,omitempty"`
+	UPnP         *UPnP         `json:"upnp,omitempty"`
+	MTU          *MTU          `json:"mtu,omitempty"`
+	MACFilter    *MACFilter    `json:"macFilter,omitempty"`
+	WinDivert    *WinDivert    `json:"windivert,omitempty"`
+	RateLimit    *RateLimit    `json:"rateLimit,omitempty"`
 }
 
 // RateLimit holds bandwidth limiting configuration
@@ -732,5 +733,45 @@ func (c *Config) validateDHCPv6() error {
 // WinDivert holds WinDivert driver configuration
 type WinDivert struct {
 	Enabled bool `json:"enabled"`
+}
+
+// WANBalancer holds Multi-WAN load balancing configuration
+type WANBalancer struct {
+	// Enabled enables Multi-WAN load balancing
+	Enabled bool `json:"enabled"`
+	// Policy is the load balancing policy: "round-robin", "weighted", "least-conn", "least-latency", "failover"
+	Policy string `json:"policy,omitempty"`
+	// Uplinks is the list of WAN uplinks
+	Uplinks []WANUplink `json:"uplinks"`
+	// HealthCheck is the health check configuration
+	HealthCheck *WANHealthCheck `json:"healthCheck,omitempty"`
+}
+
+// WANUplink represents a single WAN uplink configuration
+type WANUplink struct {
+	// Tag is the unique identifier (matches outbound tag)
+	Tag string `json:"tag"`
+	// Weight for weighted load balancing (1-100, default 1)
+	Weight int `json:"weight,omitempty"`
+	// Priority for failover (lower = higher priority, default 0)
+	Priority int `json:"priority,omitempty"`
+	// Description is optional human-readable description
+	Description string `json:"description,omitempty"`
+}
+
+// WANHealthCheck holds health check configuration
+type WANHealthCheck struct {
+	// Enabled enables health checking
+	Enabled bool `json:"enabled"`
+	// Interval is how often to perform health checks (e.g., "10s", "1m")
+	Interval string `json:"interval,omitempty"`
+	// Timeout is the timeout for each health check (e.g., "5s")
+	Timeout string `json:"timeout,omitempty"`
+	// Target is the URL/IP to check against (e.g., "8.8.8.8:53")
+	Target string `json:"target,omitempty"`
+	// FailThreshold is the number of failures before marking uplink down
+	FailThreshold int `json:"failThreshold,omitempty"`
+	// PassThreshold is the number of successes before marking uplink up
+	PassThreshold int `json:"passThreshold,omitempty"`
 }
 

@@ -5,7 +5,83 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
-## [3.26.0+] - 2026-03-28
+## [3.28.0+] - 2026-03-29
+
+### Добавлено
+- **wanbalancer/balancer.go** — Multi-WAN load balancer с поддержкой стратегий
+- **wanbalancer/metrics.go** — метрики для WAN балансировки
+- **wanbalancer/proxy.go** — интеграция с proxy пакетом (Dialer interface)
+- **wanbalancer/balancer_test.go** — тесты для wanbalancer (18 тестов)
+- **cfg/config.go** — структуры конфигурации WANBalancer, WANUplink, WANHealthCheck
+
+### Улучшения
+- ✅ **Round-Robin** — равномерное распределение по uplinks
+- ✅ **Weighted** — взвешенная балансировка (weight 1-100)
+- ✅ **Least-Connections** — выбор uplink с наименьшим числом подключений
+- ✅ **Least-Latency** — выбор uplink с наименьшей задержкой
+- ✅ **Failover** — приоритизация uplinks (primary/backup)
+- ✅ **Health Checks** — автоматическая проверка доступности uplinks
+- ✅ **Metrics** — сбор метрик (connections, traffic, latency, switches)
+- ✅ **Lock-Free** — атомарные операции для высокой производительности
+
+### Технические детали
+- **Uplink Status** — atomic.Int32 для lock-free статуса (up/down/degraded)
+- **Connection Tracking** — подсчёт активных подключений на uplink
+- **Traffic Accounting** — учёт трафика (Rx/Tx) по uplinks
+- **Latency Tracking** — измерение задержек с min/max/avg
+- **Background Health Check** — периодическая проверка uplinks (настраиваемый интервал)
+- **Graceful Degradation** — автоматическое исключение down uplinks
+
+### Примеры использования
+
+```go
+// Создание WAN balancer
+balancer, err := wanbalancer.NewBalancer(wanbalancer.BalancerConfig{
+    Uplinks: []*wanbalancer.Uplink{
+        {Tag: "proxy1", Weight: 3, Priority: 1},
+        {Tag: "proxy2", Weight: 1, Priority: 2},
+    },
+    Policy: wanbalancer.PolicyWeighted,
+    HealthCheck: &wanbalancer.HealthCheckConfig{
+        Enabled: true,
+        Interval: 10 * time.Second,
+        Target: "8.8.8.8:53",
+    },
+})
+
+// Создание dialer для интеграции с proxy
+dialer := wanbalancer.NewWANBalancerDialer(wanbalancer.WANBalancerDialerConfig{
+    Balancer: balancer,
+    Proxies: proxies, // map[string]proxy.Proxy
+})
+
+// Использование через proxy.DialContext
+proxy.SetDialer(dialer)
+```
+
+### Конфигурация (config.json)
+
+```json
+{
+  "wanBalancer": {
+    "enabled": true,
+    "policy": "round-robin",
+    "uplinks": [
+      {"tag": "proxy1", "weight": 3, "description": "Primary"},
+      {"tag": "proxy2", "weight": 1, "description": "Backup"}
+    ],
+    "healthCheck": {
+      "enabled": true,
+      "interval": "10s",
+      "timeout": "5s",
+      "target": "8.8.8.8:53",
+      "failThreshold": 3
+    }
+  }
+}
+```
+
+## [3.27.0+] - 2026-03-28
 
 ### Добавлено
 - **feature/flags.go** — feature flags с динамическим управлением

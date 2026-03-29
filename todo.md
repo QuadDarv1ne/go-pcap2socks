@@ -762,10 +762,14 @@ dev:  v3.27.0+ - синхронизировано с main ✅
 - [x] ✅ Health check улучшения — добавить новые probe types (TCP, UDP) (health/checker.go, health/probe_test.go)
 - [x] ✅ Rate limit улучшения — adaptive rate limiting (ratelimit/adaptive.go, ratelimit/adaptive_test.go)
 
-### 🔴 Сессия 15: MAC Filtering (P2) — ✅ ЗАВЕРШЕНО
-- [x] ✅ API endpoints — add/remove/list/check MAC filters (api/mac_filter.go)
-- [x] ✅ Тесты — полный набор тестов для MAC filter API (api/mac_filter_test.go)
-- [x] ✅ Интеграция — server.go dispatcher + callback (api/server.go)
+### 🔴 Сессия 17: Multi-WAN Балансировка (P0) — ✅ ЗАВЕРШЕНО
+- [x] ✅ wanbalancer/balancer.go — Multi-WAN load balancer (5 стратегий)
+- [x] ✅ wanbalancer/metrics.go — метрики (connections, traffic, latency)
+- [x] ✅ wanbalancer/proxy.go — интеграция с proxy (Dialer interface)
+- [x] ✅ wanbalancer/balancer_test.go — 18 тестов (100% pass)
+- [x] ✅ cfg/config.go — WANBalancer, WANUplink, WANHealthCheck структуры
+- [x] ✅ config.json — пример конфигурации Multi-WAN
+- [x] ✅ CHANGELOG.md — документация v3.28.0+
 
 ### 🟡 Сессия 16: Документация (P3) — СЛЕДУЮЩИЕ
 - [ ] Примеры конфигураций для разных сценариев
@@ -773,7 +777,7 @@ dev:  v3.27.0+ - синхронизировано с main ✅
 - [ ] API документация (Swagger/OpenAPI)
 
 ### Функции
-- [ ] Multi-WAN балансировка
+- [ ] Multi-WAN балансировка — ✅ ЗАВЕРШЕНО (v3.28.0+)
 
 ---
 
@@ -787,10 +791,10 @@ dev:  v3.27.0+ - синхронизировано с main ✅
 - ✅ Сессия 13: Health Check TCP/UDP
 - ✅ Сессия 14: Adaptive Rate Limiting
 - ✅ Сессия 15: MAC Filtering API
+- ✅ Сессия 17: Multi-WAN Балансировка (P0)
 
 **Оставшиеся задачи:**
 - [ ] Сессия 16: Документация (P3)
-- [ ] Multi-WAN балансировка
 
 ---
 
