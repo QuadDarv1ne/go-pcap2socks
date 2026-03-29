@@ -1,9 +1,30 @@
 ﻿# go-pcap2socks TODO
 
 **Последнее обновление**: 29 марта 2026 г.
-**Версия**: v3.28.0+ (Multi-WAN Balancer)
+**Версия**: v3.29.0+ (Observability & Reliability)
 **Статус**: ✅ стабилен, сборка успешна, working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание)
+
+---
+
+## 📈 Последние улучшения (v3.29.0+)
+
+### Observability
+- ✅ Prometheus metrics export (counters, gauges, histograms)
+- ✅ Connection pool statistics
+- ✅ Runtime метрики (memory, goroutines, GC)
+- ✅ WAN balancer metrics (uplink status, latency, traffic)
+
+### Reliability
+- ✅ DNS retry logic с exponential backoff
+- ✅ Context-based timeout для всех операций
+- ✅ Health check с auto-recovery
+
+### Documentation
+- ✅ Примеры конфигураций (home, office, multi-wan)
+- ✅ Troubleshooting guide (8 частых проблем)
+- ✅ API документация (REST + WebSocket)
+- ✅ Prometheus metrics документация
 
 ---
 
