@@ -462,21 +462,35 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 		return nil, ErrBlockedByMACFilter
 	}
 
+	// Log routing decision
+	slog.Info("Router DialContext",
+		"src", metadata.SourceAddress(),
+		"dst", metadata.DestinationAddress(),
+		"network", metadata.Network)
+
 	// Build cache key and perform routing
 	cacheKey := d.routeCache.buildKey("tcp:", metadata.SrcIP, metadata.DstIP, metadata.SrcPort, metadata.DstPort)
 	selectedTag, err := d.route(cacheKey, metadata)
 	if err != nil {
 		d.connErrors.Add(1)
+		slog.Debug("Router route failed", "src", metadata.SourceAddress(), "dst", metadata.DestinationAddress(), "err", err)
 		return nil, err
 	}
+
+	slog.Info("Router selected outbound",
+		"src", metadata.SourceAddress(),
+		"dst", metadata.DestinationAddress(),
+		"outbound", selectedTag)
 
 	// Dial using selected proxy
 	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
 		conn, err := proxy.DialContext(ctx, metadata)
 		if err != nil {
 			d.connErrors.Add(1)
+			slog.Debug("Proxy dial failed", "outbound", selectedTag, "dst", metadata.DestinationAddress(), "err", err)
 		} else {
 			d.connSuccess.Add(1)
+			slog.Info("Proxy dial success", "outbound", selectedTag, "dst", metadata.DestinationAddress())
 		}
 		return conn, err
 	}

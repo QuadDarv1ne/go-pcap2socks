@@ -232,24 +232,43 @@ func (s *Server) dhcpWorker(id int) {
 func (s *Server) processDHCPRequest(data []byte, mac string) ([]byte, error) {
 	msg, err := ParseDHCPMessage(data)
 	if err != nil {
+		slog.Error("DHCP worker: Failed to parse DHCP message",
+			"mac", mac,
+			"err", err,
+			"data_len", len(data))
 		return nil, err
 	}
 
 	messageType := msg.Options[OptionDHCPMessageType]
 	if len(messageType) == 0 {
+		slog.Error("DHCP worker: Empty message type",
+			"mac", mac,
+			"transaction_id", msg.TransactionID)
 		return nil, ErrInvalidMessageType
 	}
 
+	slog.Debug("DHCP worker: Processing request",
+		"mac", mac,
+		"msg_type", messageType[0],
+		"transaction_id", msg.TransactionID)
+
 	switch messageType[0] {
 	case DHCPDiscover:
+		slog.Debug("DHCP worker: Routing to handleDiscover", "mac", mac)
 		return s.handleDiscover(msg)
 	case DHCPRequest:
+		slog.Debug("DHCP worker: Routing to handleRequest", "mac", mac)
 		return s.handleRequest(msg)
 	case DHCPRelease:
+		slog.Debug("DHCP worker: Routing to handleRelease", "mac", mac)
 		return s.handleRelease(msg)
 	case DHCPInform:
+		slog.Debug("DHCP worker: Routing to handleInform", "mac", mac)
 		return s.handleInform(msg)
 	default:
+		slog.Warn("DHCP worker: Unknown message type",
+			"mac", mac,
+			"msg_type", messageType[0])
 		return nil, nil
 	}
 }
@@ -261,14 +280,26 @@ func (s *Server) HandleRequest(data []byte) ([]byte, error) {
 	// Extract MAC address for rate limiting
 	msg, err := ParseDHCPMessage(data)
 	if err != nil {
+		slog.Error("DHCP: Failed to parse DHCP message",
+			"err", err,
+			"data_len", len(data))
 		return nil, err
 	}
 	macStr := msg.ClientHardware.String()
 
+	slog.Debug("DHCP: HandleRequest called",
+		"mac", macStr,
+		"msg_type", msg.Options[OptionDHCPMessageType],
+		"transaction_id", msg.TransactionID,
+		"data_len", len(data))
+
 	// Check rate limit to protect against flood attacks
 	if !s.checkRateLimit(macStr) {
 		s.metrics.RecordError()
-		slog.Warn("DHCP request rate limited", "mac", macStr)
+		slog.Warn("DHCP: Request RATE LIMITED",
+			"mac", macStr,
+			"rate_limit", s.rateLimit,
+			"window", s.rateLimitWindow)
 		return nil, nil // Silently drop rate-limited requests
 	}
 
@@ -282,16 +313,28 @@ func (s *Server) HandleRequest(data []byte) ([]byte, error) {
 
 	select {
 	case s.requestQueue <- req:
+		slog.Debug("DHCP: Request queued to worker",
+			"mac", macStr,
+			"queue_len", len(s.requestQueue))
 		// Successfully queued, wait for response
 		select {
 		case response := <-responseCh:
+			slog.Debug("DHCP: Response received from worker",
+				"mac", macStr,
+				"response_len", len(response))
 			return response, nil
 		case <-time.After(500 * time.Millisecond):
+			slog.Error("DHCP: Request timeout",
+				"mac", macStr,
+				"timeout", "500ms")
 			return nil, context.DeadlineExceeded
 		}
 	default:
 		// Queue full, process synchronously as fallback
-		slog.Debug("DHCP queue full, processing synchronously", "mac", macStr)
+		slog.Warn("DHCP: Queue full, processing synchronously",
+			"mac", macStr,
+			"queue_len", len(s.requestQueue),
+			"queue_cap", cap(s.requestQueue))
 		return s.processDHCPRequest(data, macStr)
 	}
 }
@@ -301,39 +344,70 @@ func (s *Server) handleDiscover(msg *DHCPMessage) ([]byte, error) {
 	s.metrics.RecordDiscover()
 	s.metrics.RecordLastRequest(macStr, "")
 
-	// Log DHCP Discover
-	slog.Info("DHCP: DISCOVER received",
+	// Extract additional info for logging
+	hostname := getHostnameFromOptions(msg.Options)
+	clientID := ""
+	if id, ok := msg.Options[OptionClientID]; ok {
+		clientID = string(id)
+	}
+	vendorClass := ""
+	if vc, ok := msg.Options[OptionVendorClassID]; ok {
+		vendorClass = string(vc)
+	}
+
+	// Log DHCP Discover with full details
+	slog.Info("========== DHCP: DISCOVER received ==========",
 		"mac", macStr,
-		"hostname", getHostnameFromOptions(msg.Options))
+		"hostname", hostname,
+		"client_id", clientID,
+		"vendor_class", vendorClass,
+		"transaction_id", msg.TransactionID,
+		"flags", msg.Flags,
+		"client_ip", msg.ClientIP.String(),
+		"smart_dhcp_enabled", s.smartDHCP != nil)
 
 	// Allocate IP using Smart DHCP if enabled
 	ip, err := s.allocateIP(msg.ClientHardware)
 	if err != nil {
-		slog.Error("DHCP: IP allocation failed", "mac", macStr, "err", err)
+		slog.Error("DHCP: IP allocation FAILED",
+			"mac", macStr,
+			"hostname", hostname,
+			"err", err,
+			"pool_range", s.config.FirstIP.String()+"-"+s.config.LastIP.String())
 		s.metrics.RecordError()
 		return nil, err
 	}
+
+	slog.Debug("DHCP: IP allocated successfully",
+		"mac", macStr,
+		"assigned_ip", ip.String())
 
 	// Detect device type and apply profile
 	if s.smartDHCP != nil {
 		profile := auto.DetectByMAC(macStr)
 		if profile.Type != auto.DeviceUnknown {
 			s.deviceProfiles.Store(macStr, profile)
-			slog.Info("DHCP: Device detected",
+			slog.Info("DHCP: Device detected and profile applied",
 				"mac", macStr,
 				"type", profile.Type,
 				"manufacturer", profile.Manufacturer,
 				"assigned_ip", ip.String())
+		} else {
+			slog.Debug("DHCP: Device type unknown, using default profile",
+				"mac", macStr)
 		}
 	}
 
 	// Build DHCPOFFER
 	response := s.buildResponse(msg, DHCPOffer, ip)
 
-	slog.Info("DHCP: OFFER sent",
+	slog.Info("========== DHCP: OFFER sent ==========",
 		"mac", macStr,
+		"hostname", hostname,
 		"offered_ip", ip.String(),
-		"lease_duration", s.config.LeaseDuration)
+		"lease_duration", s.config.LeaseDuration,
+		"server_ip", s.config.ServerIP.String(),
+		"transaction_id", msg.TransactionID)
 
 	s.metrics.RecordOffer()
 
@@ -350,15 +424,30 @@ func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
 		requestedIP = msg.YourIP
 	}
 
-	// Log DHCP Request
-	slog.Info("DHCP: REQUEST received",
+	// Extract additional info for logging
+	hostname := getHostnameFromOptions(msg.Options)
+	serverID := ""
+	if sid, ok := msg.Options[OptionServerIdentifier]; ok {
+		serverID = net.IP(sid).String()
+	}
+
+	// Log DHCP Request with full details
+	slog.Info("========== DHCP: REQUEST received ==========",
 		"mac", macStr,
-		"requested_ip", requestedIP.String())
+		"hostname", hostname,
+		"requested_ip", requestedIP.String(),
+		"server_id", serverID,
+		"transaction_id", msg.TransactionID,
+		"client_ip", msg.ClientIP.String(),
+		"your_ip", msg.YourIP.String())
 
 	// Validate requested IP
 	if requestedIP == nil || !s.config.Network.Contains(requestedIP) {
 		s.metrics.RecordError()
-		slog.Warn("DHCP: Invalid requested IP", "mac", macStr, "ip", requestedIP)
+		slog.Warn("DHCP: Invalid requested IP",
+			"mac", macStr,
+			"ip", requestedIP,
+			"network", s.config.Network.String())
 		return nil, nil
 	}
 
@@ -376,29 +465,41 @@ func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
 		isRenewal = true
 		slog.Info("DHCP: Lease renewed",
 			"mac", macStr,
+			"hostname", hostname,
 			"ip", requestedIP.String(),
-			"expires", lease.ExpiresAt.Format(time.RFC3339))
+			"expires", lease.ExpiresAt.Format(time.RFC3339),
+			"previous_expires", lease.ExpiresAt.Format(time.RFC3339))
 	} else {
 		// New lease
 		var err error
+		oldIP := requestedIP
 		requestedIP, err = s.allocateIP(msg.ClientHardware)
 		if err != nil {
-			slog.Error("DHCP: IP allocation failed", "mac", macStr, "err", err)
+			slog.Error("DHCP: IP allocation FAILED",
+				"mac", macStr,
+				"hostname", hostname,
+				"requested_ip", oldIP.String(),
+				"err", err)
 			s.metrics.RecordError()
 			return nil, err
 		}
 		slog.Info("DHCP: New lease created",
 			"mac", macStr,
+			"hostname", hostname,
 			"ip", requestedIP.String())
 	}
 
 	// Build DHCPACK
 	response := s.buildResponse(msg, DHCPAck, requestedIP)
 
-	slog.Info("DHCP: ACK sent",
+	slog.Info("========== DHCP: ACK sent ==========",
 		"mac", macStr,
+		"hostname", hostname,
 		"assigned_ip", requestedIP.String(),
-		"renewal", isRenewal)
+		"renewal", isRenewal,
+		"lease_duration", s.config.LeaseDuration,
+		"server_ip", s.config.ServerIP.String(),
+		"transaction_id", msg.TransactionID)
 
 	s.metrics.RecordAck(macStr, requestedIP.String(), isRenewal)
 
@@ -498,16 +599,33 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 	if val, ok := s.leases.Load(macStr); ok {
 		lease := val.(*DHCPLease)
 		if time.Now().Before(lease.ExpiresAt) {
+			slog.Debug("DHCP: Found existing valid lease",
+				"mac", macStr,
+				"ip", lease.IP.String(),
+				"expires", lease.ExpiresAt.Format(time.RFC3339))
 			return lease.IP, nil
 		}
+		slog.Debug("DHCP: Existing lease expired",
+			"mac", macStr,
+			"ip", lease.IP.String(),
+			"expired_at", lease.ExpiresAt.Format(time.RFC3339))
 	}
 
 	// Use Smart DHCP if enabled
 	if s.smartDHCP != nil {
+		slog.Debug("DHCP: Using Smart DHCP for IP allocation",
+			"mac", macStr)
 		// Detect device profile
 		profile := auto.DetectByMAC(macStr)
 		if profile.Type == auto.DeviceUnknown {
+			slog.Debug("DHCP: Device type unknown, using default profile",
+				"mac", macStr)
 			profile = auto.GetDefaultProfile()
+		} else {
+			slog.Debug("DHCP: Device profile detected",
+				"mac", macStr,
+				"type", profile.Type,
+				"manufacturer", profile.Manufacturer)
 		}
 
 		// Get IP from Smart DHCP
@@ -515,6 +633,10 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		if ipStr != "" {
 			ip := net.ParseIP(ipStr)
 			if ip != nil {
+				slog.Debug("DHCP: Smart DHCP allocated IP",
+					"mac", macStr,
+					"ip", ipStr,
+					"device_type", profile.Type)
 				// Create lease
 				lease := &DHCPLease{
 					IP:          ip,
@@ -532,15 +654,32 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 
 				return ip, nil
 			}
+			slog.Warn("DHCP: Smart DHCP returned invalid IP",
+				"mac", macStr,
+				"ip_str", ipStr)
+		} else {
+			slog.Warn("DHCP: Smart DHCP returned empty IP",
+				"mac", macStr)
 		}
+	} else {
+		slog.Debug("DHCP: Smart DHCP disabled, using legacy allocation",
+			"mac", macStr)
 	}
 
 	// Fallback to legacy IP allocation
+	slog.Debug("DHCP: Falling back to legacy IP allocation",
+		"mac", macStr,
+		"pool_range", s.config.FirstIP.String()+"-"+s.config.LastIP.String())
+	
 	// Get nextIP atomically
 	nextIP := s.nextIP.Load().(net.IP)
 	startIP := nextIP
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -
 		binary.BigEndian.Uint32(s.config.FirstIP.To4()) + 1)
+
+	slog.Debug("DHCP: Legacy allocation starting",
+		"start_ip", startIP.String(),
+		"max_attempts", maxAttempts)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		currentIP := nextIP
@@ -550,12 +689,18 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		available := true
 		if _, ok := s.reserved.Load(ipStr); ok {
 			available = false
+			slog.Debug("DHCP: IP is reserved",
+				"ip", ipStr,
+				"mac", macStr)
 		}
 
 		// Check IP index for O(1) lookup instead of O(n) Range
 		if available {
 			if _, ok := s.ipIndex.Load(ipStr); ok {
 				available = false
+				slog.Debug("DHCP: IP already allocated",
+					"ip", ipStr,
+					"mac", macStr)
 			}
 		}
 
@@ -571,6 +716,10 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		}
 
 		if available {
+			slog.Debug("DHCP: Legacy allocation found available IP",
+				"mac", macStr,
+				"allocated_ip", ipStr,
+				"attempt", attempt+1)
 			// Create lease
 			lease := &DHCPLease{
 				IP:          currentIP,
@@ -592,10 +741,15 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 
 		// Prevent infinite loop
 		if nextIP.Equal(startIP) {
+			slog.Warn("DHCP: Legacy allocation completed full circle, no IPs available",
+				"mac", macStr)
 			break
 		}
 	}
 
+	slog.Error("DHCP: No available IPs in pool",
+		"mac", macStr,
+		"pool_range", s.config.FirstIP.String()+"-"+s.config.LastIP.String())
 	return nil, ErrNoAvailableIPs
 }
 

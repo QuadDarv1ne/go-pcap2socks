@@ -135,13 +135,24 @@ func NewHandle(filter string) (*Handle, error) {
 		filter = DHCPFilter
 	}
 
+	slog.Info("Opening WinDivert handle...",
+		"filter", filter,
+		"mode", "network",
+		"filter_description", "DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)")
+
 	// Use network layer (default) - packet layer not supported with custom filters
 	h, err := godivert.NewWinDivertHandle(filter)
 	if err != nil {
+		slog.Error("Failed to open WinDivert handle",
+			"filter", filter,
+			"err", err)
 		return nil, fmt.Errorf("%w: %w", ErrWinDivertOpen, err)
 	}
 
-	slog.Info("WinDivert handle opened", "filter", filter, "mode", "network")
+	slog.Info("WinDivert handle opened successfully",
+		"filter", filter,
+		"mode", "network",
+		"handle", h)
 
 	return &Handle{
 		handle:   h,
@@ -389,15 +400,26 @@ func (h *Handle) parsePacketRaw(data []byte, pkt *Packet) *Packet {
 // Returns nil if packet is too short or invalid
 func GetClientMAC(dhcpData []byte) net.HardwareAddr {
 	if len(dhcpData) < 34 {
+		slog.Debug("GetClientMAC: packet too short",
+			"len", len(dhcpData),
+			"required", 34)
 		return nil
 	}
 	hwType := dhcpData[1]
 	hwLen := dhcpData[2]
 	if hwType != 1 || hwLen != 6 {
+		slog.Debug("GetClientMAC: invalid hardware type or length",
+			"hwType", hwType,
+			"hwLen", hwLen,
+			"expected_hwType", 1,
+			"expected_hwLen", 6)
 		return nil
 	}
 	mac := make(net.HardwareAddr, 6)
 	copy(mac, dhcpData[28:34])
+	slog.Debug("GetClientMAC: extracted MAC",
+		"mac", mac.String(),
+		"dhcpData_len", len(dhcpData))
 	return mac
 }
 

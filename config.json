@@ -56,42 +56,25 @@
                     "rules":  [
                                   {
                                       "dstPort":  "53",
-                                      "outboundTag":  "dns-out",
-                                      "SrcPortMatcher":  null,
-                                      "DstPortMatcher":  null,
-                                      "SrcIPs":  null,
-                                      "DstIPs":  null
+                                      "outboundTag":  "dns-out"
+                                  },
+                                  {
+                                      "dstPort":  "80,443",
+                                      "outboundTag":  "direct"
+                                  },
+                                  {
+                                      "outboundTag":  "direct"
                                   }
                               ]
                 },
     "outbounds":  [
                       {
-                          "direct":  {
-
-                                     },
+                          "direct":  {},
                           "tag":  "direct"
                       },
                       {
-                          "dns":  {
-
-                                  },
+                          "dns":  {},
                           "tag":  "dns-out"
-                      },
-                      {
-                          "socks":  {
-                                        "address":  "proxy1.example.com:1080",
-                                        "username":  "",
-                                        "password":  ""
-                                    },
-                          "tag":  "proxy1"
-                      },
-                      {
-                          "socks":  {
-                                        "address":  "proxy2.example.com:1080",
-                                        "username":  "",
-                                        "password":  ""
-                                    },
-                          "tag":  "proxy2"
                       }
                   ],
     "wanBalancer":  {
@@ -164,7 +147,7 @@
                   },
     "nat": {
         "enabled": true,
-        "externalInterface": "",
+        "externalInterface": "Ethernet",
         "internalInterface": ""
     }
 }

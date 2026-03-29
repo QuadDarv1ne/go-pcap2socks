@@ -28,6 +28,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/checksum"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
+	glog "gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 )
@@ -168,13 +169,19 @@ func (f *UDPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.Pac
 	if f.sessionCount.Load() >= maxUDPSessions {
 		f.droppedCount.Add(1)
 		// Drop packet silently when limit reached
+		glog.Debugf("UDP packet dropped due to session limit: %s:%d -> %s:%d",
+			id.RemoteAddress, id.RemotePort, id.LocalAddress, id.LocalPort)
 		return true
 	}
+
+	// Log incoming UDP packets for debugging
+	glog.Debugf("UDP packet received: %s:%d -> %s:%d, payload: %d bytes",
+		id.RemoteAddress, id.RemotePort, id.LocalAddress, id.LocalPort, pkt.Data().Size())
 
 	var upstreamMetadata M.Metadata
 	upstreamMetadata.Source = M.SocksaddrFrom(AddrFromAddress(id.RemoteAddress), id.RemotePort)
 	upstreamMetadata.Destination = M.SocksaddrFrom(AddrFromAddress(id.LocalAddress), id.LocalPort)
-	
+
 	// Determine protocol locally without storing in shared field
 	var proto tcpip.NetworkProtocolNumber
 	if upstreamMetadata.Source.IsIPv4() {

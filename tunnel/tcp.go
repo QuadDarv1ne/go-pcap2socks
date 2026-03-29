@@ -58,12 +58,21 @@ func handleTCPConn(originConn adapter.TCPConn) {
 	metadata.DstIP = net.IP(id.LocalAddress.AsSlice())
 	metadata.DstPort = id.LocalPort
 
+	slog.Info("Tunnel TCP connection",
+		"src", metadata.SourceAddress(),
+		"dst", metadata.DestinationAddress())
+
 	remoteConn, err := proxy.Dial(metadata)
 	if err != nil {
-		slog.Debug("TCP dial failed", "src", id.RemoteAddress, "dst", id.LocalAddress, "err", err)
+		slog.Warn("TCP dial failed", "src", id.RemoteAddress, "dst", id.LocalAddress, "err", err)
 		return
 	}
 	metadata.MidIP, metadata.MidPort = parseAddr(remoteConn.LocalAddr())
+
+	slog.Info("Tunnel TCP connected",
+		"src", metadata.SourceAddress(),
+		"dst", metadata.DestinationAddress(),
+		"proxy", remoteConn.LocalAddr())
 
 	// Apply MSS clamping based on MTU
 	applyMSSClamping(remoteConn, metadata.DstIP.To4() == nil)
@@ -106,6 +115,10 @@ func pipe(origin, remote net.Conn) {
 	var errorsCount atomic.Int32
 	var bytesCopied atomic.Int64
 
+	slog.Info("TCP pipe started",
+		"origin", origin.RemoteAddr(),
+		"remote", remote.RemoteAddr())
+
 	// Start both copy operations in separate goroutines
 	go func() {
 		defer wg.Done()
@@ -114,6 +127,8 @@ func pipe(origin, remote net.Conn) {
 		if result.err != nil && !errors.Is(result.err, io.EOF) {
 			errorsCount.Add(1)
 			slog.Debug("TCP stream copy error", "direction", result.dir, "bytes", result.bytes, "err", result.err)
+		} else {
+			slog.Info("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
 		}
 	}()
 
@@ -124,6 +139,8 @@ func pipe(origin, remote net.Conn) {
 		if result.err != nil && !errors.Is(result.err, io.EOF) {
 			errorsCount.Add(1)
 			slog.Debug("TCP stream copy error", "direction", result.dir, "bytes", result.bytes, "err", result.err)
+		} else {
+			slog.Info("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
 		}
 	}()
 
@@ -132,6 +149,8 @@ func pipe(origin, remote net.Conn) {
 
 	// Log total bytes copied
 	if totalBytes := bytesCopied.Load(); totalBytes > 0 {
-		slog.Debug("TCP session completed", "total_bytes", totalBytes, "errors", errorsCount.Load())
+		slog.Info("TCP session completed", "total_bytes", totalBytes, "errors", errorsCount.Load())
+	} else {
+		slog.Warn("TCP session completed with NO DATA transferred", "errors", errorsCount.Load())
 	}
 }

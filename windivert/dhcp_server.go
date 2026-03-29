@@ -28,6 +28,15 @@ func bytesEqual(a, b []byte) bool {
 	return true
 }
 
+// ipInt converts net.IP to uint32 for IPv4 addresses
+func ipInt(ip net.IP) uint32 {
+	ip = ip.To4()
+	if ip == nil {
+		return 0
+	}
+	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+}
+
 // DHCPServer represents a DHCP server using WinDivert
 type DHCPServer struct {
 	mu            sync.RWMutex
@@ -43,19 +52,43 @@ type DHCPServer struct {
 
 // NewDHCPServer creates a new DHCP server using WinDivert
 func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableSmartDHCP bool, poolStart, poolEnd string) (*DHCPServer, error) {
+	slog.Info("Creating WinDivert DHCP server...",
+		"config_network", config.Network.String(),
+		"config_server_ip", config.ServerIP.String(),
+		"config_first_ip", config.FirstIP.String(),
+		"config_last_ip", config.LastIP.String(),
+		"local_mac", localMAC.String(),
+		"enable_smart_dhcp", enableSmartDHCP,
+		"pool_start", poolStart,
+		"pool_end", poolEnd)
+
 	// Create internal DHCP server with options
 	var dhcpServer *dhcp.Server
 	if enableSmartDHCP && poolStart != "" && poolEnd != "" {
+		slog.Info("Enabling Smart DHCP with device-based IP allocation",
+			"pool_range", poolStart+"-"+poolEnd)
 		dhcpServer = dhcp.NewServer(config, dhcp.WithSmartDHCP(poolStart, poolEnd))
 	} else {
+		slog.Warn("Smart DHCP disabled, using standard DHCP",
+			"enable_smart_dhcp", enableSmartDHCP,
+			"pool_start", poolStart,
+			"pool_end", poolEnd)
 		dhcpServer = dhcp.NewServer(config)
 	}
 
 	// Open WinDivert handle for DHCP packets
+	slog.Info("Creating WinDivert handle for DHCP packets",
+		"filter", DHCPFilter)
 	handle, err := NewHandle(DHCPFilter)
 	if err != nil {
+		slog.Error("Failed to create WinDivert handle",
+			"filter", DHCPFilter,
+			"err", err)
 		return nil, fmt.Errorf("create windivert handle: %w", err)
 	}
+
+	slog.Info("WinDivert handle created successfully",
+		"filter", DHCPFilter)
 
 	s := &DHCPServer{
 		config:      config,
@@ -67,13 +100,40 @@ func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableS
 		// lastRequest is sync.Map, no initialization needed
 	}
 
+	slog.Info("WinDivert DHCP server instance created",
+		"server_ip", config.ServerIP.String(),
+		"local_mac", localMAC.String())
+
 	return s, nil
 }
 
 // Start starts the DHCP server
 func (s *DHCPServer) Start() error {
+	slog.Info("========== WinDivert DHCP Server Starting ==========",
+		"filter", DHCPFilter,
+		"network", s.config.Network.String(),
+		"pool_range", s.config.FirstIP.String()+"-"+s.config.LastIP.String(),
+		"server_ip", s.config.ServerIP.String(),
+		"server_mac", s.localMAC.String(),
+		"dns_servers", s.config.DNSServers,
+		"lease_duration", s.config.LeaseDuration,
+		"smart_dhcp_enabled", s.server != nil)
+
+	// Log pool details
+	poolStartInt := ipInt(s.config.FirstIP)
+	poolEndInt := ipInt(s.config.LastIP)
+	poolSize := poolEndInt - poolStartInt + 1
+	slog.Info("DHCP pool details",
+		"pool_start", s.config.FirstIP.String(),
+		"pool_end", s.config.LastIP.String(),
+		"pool_size", poolSize,
+		"reserved_ips", 1) // Gateway IP is reserved
+
 	s.wg.Add(1)
 	go s.packetLoop()
+
+	slog.Info("WinDivert DHCP server started successfully",
+		"goroutine_started", true)
 
 	return nil
 }
@@ -114,13 +174,20 @@ func (s *DHCPServer) packetLoop() {
 	errorCount := 0
 	const maxErrors = 10
 	packetCount := 0
+	dhcpPacketCount := 0
 	queueCheckTicker := time.NewTicker(QueueCheckInterval)
 	defer queueCheckTicker.Stop()
+
+	slog.Info("WinDivert packet loop started",
+		"filter", DHCPFilter,
+		"queue_check_interval", QueueCheckInterval)
 
 	for {
 		select {
 		case <-s.stopChan:
-			slog.Info("WinDivert packet loop stopped", "total_packets", packetCount)
+			slog.Info("WinDivert packet loop stopped",
+				"total_packets", packetCount,
+				"dhcp_packets", dhcpPacketCount)
 			return
 		case <-queueCheckTicker.C:
 			// Monitor WinDivert queue to detect overflow early
@@ -129,6 +196,10 @@ func (s *DHCPServer) packetLoop() {
 				slog.Warn("WinDivert queue length high",
 					"queue_length", stats.QueueLength,
 					"threshold", QueueOverflowThreshold,
+					"overflowed", stats.Overflowed)
+			} else {
+				slog.Debug("WinDivert queue stats",
+					"queue_length", stats.QueueLength,
 					"overflowed", stats.Overflowed)
 			}
 		default:
@@ -143,7 +214,10 @@ func (s *DHCPServer) packetLoop() {
 
 				// Check for fatal errors
 				if errorCount >= maxErrors {
-					slog.Error("WinDivert: too many consecutive errors, stopping", "count", errorCount)
+					slog.Error("WinDivert: too many consecutive errors, stopping",
+						"count", errorCount,
+						"total_packets", packetCount,
+						"dhcp_packets", dhcpPacketCount)
 					return
 				}
 
@@ -166,27 +240,56 @@ func (s *DHCPServer) packetLoop() {
 			packetCount++
 
 			// Process DHCP packets
-			s.processPacket(packet)
+			s.processPacket(packet, &dhcpPacketCount)
 		}
 	}
 }
 
 // processPacket processes a single DHCP packet
-func (s *DHCPServer) processPacket(packet *Packet) {
+func (s *DHCPServer) processPacket(packet *Packet, dhcpPacketCount *int) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("processPacket panic", "recover", r, "mac", getPacketMAC(packet))
+			slog.Error("processPacket panic",
+				"recover", r,
+				"mac", getPacketMAC(packet),
+				"srcIP", packet.SrcIP,
+				"dstIP", packet.DstIP)
 		}
 	}()
+
+	// Log DHCP packets for debugging
+	slog.Debug("WinDivert received packet",
+		"srcPort", packet.SrcPort,
+		"dstPort", packet.DstPort,
+		"mac", getPacketMAC(packet),
+		"srcIP", packet.SrcIP.String(),
+		"dstIP", packet.DstIP.String(),
+		"raw_len", len(packet.Raw))
 
 	// Check if this is a DHCP request from client (srcPort=68, dstPort=67)
 	if packet.SrcPort != 68 || packet.DstPort != 67 {
 		// Not a DHCP request from client, reinject
 		if err := s.handle.Send(packet); err != nil {
-			slog.Debug("WinDivert send error (non-DHCP)", "err", err)
+			slog.Debug("WinDivert send error (non-DHCP)",
+				"err", err,
+				"srcPort", packet.SrcPort,
+				"dstPort", packet.DstPort)
 		}
 		return
 	}
+
+	// Increment DHCP packet counter
+	*dhcpPacketCount++
+
+	// Log DHCP request
+	slog.Info("========== WinDivert DHCP request received ==========",
+		"mac", getPacketMAC(packet),
+		"srcIP", packet.SrcIP.String(),
+		"dstIP", packet.DstIP.String(),
+		"srcPort", packet.SrcPort,
+		"dstPort", packet.DstPort,
+		"raw_len", len(packet.Raw),
+		"total_dhcp_packets", *dhcpPacketCount)
 
 	// Extract DHCP payload (skip IP and UDP headers)
 	// In network layer, packet starts from IP header
@@ -195,7 +298,11 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	dhcpStart := ipHeaderLen + udpHeaderLen
 
 	if len(packet.Raw) <= dhcpStart {
-		slog.Debug("DHCP packet too short", "len", len(packet.Raw))
+		slog.Warn("DHCP packet too short",
+			"len", len(packet.Raw),
+			"dhcpStart", dhcpStart,
+			"ipHeaderLen", ipHeaderLen,
+			"udpHeaderLen", udpHeaderLen)
 		s.handle.Send(packet)
 		return
 	}
@@ -205,30 +312,38 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	// Extract client MAC from DHCP payload
 	clientMAC := GetClientMAC(dhcpData)
 	if clientMAC == nil {
+		slog.Warn("Failed to extract client MAC from DHCP payload, using packet MAC",
+			"packet_mac", packet.SrcMAC.String())
 		clientMAC = packet.SrcMAC // Fallback
 	}
 
-	// Log DHCP request
-	slog.Info("DHCP request received",
+	// Log DHCP request details
+	slog.Info("DHCP request details",
 		"mac", clientMAC.String(),
 		"srcIP", packet.SrcIP.String(),
-		"dstIP", packet.DstIP.String())
+		"dstIP", packet.DstIP.String(),
+		"dhcp_payload_len", len(dhcpData))
 
 	// Rate limiting: prevent DHCP flood (max 1 request per 500ms per MAC)
 	// Optimized with sync.Map for lock-free reads in hot path
 	macStr := clientMAC.String()
 	now := time.Now().UnixNano()
-	
+
 	// Fast path: check with Load (lock-free)
 	if lastTimeVal, exists := s.lastRequest.Load(macStr); exists {
 		lastTime := lastTimeVal.(int64)
 		if now-lastTime < (500 * time.Millisecond).Nanoseconds() {
+			slog.Warn("DHCP request rate limited",
+				"mac", macStr,
+				"last_request_ns", lastTime,
+				"now_ns", now,
+				"delta_ns", now-lastTime)
 			// Rate limited - reinject packet
 			s.handle.Send(packet)
 			return
 		}
 	}
-	
+
 	// Store new timestamp
 	s.lastRequest.Store(macStr, now)
 
@@ -237,29 +352,47 @@ func (s *DHCPServer) processPacket(packet *Packet) {
 	if len(dhcpData) >= 12 {
 		flags := uint16(dhcpData[10])<<8 | uint16(dhcpData[11])
 		broadcastFlag = (flags & 0x8000) != 0
+		slog.Debug("DHCP broadcast flag",
+			"flags", flags,
+			"broadcast", broadcastFlag)
 	}
 
 	// Handle DHCP request
+	slog.Info("Calling DHCP server HandleRequest",
+		"mac", clientMAC.String(),
+		"dhcp_payload_len", len(dhcpData))
 	responseData, err := s.server.HandleRequest(dhcpData)
 	if err != nil {
-		slog.Error("DHCP handle error", "err", err, "mac", clientMAC.String())
+		slog.Error("DHCP handle error",
+			"err", err,
+			"mac", clientMAC.String(),
+			"response_data", responseData != nil)
 		s.handle.Send(packet)
 		return
 	}
 
 	if responseData == nil {
+		slog.Warn("DHCP server returned nil response",
+			"mac", clientMAC.String())
 		s.handle.Send(packet)
 		return
 	}
 
+	slog.Info("DHCP response generated successfully",
+		"mac", clientMAC.String(),
+		"response_len", len(responseData))
+
 	// Build and send response with Ethernet header
 	err = s.sendDHCPResponseWithMAC(clientMAC, packet, responseData, broadcastFlag)
 	if err != nil {
-		slog.Error("DHCP send error", "err", err, "mac", clientMAC.String())
+		slog.Error("DHCP send error",
+			"err", err,
+			"mac", clientMAC.String())
 	} else {
-		slog.Info("DHCP response sent",
+		slog.Info("========== DHCP response sent successfully ==========",
 			"mac", clientMAC.String(),
-			"broadcast", broadcastFlag)
+			"broadcast", broadcastFlag,
+			"response_len", len(responseData))
 	}
 }
 
@@ -281,6 +414,10 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	dstIP := net.IPv4(255, 255, 255, 255) // Default broadcast
 	dstMAC := broadcastMAC                 // Default broadcast MAC
 
+	slog.Debug("DHCP response: determining destination",
+		"clientMAC", clientMAC.String(),
+		"broadcastFlag", broadcastFlag)
+
 	// Check DHCP message type and client IP
 	// DHCP message starts at dhcpData[0]
 	// YourIP (yiaddr) is at offset 16-19 in DHCP message
@@ -289,19 +426,36 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 		clientIP := net.IP(dhcpData[12:16]).To4()
 		yourIP := net.IP(dhcpData[16:20]).To4()
 
+		slog.Debug("DHCP response: IP addresses from DHCP message",
+			"clientIP", clientIP.String(),
+			"yourIP", yourIP.String())
+
 		// If client already has an IP (ciaddr != 0), use unicast
 		if !clientIP.Equal(net.IPv4zero) {
 			dstIP = clientIP
 			dstMAC = clientMAC // Use client's MAC from DHCP payload
+			slog.Debug("DHCP response: Using unicast (client has IP)",
+				"dstIP", dstIP.String(),
+				"dstMAC", dstMAC.String())
 		} else if broadcastFlag {
 			// Client explicitly requested broadcast response
 			dstIP = net.IPv4(255, 255, 255, 255)
 			dstMAC = broadcastMAC
+			slog.Debug("DHCP response: Using broadcast (flag set)",
+				"dstIP", dstIP.String(),
+				"dstMAC", dstMAC.String())
 		} else if !yourIP.Equal(net.IPv4zero) {
 			// For OFFER/ACK to clients without IP and no broadcast flag
 			// Use unicast to client MAC - critical for PS4 and other devices
 			dstIP = yourIP
 			dstMAC = clientMAC // Use client's MAC from DHCP payload
+			slog.Debug("DHCP response: Using unicast (yourIP set)",
+				"dstIP", dstIP.String(),
+				"dstMAC", dstMAC.String())
+		} else {
+			slog.Debug("DHCP response: Using broadcast (fallback)",
+				"dstIP", dstIP.String(),
+				"dstMAC", dstMAC.String())
 		}
 	}
 
@@ -311,11 +465,18 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	var responsePacket []byte
 	var err error
 
-	// Always build full Ethernet+IP+UDP+DHCP packet
-	// WinDivert in network mode can still send Ethernet frames
-	responsePacket, err = buildEthernetIPUDPPacket(
-		dstMAC,        // Destination MAC (client)
-		s.localMAC,    // Source MAC (server)
+	slog.Debug("Building DHCP response packet",
+		"dstMAC", dstMAC.String(),
+		"srcMAC", s.localMAC.String(),
+		"srcIP", s.localIP.String(),
+		"dstIP", dstIP.String(),
+		"srcPort", 67,
+		"dstPort", 68,
+		"dhcpPayloadLen", len(dhcpData))
+
+	// Build IP+UDP+DHCP packet (NO Ethernet header) for network layer mode
+	// WinDivert in network layer expects IP packets without Ethernet framing
+	responsePacket, err = buildIPUDPPacket(
 		s.localIP,     // Source IP (server)
 		dstIP,         // Destination IP (client or broadcast)
 		67,            // Source port (DHCP server)
@@ -324,21 +485,36 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	)
 
 	if err != nil {
+		slog.Error("Failed to build DHCP response packet",
+			"err", err,
+			"clientMAC", clientMAC.String())
 		return fmt.Errorf("build DHCP response: %w", err)
 	}
 
+	slog.Debug("DHCP response packet built successfully",
+		"packetLen", len(responsePacket),
+		"dstIP", dstIP.String(),
+		"mode", "network_layer_ip_only")
+
 	// Create WinDivert packet for response
-	// Use inbound direction to send back to the local network
-	// In packet layer, we need to set the correct interface indices
+	// Use outbound direction (Data: 0) to send from local system to network
+	// This ensures the packet is sent out to the client
 	godivertPacket := &godivert.Packet{
 		Raw: responsePacket,
 		Addr: &godivert.WinDivertAddress{
 			IfIdx:    request.Addr.IfIdx,
 			SubIfIdx: request.Addr.SubIfIdx,
-			Data:     1, // 1 = inbound (send to local network)
+			Data:     0, // 0 = outbound (send from system to network)
 		},
 		PacketLen: uint(len(responsePacket)),
 	}
+
+	slog.Debug("Sending DHCP response via WinDivert",
+		"ifIdx", request.Addr.IfIdx,
+		"subIfIdx", request.Addr.SubIfIdx,
+		"data", 0,
+		"direction", "outbound",
+		"packetLen", len(responsePacket))
 
 	// Send the response
 	s.handle.mu.Lock()
@@ -346,13 +522,20 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	s.handle.mu.Unlock()
 
 	if err != nil {
+		slog.Error("Failed to send DHCP response",
+			"err", err,
+			"clientMAC", clientMAC.String(),
+			"dstIP", dstIP.String(),
+			"dstMAC", dstMAC.String())
 		return fmt.Errorf("send DHCP response: %w", err)
 	}
 
-	slog.Info("DHCP response sent",
+	slog.Info("DHCP response sent successfully",
 		"mac", clientMAC.String(),
 		"dstIP", dstIP.String(),
-		"broadcast", broadcastFlag)
+		"dstMAC", dstMAC.String(),
+		"broadcast", broadcastFlag,
+		"packetLen", len(responsePacket))
 
 	return nil
 }

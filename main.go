@@ -20,7 +20,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -75,6 +77,113 @@ const (
 
 // asyncHandler holds the async logger for graceful shutdown
 var asyncHandler *asynclogger.AsyncHandler
+
+// multiHandler wraps multiple slog handlers
+type multiHandler struct {
+	handlers []slog.Handler
+}
+
+func newMultiHandler(handlers ...slog.Handler) *multiHandler {
+	return &multiHandler{handlers: handlers}
+}
+
+func (h *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, handler := range h.handlers {
+		if handler.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *multiHandler) Handle(ctx context.Context, record slog.Record) error {
+	for _, handler := range h.handlers {
+		if err := handler.Handle(ctx, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	handlers := make([]slog.Handler, len(h.handlers))
+	for i, handler := range h.handlers {
+		handlers[i] = handler.WithAttrs(attrs)
+	}
+	return &multiHandler{handlers: handlers}
+}
+
+func (h *multiHandler) WithGroup(name string) slog.Handler {
+	handlers := make([]slog.Handler, len(h.handlers))
+	for i, handler := range h.handlers {
+		handlers[i] = handler.WithGroup(name)
+	}
+	return &multiHandler{handlers: handlers}
+}
+
+// logStream holds recent log entries for streaming
+var logStream = struct {
+	mu       sync.RWMutex
+	entries  []string
+	maxSize  int
+	listeners map[chan string]bool
+}{
+	maxSize: 1000,
+	entries: make([]string, 0, 1000),
+	listeners: make(map[chan string]bool),
+}
+
+// streamLogHandler wraps slog handler to also stream logs
+type streamLogHandler struct {
+	handler slog.Handler
+}
+
+func (h *streamLogHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.handler.Enabled(ctx, level)
+}
+
+func (h *streamLogHandler) Handle(ctx context.Context, record slog.Record) error {
+	// Format log entry
+	var buf strings.Builder
+	buf.WriteString(record.Time.Format(time.RFC3339))
+	buf.WriteString(" ")
+	buf.WriteString(record.Level.String())
+	buf.WriteString(" ")
+	buf.WriteString(record.Message)
+	record.Attrs(func(a slog.Attr) bool {
+		buf.WriteString(" ")
+		buf.WriteString(a.Key)
+		buf.WriteString("=")
+		buf.WriteString(a.Value.String())
+		return true
+	})
+	
+	// Add to stream
+	logStream.mu.Lock()
+	logStream.entries = append(logStream.entries, buf.String())
+	if len(logStream.entries) > logStream.maxSize {
+		logStream.entries = logStream.entries[1:]
+	}
+	// Notify listeners
+	for ch := range logStream.listeners {
+		select {
+		case ch <- buf.String():
+		default:
+			// Channel full, skip
+		}
+	}
+	logStream.mu.Unlock()
+	
+	return h.handler.Handle(ctx, record)
+}
+
+func (h *streamLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &streamLogHandler{handler: h.handler.WithAttrs(attrs)}
+}
+
+func (h *streamLogHandler) WithGroup(name string) slog.Handler {
+	return &streamLogHandler{handler: h.handler.WithGroup(name)}
+}
 
 // _apiServer is the global API server instance
 var _apiServer *api.Server
@@ -154,6 +263,36 @@ func restartAsAdmin() error {
 }
 
 func main() {
+	// Recover from panics and log stack trace
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			slog.Error("PANIC recovered", "recover", r, "stack", string(stack))
+			
+			// Write panic to file
+			panicFile, err := os.OpenFile("panic.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+			if err == nil {
+				fmt.Fprintf(panicFile, "=== PANIC at %s ===\nRecover: %v\n\nStack:\n%s\n\n",
+					time.Now().Format(time.RFC3339), r, string(stack))
+				panicFile.Close()
+			}
+			
+			// Wait 5 seconds and restart
+			slog.Info("Attempting automatic restart after panic...")
+			time.Sleep(5 * time.Second)
+			
+			// Restart self
+			executable, _ := os.Executable()
+			cmd := exec.Command(executable, os.Args[1:]...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Start(); err != nil {
+				slog.Error("Failed to restart after panic", "err", err)
+			} else {
+				os.Exit(0)
+			}
+		}
+	}()
 	// Check for commands that don't require admin
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -287,7 +426,22 @@ func main() {
 
 	// Use async handler for better performance
 	syncHandler := slog.NewTextHandler(os.Stdout, opts)
-	asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
+	
+	// Also log to file for debugging
+	logFile, err := os.OpenFile("go-pcap2socks.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		slog.Warn("Failed to open log file", "err", err)
+	} else {
+		fileHandler := slog.NewTextHandler(logFile, opts)
+		multiHandler := newMultiHandler(syncHandler, fileHandler)
+		streamHandler := &streamLogHandler{handler: multiHandler}
+		asyncHandler = asynclogger.NewAsyncHandler(streamHandler)
+	}
+	
+	if asyncHandler == nil {
+		syncHandler := slog.NewTextHandler(os.Stdout, opts)
+		asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
+	}
 	slog.SetDefault(slog.New(asyncHandler))
 
 	// Flush logs on exit to ensure all logs are written
@@ -546,9 +700,51 @@ func main() {
 		})
 	}
 
-	err = run(config, localizer)
-	if err != nil {
+	// Run with auto-retry on network adapter errors
+	maxRetries := 3
+	retryDelay := 5 * time.Second
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = run(config, localizer)
+		if err == nil {
+			break // Success
+		}
+
+		// Check if it's a network adapter error that can be recovered
+		errStr := err.Error()
+		if strings.Contains(errStr, "network adapter disconnected") ||
+			strings.Contains(errStr, "PacketSendPacket failed") ||
+			strings.Contains(errStr, "сетевой носитель отключен") {
+			
+			if attempt < maxRetries {
+				slog.Warn("Network adapter error detected, attempting recovery...",
+					"attempt", attempt, "max_retries", maxRetries, "retry_delay", retryDelay)
+				
+				// Wait before retry
+				time.Sleep(retryDelay)
+				
+				// Try to reconfigure network interfaces
+				slog.Info("Attempting to reconfigure network interfaces...")
+				if err := reconfigureNetworkInterfaces(); err != nil {
+					slog.Warn("Network reconfiguration failed", "err", err)
+				}
+				
+				// Check if interface is now available
+				if _, err := findInterface("", localizer); err == nil {
+					slog.Info("Network interface recovered, restarting...")
+					continue
+				}
+				
+				// Interface still not available - wait longer
+				slog.Info("Interface not found, waiting 30 seconds for connection...")
+				time.Sleep(30 * time.Second)
+				continue
+			}
+		}
+
+		// Non-recoverable error or max retries reached
 		slog.Error("run error", slog.Any("err", err))
+		slog.Info("Application will exit in 10 seconds...")
+		time.Sleep(10 * time.Second)
 		return
 	}
 
@@ -790,6 +986,32 @@ func main() {
 
 	// Start API server in goroutine
 	goroutine.SafeGo(func() {
+		// Add log streaming endpoint
+		http.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
+			// Enable CORS
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			
+			// Return last N logs as JSON
+			limit := 100
+			if l := r.URL.Query().Get("limit"); l != "" {
+				if n, err := strconv.Atoi(l); err == nil && n > 0 {
+					limit = n
+				}
+			}
+			
+			logStream.mu.RLock()
+			start := len(logStream.entries) - limit
+			if start < 0 {
+				start = 0
+			}
+			entries := logStream.entries[start:]
+			logStream.mu.RUnlock()
+			
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string][]string{"logs": entries})
+		})
+		
 		// Setup HTTPS if configured
 		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
 			httpsCfg := config.API.HTTPS
@@ -935,7 +1157,36 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	// Find the interface first
 	ifce, err := findInterface(cfg.PCAP.InterfaceGateway, localizer)
 	if err != nil {
-		return err
+		// Try to recover by searching for any available interface
+		slog.Warn("Failed to find interface, attempting recovery...", "err", err)
+		ifce, err = findInterface("", localizer)
+		if err != nil {
+			// No interface available - wait for connection instead of exiting
+			slog.Warn("No network interface available, waiting for connection...")
+			slog.Info("Please connect PS4 via Ethernet cable or Wi-Fi hotspot")
+			
+			// Wait up to 60 seconds for interface to appear
+			for attempt := 0; attempt < 12; attempt++ {
+				time.Sleep(5 * time.Second)
+				slog.Info("Waiting for network interface...", "attempt", attempt+1, "max", 12)
+				
+				ifce, err = findInterface("", localizer)
+				if err == nil {
+					slog.Info("Network interface detected!", "name", ifce.Name)
+					break
+				}
+			}
+			
+			// Still no interface - return error gracefully
+			if err != nil {
+				slog.Error("No network interface available after waiting")
+				slog.Info("To fix this:")
+				slog.Info("  1. Connect Ethernet cable from PC to PS4")
+				slog.Info("  2. Or enable Windows Mobile Hotspot and connect PS4 via Wi-Fi")
+				slog.Info("  3. Then restart the application")
+				return fmt.Errorf("no network interface: %w", err)
+			}
+		}
 	}
 	slog.Info(msgs.UsingInterface, "interface", ifce.Name, "mac", ifce.HardwareAddr.String())
 
@@ -952,6 +1203,22 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	proxies, err := createProxies(cfg, cfg.DNS, ifce.Name, _statsStore, localizer)
 	if err != nil {
 		return err
+	}
+
+	// Гарантируем наличие дефолтного прокси для трафика без совпадения правил
+	// Это предотвращает ErrProxyNotFound для всего не-DNS трафика
+	if _, ok := proxies[""]; !ok {
+		if p, ok := proxies["direct"]; ok {
+			proxies[""] = p
+			slog.Info("Default proxy set to 'direct' for unmatched traffic")
+		} else if len(proxies) > 0 {
+			// Use first available proxy as default
+			for tag, p := range proxies {
+				proxies[""] = p
+				slog.Info("Default proxy set", "tag", tag)
+				break
+			}
+		}
 	}
 
 	// Create WAN balancer if enabled
@@ -1397,6 +1664,7 @@ func findInterface(cfgIfce string, localizer *i18n.Localizer) (net.Interface, er
 		return net.Interface{}, err
 	}
 
+	// First pass: find interface with matching IP
 	for _, iface := range ifaces {
 		addrs, err := iface.Addrs()
 		if err != nil {
@@ -1411,12 +1679,86 @@ func findInterface(cfgIfce string, localizer *i18n.Localizer) (net.Interface, er
 
 			ip4 := ipnet.IP.To4()
 			if ip4 != nil && bytes.Equal(ip4, targetIP.To4()) {
+				slog.Info("Found interface with matching IP", "name", iface.Name, "ip", ip4)
 				return iface, nil
 			}
 		}
 	}
 
+	// Second pass: find active Ethernet interface and auto-configure IP
+	slog.Info("Interface with target IP not found, searching for active Ethernet interface...", "target_ip", targetIP)
+	for _, iface := range ifaces {
+		if (iface.Name == "Ethernet" || strings.Contains(iface.Name, "Ethernet")) && iface.Flags&net.FlagUp != 0 {
+			slog.Info("Found active Ethernet interface, auto-configuring IP", "name", iface.Name, "target_ip", targetIP)
+			
+			// Try to configure IP automatically
+			if err := configureInterfaceIP(iface.Name, targetIP); err != nil {
+				slog.Warn("Failed to auto-configure IP", "interface", iface.Name, "ip", targetIP, "err", err)
+				continue
+			}
+			
+			slog.Info("Successfully configured IP on interface", "name", iface.Name, "ip", targetIP)
+			return iface, nil
+		}
+	}
+
+	// Third pass: find any active interface (excluding loopback and virtual)
+	slog.Info("Ethernet not found, searching for any active interface...")
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagLoopback == 0 && !strings.Contains(iface.Name, "Virtual") && !strings.Contains(iface.Name, "vEthernet") {
+			slog.Info("Found active interface (fallback)", "name", iface.Name)
+			return iface, nil
+		}
+	}
+
 	return net.Interface{}, fmt.Errorf(msgs.InterfaceNotFound, targetIP)
+}
+
+// configureInterfaceIP configures an IP address on a network interface using netsh
+func configureInterfaceIP(ifaceName string, ip net.IP) error {
+	cmd := exec.Command("netsh", "interface", "ip", "set", "address", "name="+ifaceName, "static", ip.String(), "255.255.255.0", "gateway="+ip.String())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("netsh command failed: %w, output: %s", err, string(output))
+	}
+	slog.Info("Interface IP configured", "interface", ifaceName, "ip", ip, "output", string(output))
+	return nil
+}
+
+// reconfigureNetworkInterfaces attempts to recover from network adapter errors
+func reconfigureNetworkInterfaces() error {
+	// Reset all interfaces with our target IP
+	targetIP := net.ParseIP("192.168.100.1")
+	
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+	
+	// Try to configure Ethernet interface
+	for _, iface := range ifaces {
+		if iface.Name == "Ethernet" || strings.Contains(iface.Name, "Ethernet") {
+			slog.Info("Attempting to configure Ethernet interface", "name", iface.Name)
+			if err := configureInterfaceIP(iface.Name, targetIP); err != nil {
+				slog.Warn("Failed to configure Ethernet", "name", iface.Name, "err", err)
+				continue
+			}
+			return nil
+		}
+	}
+	
+	// Fallback: try any active interface
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagLoopback == 0 {
+			slog.Info("Configuring fallback interface", "name", iface.Name)
+			if err := configureInterfaceIP(iface.Name, targetIP); err != nil {
+				continue
+			}
+			return nil
+		}
+	}
+	
+	return fmt.Errorf("no suitable interface found for IP configuration")
 }
 
 func parseNetworkConfig(pcapCfg cfg.PCAP, ifce net.Interface, localizer *i18n.Localizer) (*device.NetworkConfig, error) {
@@ -2202,6 +2544,32 @@ func autoConfigureAndStart() {
 
 	// Start API server in goroutine
 	goroutine.SafeGo(func() {
+		// Add log streaming endpoint
+		http.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
+			// Enable CORS
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			
+			// Return last N logs as JSON
+			limit := 100
+			if l := r.URL.Query().Get("limit"); l != "" {
+				if n, err := strconv.Atoi(l); err == nil && n > 0 {
+					limit = n
+				}
+			}
+			
+			logStream.mu.RLock()
+			start := len(logStream.entries) - limit
+			if start < 0 {
+				start = 0
+			}
+			entries := logStream.entries[start:]
+			logStream.mu.RUnlock()
+			
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string][]string{"logs": entries})
+		})
+		
 		// Setup HTTPS if configured
 		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
 			httpsCfg := config.API.HTTPS
@@ -2941,7 +3309,24 @@ func createWANBalancer(cfg *cfg.Config, proxies map[string]proxy.Proxy) (*wanbal
 
 // createDHCPServerIfNeeded creates DHCP server if enabled in configuration
 func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) (interface{}, error) {
+	dhcpNil := cfg.DHCP == nil
+	dhcpEnabled := false
+	poolStartStr := ""
+	poolEndStr := ""
+	if !dhcpNil {
+		dhcpEnabled = cfg.DHCP.Enabled
+		poolStartStr = cfg.DHCP.PoolStart
+		poolEndStr = cfg.DHCP.PoolEnd
+	}
+
+	slog.Info("createDHCPServerIfNeeded: checking DHCP config",
+		"dhcp_nil", dhcpNil,
+		"dhcp_enabled", dhcpEnabled,
+		"poolStart", poolStartStr,
+		"poolEnd", poolEndStr)
+
 	if cfg.DHCP == nil || !cfg.DHCP.Enabled {
+		slog.Info("DHCP disabled or nil, skipping")
 		return nil, nil
 	}
 
@@ -2972,7 +3357,14 @@ func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) 
 	// Create DHCP server (platform-specific implementation)
 	dhcpServerImpl, err := createDHCPServer(cfg, dhcpConfig, netConfig)
 	if err != nil {
+		slog.Error("Failed to create DHCP server", "err", err)
 		return nil, err
+	}
+
+	if dhcpServerImpl == nil {
+		slog.Warn("DHCP server is nil - DHCP will be disabled")
+	} else {
+		slog.Info("DHCP server created", "type", fmt.Sprintf("%T", dhcpServerImpl))
 	}
 
 	// Set global DHCP server

@@ -17,6 +17,8 @@ import (
 // createDHCPServer creates a DHCP server instance
 // Uses WinDivert if available, otherwise returns nil (DHCP disabled)
 func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig *device.NetworkConfig) (interface{}, error) {
+	slog.Info("Creating DHCP server...", "enabled", cfg.DHCP != nil && cfg.DHCP.Enabled, "pool", dhcpConfig.FirstIP, "-", dhcpConfig.LastIP)
+	
 	// Enable Smart DHCP for device-based IP allocation
 	enableSmartDHCP := true
 	poolStart := dhcpConfig.FirstIP.String()
@@ -29,10 +31,15 @@ func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig 
 	winDivertPath := filepath.Join(execDir, "WinDivert.dll")
 	if _, err := os.Stat(winDivertPath); err == nil {
 		winDivertAvailable = true
+		slog.Info("WinDivert.dll found", "path", winDivertPath)
 	} else {
+		slog.Warn("WinDivert.dll not found in executable directory", "dir", execDir)
 		// Also check current working directory
 		if _, err := os.Stat("WinDivert.dll"); err == nil {
 			winDivertAvailable = true
+			slog.Info("WinDivert.dll found in current directory")
+		} else {
+			slog.Warn("WinDivert.dll not found in current directory either")
 		}
 	}
 

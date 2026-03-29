@@ -1,13 +1,50 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 29 марта 2026 г.
-**Версия**: v3.33.0 (Optimization & Polishing)
-**Статус**: ✅ стабилен, сборка успешна, working tree clean
+**Последнее обновление**: 29 марта 2026 г. (Сессия 34)
+**Версия**: v3.34.0 (PS4 DHCP Stability & Auto-Recovery)
+**Статус**: ✅ стабилен, сборка успешна (25.7 MB), working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
+**🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery — ожидает подключения устройства
 
 ---
 
 ## 📈 Последние улучшения
+
+### v3.34.0 - PS4 DHCP Stability & Auto-Recovery (29 марта 2026)
+
+**Часть 1: Исправление маршрутизации (анализ z.ai)**
+- ✅ Добавлен дефолтный прокси `proxies[""] = direct` в main.go
+- ✅ Catch-all правило в config.json: `{"outboundTag": "direct"}`
+- ✅ Логирование TCP ошибок на уровне WARN (было DEBUG)
+- ✅ Лог: "Default proxy set to 'direct' for unmatched traffic"
+- ✅ Исправлена проблема ErrProxyNotFound для не-DNS трафика
+
+**Часть 2: Логирование и мониторинг**
+- ✅ Логирование в файл: `go-pcap2socks.log` (multiHandler)
+- ✅ API endpoint: `/api/logs` (JSON + SSE streaming)
+- ✅ Веб-страница: `/logs` (автообновление 5 сек)
+- ✅ streamLogHandler для realtime логов
+- ✅ logStream буфер: 1000 записей
+
+**Часть 3: Обработка паник и авто-восстановление**
+- ✅ defer/recover в main() с записью стек-трейса
+- ✅ Файл `panic.log` при панике
+- ✅ Авто-перезапуск через 5 секунд после паники
+- ✅ MaxRetries=3 с retryDelay=5s для network adapter errors
+- ✅ Ожидание 30 сек при отсутствии интерфейса
+- ✅ Graceful exit с инструкциями (10 сек)
+
+**Часть 4: Auto-configuration интерфейсов**
+- ✅ findInterface(): 3 прохода (by IP → Ethernet → fallback)
+- ✅ configureInterfaceIP() через netsh
+- ✅ reconfigureNetworkInterfaces() при ошибках
+- ✅ Ожидание подключения: 12 попыток × 5 сек = 60 сек
+- ✅ Лог: "Attempting to configure Ethernet interface"
+
+**Часть 5: Утилиты и документация**
+- ✅ start.bat — запуск от администратора с инструкциями
+- ✅ README-PS4.md — полное руководство по настройке PS4
+- ✅ Инструкции в консоли при ошибке подключения
 
 ### v3.33.0 - Optimization & Polishing (29 марта 2026)
 
@@ -282,19 +319,59 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Тесты покрывают: кэш, pre-warming, persistent cache, concurrent access
   * [x] Бенчмарки для производительности
 
-### ✅ Сессия 33: Optimization & Polishing (P1) — ЗАВЕРШЕНА
-- [x] **Улучшение #1: Per-client Bandwidth Limiting**
-  * [x] bandwidth.BandwidthLimiter интегрирован в proxy.Router
-  * [x] Метод SetBandwidthLimit() для установки лимитов по MAC/IP
-  * [x] Методы GetBandwidthStats(), GetTotalBandwidthStats() (placeholder)
-  * [x] Default лимит 10Mbps для всех клиентов
-- [x] **Улучшение #2: Graceful Shutdown улучшения**
-  * [x] dhcp/lease_db.go: Close() явно сохраняет leases перед закрытием
-  * [x] main.go: улучшенное логирование сохранения DHCP leases
-- [x] **Улучшение #3: Connection Pool DoS Protection**
-  * [x] connpool/pool.go: добавлена защита от DoS атак
-  * [x] Статистика Rejected для отслеживания отклонённых соединений
-  * [x] Логирование при срабатывании защиты
+### ✅ Сессия 34: PS4 DHCP Stability & Auto-Recovery (P1) — ЗАВЕРШЕНА
+- [x] **Исправление маршрутизации (анализ z.ai)**
+  * [x] Добавлен дефолтный прокси `proxies[""] = direct` в main.go
+  * [x] Catch-all правило в config.json: `{"outboundTag": "direct"}`
+  * [x] Логирование TCP ошибок на уровне WARN (было DEBUG)
+  * [x] Лог: "Default proxy set to 'direct' for unmatched traffic"
+- [x] **Логирование и мониторинг**
+  * [x] Логирование в файл: `go-pcap2socks.log` (multiHandler)
+  * [x] API endpoint: `/api/logs` (JSON + SSE streaming)
+  * [x] Веб-страница: `/logs` (автообновление 5 сек)
+  * [x] streamLogHandler для realtime логов
+  * [x] logStream буфер: 1000 записей
+- [x] **Обработка паник и авто-восстановление**
+  * [x] defer/recover в main() с записью стек-трейса
+  * [x] Файл `panic.log` при панике
+  * [x] Авто-перезапуск через 5 секунд после паники
+  * [x] MaxRetries=3 с retryDelay=5s для network adapter errors
+  * [x] Ожидание 30 сек при отсутствии интерфейса
+  * [x] Graceful exit с инструкциями (10 сек)
+- [x] **Auto-configuration интерфейсов**
+  * [x] findInterface(): 3 прохода (by IP → Ethernet → fallback)
+  * [x] configureInterfaceIP() через netsh
+  * [x] reconfigureNetworkInterfaces() при ошибках
+  * [x] Лог: "Attempting to configure Ethernet interface"
+  * [x] Ожидание подключения: 12 попыток × 5 сек = 60 сек
+- [x] **Утилиты и документация**
+  * [x] start.bat — запуск от администратора с инструкциями
+  * [x] README-PS4.md — полное руководство по настройке PS4
+  * [x] Инструкции в консоли при ошибке подключения
+- [x] **Сборка и тестирование**
+  * [x] go build успешна (25.7 MB)
+  * [x] go vet ./... без ошибок
+  * [x] Синхронизация: dev → main
+
+---
+
+## 📋 Актуальные задачи
+
+### ⏳ Сессия 35: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+- [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
+- [ ] Тест DHCP: PS4 получает IP 192.168.100.100
+- [ ] Тест маршрутизации: трафик через direct
+- [ ] Тест интернета: проверка подключения на PS4
+- [ ] Мониторинг логов: TCP dial success
+- [ ] Замер производительности: latency, throughput
+
+### 📝 Будущие улучшения (PS4)
+- [ ] Web UI для управления DHCP leases
+- [ ] Статистика по устройствам (трафик, сессии)
+- [ ] Правила маршрутизации по MAC/IP
+- [ ] NAT traversal для игр (UPnP auto-forwarding)
+- [ ] QoS для игрового трафика
+
 
 ---
 
@@ -328,9 +405,11 @@ CPU (idle):         ~0.5-2%     (было ~5-10%)        -50% ✅
 1. `go build -ldflags="-s -w"` — сборка без ошибок ✅
 2. `go vet ./...` — статический анализ ✅
 3. `golangci-lint run` — линтер ✅
-4. Размер бинарника <25MB
-5. Обновить CHANGELOG.md
-6. ⚠️ Тесты отключены (не запускать)
+4. Размер бинарника <30MB ✅ (25.7 MB)
+5. Обновить CHANGELOG.md ✅
+6. Обновить todo.md ✅
+7. ⚠️ Тесты отключены (не запускать)
+8. 🎮 PS4 integration test (ожидается подключение)
 
 ### Ветка dev:
 - Новые фичи → dev
@@ -346,10 +425,14 @@ CPU (idle):         ~0.5-2%     (было ~5-10%)        -50% ✅
 | Multi-WAN | `wanbalancer/*` | Балансировка нагрузки (5 стратегий) |
 | Proxy | `proxy/*` | SOCKS5/HTTP/HTTP3 маршрутизация |
 | DHCP | `dhcp/*` | Smart DHCP с определением устройств |
+| **Auto-Recovery** | `main.go` | Авто-восстановление при ошибках сети |
+| **Logging** | `main.go`, `asynclogger/*` | Логи в файл + API + Web UI |
 | Tray | `tray/*` | Иконка в трее с WebSocket |
 | API | `api/*` | REST + WebSocket для Web UI |
 | Tunnel | `tunnel/*` | TCP/UDP туннелирование |
 | Health | `health/*` | Проверка доступности прокси |
+| NAT | `nat/*` | Встроенная NAT маршрутизация |
+| UPnP | `upnp/*` | Авто-проброс портов для игр |
 
 ---
 

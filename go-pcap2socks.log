@@ -1,0 +1,483 @@
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Config loaded" file=config.json
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Config validation passed"
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Config hot reload enabled" file=config.json
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Starting ARP monitor" network=192.168.100.0/24
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="ARP monitor started" network=192.168.100.0/24
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Hotkey registered" name="Toggle Proxy" id=1
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Hotkey registered" name="Restart Service" id=2
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Hotkey registered" name="Stop Service" id=3
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Hotkey registered" name="Toggle Logs" id=4
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Hotkeys initialized"
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="DNS resolver worker pool started" workers=4
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="Profile manager initialized (parallel)"
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="DNS cache pre-warming started" domains=5
+time=2026-03-29T21:03:26.906+03:00 level=INFO msg="DNS cache pre-warming completed"
+time=2026-03-29T21:03:38.910+03:00 level=WARN msg="UPnP manager start failed" err="no UPnP devices found: %!w(<nil>)"
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="DNS resolver initialized (parallel)"
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="Parallel initialization completed" duration_ms=12004
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="Component initialization completed" duration_ms=12004
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="DNS prefetch started"
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="DNS resolver ready" auto_bench=true cache_size=1024
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="Health checker started" interval=10s recovery_threshold=3 probes=0
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="Health checker: DNS probe added" dns_server=8.8.8.8:53
+time=2026-03-29T21:03:38.911+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:03:39.430+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=483
+time=2026-03-29T21:03:39.889+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=458
+time=2026-03-29T21:03:40.353+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:03:40.353+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:03:40.383+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=494
+time=2026-03-29T21:03:40.383+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=3 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:03:40.383+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:03:40.383+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:03:40.798+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:03:40.911+03:00 level=INFO msg="Starting DNS benchmark..."
+time=2026-03-29T21:03:41.037+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:03:41.037+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:03:41.082+03:00 level=INFO msg="DNS benchmark result" rank=1 server=1.1.1.1:53 protocol=udp latency=9.0484ms status=FAIL
+time=2026-03-29T21:03:41.082+03:00 level=INFO msg="DNS benchmark result" rank=2 server=8.8.8.8:53 protocol=udp latency=23.8874ms status=FAIL
+time=2026-03-29T21:03:41.082+03:00 level=INFO msg="DNS benchmark result" rank=3 server=https://dns.google.com/dns-query protocol=doh latency=116.2571ms status=FAIL
+time=2026-03-29T21:03:41.082+03:00 level=INFO msg="DNS benchmark result" rank=4 server=https://cloudflare-dns.com/dns-query protocol=doh latency=170.5803ms status=FAIL
+time=2026-03-29T21:03:41.082+03:00 level=INFO msg="DNS benchmark completed" best_servers=0
+time=2026-03-29T21:03:41.121+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:03:41.121+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:03:41.121+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:03:41.121+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:03:41.129+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:920 open:true}"
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:03:41.131+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:03:41.168+03:00 level=WARN msg="Network adapter error detected, attempting recovery..." attempt=1 max_retries=3 retry_delay=5s
+time=2026-03-29T21:03:45.787+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=402
+time=2026-03-29T21:03:45.787+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=4 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:03:45.787+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:03:45.787+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:03:46.169+03:00 level=INFO msg="Attempting to reconfigure network interfaces..."
+time=2026-03-29T21:03:46.173+03:00 level=INFO msg="Attempting to configure Ethernet interface" name=Ethernet
+time=2026-03-29T21:03:46.285+03:00 level=INFO msg="Interface IP configured" interface=Ethernet ip=192.168.100.1 output="\r\n"
+time=2026-03-29T21:03:46.285+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:03:47.388+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:03:47.388+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:03:47.412+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:03:47.641+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:03:47.641+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:03:47.718+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:03:47.718+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:03:47.718+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:03:47.718+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:03:47.725+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:1776 open:true}"
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:03:47.727+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:03:47.756+03:00 level=WARN msg="Network adapter error detected, attempting recovery..." attempt=2 max_retries=3 retry_delay=5s
+time=2026-03-29T21:03:51.228+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=440
+time=2026-03-29T21:03:51.228+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=5 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:03:51.228+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:03:51.228+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:03:52.757+03:00 level=INFO msg="Attempting to reconfigure network interfaces..."
+time=2026-03-29T21:03:52.761+03:00 level=INFO msg="Attempting to configure Ethernet interface" name=Ethernet
+time=2026-03-29T21:03:52.884+03:00 level=INFO msg="Interface IP configured" interface=Ethernet ip=192.168.100.1 output="\r\n"
+time=2026-03-29T21:03:52.884+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:03:53.983+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:03:53.983+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:03:54.005+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:03:54.243+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:03:54.243+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:03:54.322+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:03:54.322+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:03:54.322+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:03:54.322+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:03:54.329+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:1856 open:true}"
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:03:54.331+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:03:54.360+03:00 level=ERROR msg="run error" err="network adapter disconnected: check if the network cable is plugged in and the interface is enabled (interface: Ethernet, IP: 192.168.100.1). Error: send error: PacketSendPacket failed: \xce\xf8\xe8\xe1\xea\xe0 \xee\xef\xe5\xf0\xe0\xf6\xe8\xe8 \xe2\xe2\xee\xe4\xe0-\xe2\xfb\xe2\xee\xe4\xe0, \xf2\xe0\xea \xea\xe0\xea \xf1\xe5\xf2\xe5\xe2\xee\xe9 \xed\xee\xf1\xe8\xf2\xe5\xeb\xfc \xee\xf2\xea\xeb\xfe\xf7\xe5\xed \xe8\xeb\xe8 \xf2\xee\xf7\xea\xe0 \xe1\xe5\xf1\xef\xf0\xee\xe2\xee\xe4\xed\xee\xe3\xee \xe4\xee\xf1\xf2\xf3\xef\xe0 \xed\xe0\xf5\xee\xe4\xe8\xf2\xf1\xff \xe7\xe0 \xef\xf0\xe5\xe4\xe5\xeb\xe0\xec (2150891551)"
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Config loaded" file=config.json
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Config validation passed"
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Config hot reload enabled" file=config.json
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Starting ARP monitor" network=192.168.100.0/24
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="ARP monitor started" network=192.168.100.0/24
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Hotkey registered" name="Toggle Proxy" id=1
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Hotkey registered" name="Restart Service" id=2
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Hotkey registered" name="Stop Service" id=3
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Hotkey registered" name="Toggle Logs" id=4
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Hotkeys initialized"
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="DNS resolver worker pool started" workers=4
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="Profile manager initialized (parallel)"
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="DNS cache pre-warming started" domains=5
+time=2026-03-29T21:11:45.006+03:00 level=INFO msg="DNS cache pre-warming completed"
+time=2026-03-29T21:11:57.012+03:00 level=WARN msg="UPnP manager start failed" err="no UPnP devices found: %!w(<nil>)"
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="DNS resolver initialized (parallel)"
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="Parallel initialization completed" duration_ms=12005
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="Component initialization completed" duration_ms=12005
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="DNS prefetch started"
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="DNS resolver ready" auto_bench=true cache_size=1024
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="Health checker started" interval=10s recovery_threshold=3 probes=0
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="Health checker: DNS probe added" dns_server=8.8.8.8:53
+time=2026-03-29T21:11:57.012+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:11:57.518+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=468
+time=2026-03-29T21:11:57.961+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=442
+time=2026-03-29T21:11:58.227+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=265
+time=2026-03-29T21:11:58.227+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=3 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:11:58.227+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:11:58.227+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:11:58.720+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:11:58.720+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:11:58.744+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:11:58.987+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:11:58.988+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:11:59.013+03:00 level=INFO msg="Starting DNS benchmark..."
+time=2026-03-29T21:11:59.067+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:11:59.067+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:11:59.067+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:11:59.067+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Default proxy set to 'direct' for unmatched traffic"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:11:59.074+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:1872 open:true}"
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:11:59.078+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:11:59.112+03:00 level=WARN msg="Network adapter error detected, attempting recovery..." attempt=1 max_retries=3 retry_delay=5s
+time=2026-03-29T21:11:59.254+03:00 level=INFO msg="DNS benchmark result" rank=1 server=1.1.1.1:53 protocol=udp latency=16.7808ms status=FAIL
+time=2026-03-29T21:11:59.254+03:00 level=INFO msg="DNS benchmark result" rank=2 server=8.8.8.8:53 protocol=udp latency=34.0422ms status=FAIL
+time=2026-03-29T21:11:59.254+03:00 level=INFO msg="DNS benchmark result" rank=3 server=https://cloudflare-dns.com/dns-query protocol=doh latency=195.6599ms status=FAIL
+time=2026-03-29T21:11:59.254+03:00 level=INFO msg="DNS benchmark result" rank=4 server=https://dns.google.com/dns-query protocol=doh latency=241.6184ms status=FAIL
+time=2026-03-29T21:11:59.254+03:00 level=INFO msg="DNS benchmark completed" best_servers=0
+time=2026-03-29T21:12:03.685+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=458
+time=2026-03-29T21:12:03.685+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=4 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:12:03.685+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:12:03.685+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:12:04.113+03:00 level=INFO msg="Attempting to reconfigure network interfaces..."
+time=2026-03-29T21:12:04.116+03:00 level=INFO msg="Attempting to configure Ethernet interface" name=Ethernet
+time=2026-03-29T21:12:04.221+03:00 level=INFO msg="Interface IP configured" interface=Ethernet ip=192.168.100.1 output="\r\n"
+time=2026-03-29T21:12:04.221+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:12:05.326+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:12:05.327+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:12:05.349+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:12:05.583+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:12:05.583+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:12:05.657+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:12:05.658+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:12:05.658+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:12:05.658+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Default proxy set to 'direct' for unmatched traffic"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:12:05.664+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:1984 open:true}"
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:12:05.667+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:12:05.695+03:00 level=WARN msg="Network adapter error detected, attempting recovery..." attempt=2 max_retries=3 retry_delay=5s
+time=2026-03-29T21:12:08.961+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=275
+time=2026-03-29T21:12:08.961+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=5 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:12:08.961+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:12:08.961+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:12:10.695+03:00 level=INFO msg="Attempting to reconfigure network interfaces..."
+time=2026-03-29T21:12:10.699+03:00 level=INFO msg="Attempting to configure Ethernet interface" name=Ethernet
+time=2026-03-29T21:12:10.836+03:00 level=INFO msg="Interface IP configured" interface=Ethernet ip=192.168.100.1 output="\r\n"
+time=2026-03-29T21:12:10.836+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:12:11.951+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:12:11.951+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:12:11.974+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:12:12.208+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:12:12.208+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:12:12.286+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:12:12.286+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:12:12.286+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:12:12.286+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Default proxy set to 'direct' for unmatched traffic"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:12:12.293+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:2064 open:true}"
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:12:12.296+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:12:12.324+03:00 level=ERROR msg="run error" err="network adapter disconnected: check if the network cable is plugged in and the interface is enabled (interface: Ethernet, IP: 192.168.100.1). Error: send error: PacketSendPacket failed: \xce\xf8\xe8\xe1\xea\xe0 \xee\xef\xe5\xf0\xe0\xf6\xe8\xe8 \xe2\xe2\xee\xe4\xe0-\xe2\xfb\xe2\xee\xe4\xe0, \xf2\xe0\xea \xea\xe0\xea \xf1\xe5\xf2\xe5\xe2\xee\xe9 \xed\xee\xf1\xe8\xf2\xe5\xeb\xfc \xee\xf2\xea\xeb\xfe\xf7\xe5\xed \xe8\xeb\xe8 \xf2\xee\xf7\xea\xe0 \xe1\xe5\xf1\xef\xf0\xee\xe2\xee\xe4\xed\xee\xe3\xee \xe4\xee\xf1\xf2\xf3\xef\xe0 \xed\xe0\xf5\xee\xe4\xe8\xf2\xf1\xff \xe7\xe0 \xef\xf0\xe5\xe4\xe5\xeb\xe0\xec (2150891551)"
+time=2026-03-29T21:12:55.172+03:00 level=INFO msg="Config loaded" file=config.json
+time=2026-03-29T21:12:55.172+03:00 level=INFO msg="Config validation passed"
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Config hot reload enabled" file=config.json
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Starting ARP monitor" network=192.168.100.0/24
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="ARP monitor started" network=192.168.100.0/24
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Hotkey registered" name="Toggle Proxy" id=1
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Hotkey registered" name="Restart Service" id=2
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Hotkey registered" name="Stop Service" id=3
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Hotkey registered" name="Toggle Logs" id=4
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Hotkeys initialized"
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="DNS resolver worker pool started" workers=4
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="Profile manager initialized (parallel)"
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="DNS cache pre-warming started" domains=5
+time=2026-03-29T21:12:55.173+03:00 level=INFO msg="DNS cache pre-warming completed"
+time=2026-03-29T21:13:07.177+03:00 level=WARN msg="UPnP manager start failed" err="no UPnP devices found: %!w(<nil>)"
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="DNS resolver initialized (parallel)"
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="Parallel initialization completed" duration_ms=12004
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="Component initialization completed" duration_ms=12004
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="DNS prefetch started"
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="DNS resolver ready" auto_bench=true cache_size=1024
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="Health checker started" interval=10s recovery_threshold=3 probes=0
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="Health checker: DNS probe added" dns_server=8.8.8.8:53
+time=2026-03-29T21:13:07.177+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:13:07.747+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=568
+time=2026-03-29T21:13:08.282+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=534
+time=2026-03-29T21:13:08.362+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:13:08.362+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:13:08.384+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:13:08.625+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:13:08.625+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:13:08.636+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=353
+time=2026-03-29T21:13:08.636+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=3 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:13:08.636+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:13:08.636+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:13:09.180+03:00 level=INFO msg="Starting DNS benchmark..."
+time=2026-03-29T21:13:09.200+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:13:09.200+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:13:09.200+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:13:09.200+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Default proxy set to 'direct' for unmatched traffic"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:13:09.209+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:1768 open:true}"
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:13:09.213+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:13:09.250+03:00 level=WARN msg="Network adapter error detected, attempting recovery..." attempt=1 max_retries=3 retry_delay=5s
+time=2026-03-29T21:13:09.318+03:00 level=INFO msg="DNS benchmark result" rank=1 server=1.1.1.1:53 protocol=udp latency=12.6434ms status=FAIL
+time=2026-03-29T21:13:09.318+03:00 level=INFO msg="DNS benchmark result" rank=2 server=8.8.8.8:53 protocol=udp latency=33.3353ms status=FAIL
+time=2026-03-29T21:13:09.318+03:00 level=INFO msg="DNS benchmark result" rank=3 server=https://dns.google.com/dns-query protocol=doh latency=110.2231ms status=FAIL
+time=2026-03-29T21:13:09.318+03:00 level=INFO msg="DNS benchmark result" rank=4 server=https://cloudflare-dns.com/dns-query protocol=doh latency=137.6759ms status=FAIL
+time=2026-03-29T21:13:09.318+03:00 level=INFO msg="DNS benchmark completed" best_servers=0
+time=2026-03-29T21:13:14.109+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=472
+time=2026-03-29T21:13:14.109+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=4 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:13:14.109+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:13:14.109+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:13:14.250+03:00 level=INFO msg="Attempting to reconfigure network interfaces..."
+time=2026-03-29T21:13:14.253+03:00 level=INFO msg="Attempting to configure Ethernet interface" name=Ethernet
+time=2026-03-29T21:13:14.377+03:00 level=INFO msg="Interface IP configured" interface=Ethernet ip=192.168.100.1 output="\r\n"
+time=2026-03-29T21:13:14.377+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:13:15.500+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:13:15.500+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:13:15.523+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:13:15.761+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:13:15.761+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:13:15.837+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:13:15.837+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:13:15.837+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:13:15.837+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Default proxy set to 'direct' for unmatched traffic"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:13:15.845+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:1980 open:true}"
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:13:15.847+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:13:15.876+03:00 level=WARN msg="Network adapter error detected, attempting recovery..." attempt=2 max_retries=3 retry_delay=5s
+time=2026-03-29T21:13:19.535+03:00 level=WARN msg="Health probe failed" name=HTTP error="health probe Internet Connectivity (HTTP) failed for https://www.google.com: HTTP status 429" latency_ms=426
+time=2026-03-29T21:13:19.535+03:00 level=ERROR msg="Health check failed consecutively, triggering recovery" failures=5 threshold=3 failed_probes=1 backoff=0s
+time=2026-03-29T21:13:19.535+03:00 level=INFO msg="Starting network recovery" failed_probes=1
+time=2026-03-29T21:13:19.535+03:00 level=WARN msg="Network health check failed, attempting recovery..."
+time=2026-03-29T21:13:20.876+03:00 level=INFO msg="Attempting to reconfigure network interfaces..."
+time=2026-03-29T21:13:20.880+03:00 level=INFO msg="Attempting to configure Ethernet interface" name=Ethernet
+time=2026-03-29T21:13:21.024+03:00 level=INFO msg="Interface IP configured" interface=Ethernet ip=192.168.100.1 output="\r\n"
+time=2026-03-29T21:13:21.024+03:00 level=INFO msg="NAT routing enabled, configuring..."
+time=2026-03-29T21:13:22.160+03:00 level=WARN msg="Failed to auto-detect Ethernet interface" err="no connected Ethernet interface found"
+time=2026-03-29T21:13:22.161+03:00 level=INFO msg="Configuring NAT routing" external=Ethernet internal=""
+time=2026-03-29T21:13:22.185+03:00 level=INFO msg="IP routing enabled in registry"
+time=2026-03-29T21:13:22.418+03:00 level=WARN msg="NAT external interface config warning" output="Команда routing ip nat add interface interface=Ethernet mode=full не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:13:22.418+03:00 level=INFO msg="NAT external interface configured" interface=Ethernet
+time=2026-03-29T21:13:22.496+03:00 level=WARN msg="NAT internal interface config warning" output="Команда routing ip nat add interface interface= mode=private не найдена.\r\n" err="exit status 1"
+time=2026-03-29T21:13:22.496+03:00 level=INFO msg="NAT internal interface configured" interface=""
+time=2026-03-29T21:13:22.496+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:13:22.496+03:00 level=INFO msg="NAT routing configured successfully"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Found interface with matching IP" name=Ethernet ip=192.168.100.1
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Используется сетевой интерфейс" interface=Ethernet mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Настройте ваше устройство со следующими параметрами:"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="  IP адрес:     192.168.100.2 - 192.168.100.254"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="  Маска подсети:    255.255.255.0"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="  Шлюз:        192.168.100.1"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="  MTU:            1458 (or lower)"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg=━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Default proxy set to 'direct' for unmatched traffic"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="createDHCPServerIfNeeded: checking DHCP config" dhcp_nil=false dhcp_enabled=true poolStart=192.168.100.100 poolEnd=192.168.100.200
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Creating DHCP server..." enabled=true pool=192.168.100.100 -=192.168.100.200
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="WinDivert.dll found" path=M:\GitHub\go-pcap2socks\WinDivert.dll
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Creating WinDivert DHCP server..." config_network=192.168.100.0/24 config_server_ip=192.168.100.1 config_first_ip=192.168.100.100 config_last_ip=192.168.100.200 local_mac=b0:25:aa:65:67:bb enable_smart_dhcp=true pool_start=192.168.100.100 pool_end=192.168.100.200
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Enabling Smart DHCP with device-based IP allocation" pool_range=192.168.100.100-192.168.100.200
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="DHCP worker pool started" workers=4
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Creating WinDivert handle for DHCP packets" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:13:22.502+03:00 level=INFO msg="Opening WinDivert handle..." filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network filter_description="DHCP packets (UDP 67/68 for IPv4, 546/547 for IPv6)"
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="WinDivert handle opened successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" mode=network handle="&{handle:2040 open:true}"
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="WinDivert handle created successfully" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)"
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="WinDivert DHCP server instance created" server_ip=192.168.100.1 local_mac=b0:25:aa:65:67:bb
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="========== WinDivert DHCP Server Starting ==========" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" network=192.168.100.0/24 pool_range=192.168.100.100-192.168.100.200 server_ip=192.168.100.1 server_mac=b0:25:aa:65:67:bb dns_servers="[8.8.8.8 1.1.1.1]" lease_duration=24h0m0s smart_dhcp_enabled=true
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="DHCP pool details" pool_start=192.168.100.100 pool_end=192.168.100.200 pool_size=101 reserved_ips=1
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="WinDivert DHCP server started successfully" goroutine_started=true
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="WINDIVERT DHCP SERVER STARTED" pool=192.168.100.100-192.168.100.200 lease=86400s engine=WinDivert
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="DHCP server created" type=*windivert.DHCPServer
+time=2026-03-29T21:13:22.504+03:00 level=INFO msg="WinDivert packet loop started" filter="(udp.DstPort == 67 or udp.SrcPort == 68) or (udp.DstPort == 547 or udp.SrcPort == 546)" queue_check_interval=100ms
+time=2026-03-29T21:13:22.538+03:00 level=ERROR msg="run error" err="network adapter disconnected: check if the network cable is plugged in and the interface is enabled (interface: Ethernet, IP: 192.168.100.1). Error: send error: PacketSendPacket failed: \xce\xf8\xe8\xe1\xea\xe0 \xee\xef\xe5\xf0\xe0\xf6\xe8\xe8 \xe2\xe2\xee\xe4\xe0-\xe2\xfb\xe2\xee\xe4\xe0, \xf2\xe0\xea \xea\xe0\xea \xf1\xe5\xf2\xe5\xe2\xee\xe9 \xed\xee\xf1\xe8\xf2\xe5\xeb\xfc \xee\xf2\xea\xeb\xfe\xf7\xe5\xed \xe8\xeb\xe8 \xf2\xee\xf7\xea\xe0 \xe1\xe5\xf1\xef\xf0\xee\xe2\xee\xe4\xed\xee\xe3\xee \xe4\xee\xf1\xf2\xf3\xef\xe0 \xed\xe0\xf5\xee\xe4\xe8\xf2\xf1\xff \xe7\xe0 \xef\xf0\xe5\xe4\xe5\xeb\xe0\xec (2150891551)"

@@ -53,6 +53,10 @@ func withTCPHandler(handle func(adapter.TCPConn)) option.Option {
 				id  = r.ID()
 			)
 
+			// Log incoming TCP connections for debugging
+			glog.Debugf("TCP Forwarder request: %s:%d -> %s:%d",
+				id.RemoteAddress, id.RemotePort, id.LocalAddress, id.LocalPort)
+
 			defer func() {
 				if err != nil {
 					glog.Debugf("forward tcp request: %s:%d->%s:%d: %s",
@@ -65,6 +69,8 @@ func withTCPHandler(handle func(adapter.TCPConn)) option.Option {
 			if err != nil {
 				// RST: prevent potential half-open TCP connection leak.
 				r.Complete(true)
+				glog.Debugf("TCP CreateEndpoint failed: %s:%d->%s:%d: %s",
+					id.RemoteAddress, id.RemotePort, id.LocalAddress, id.LocalPort, err)
 				return
 			}
 			defer r.Complete(false)
@@ -75,6 +81,8 @@ func withTCPHandler(handle func(adapter.TCPConn)) option.Option {
 				TCPConn: gonet.NewTCPConn(&wq, ep),
 				id:      id,
 			}
+			glog.Debugf("TCP connection established: %s:%d -> %s:%d",
+				id.RemoteAddress, id.RemotePort, id.LocalAddress, id.LocalPort)
 			handle(conn)
 		})
 		s.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
