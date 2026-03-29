@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
+	"github.com/QuadDarv1ne/go-pcap2socks/connpool"
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
 	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
@@ -42,6 +43,9 @@ type Socks5 struct {
 	lastHealthCheck     time.Time
 	lastHealthStatus    bool
 	healthCheckMu       sync.RWMutex
+	
+	// Connection pool
+	connPool *connpool.Pool
 }
 
 // HealthStatus returns the last known health status of the SOCKS5 proxy
@@ -75,7 +79,7 @@ func (ss *Socks5) CheckHealth() bool {
 }
 
 func NewSocks5(addr, user, pass string) (*Socks5, error) {
-	return &Socks5{
+	ss := &Socks5{
 		Base: &Base{
 			addr: addr,
 			mode: ModeSocks5,
@@ -83,7 +87,19 @@ func NewSocks5(addr, user, pass string) (*Socks5, error) {
 		user: user,
 		pass: pass,
 		unix: len(addr) > 0 && addr[0] == '/',
-	}, nil
+	}
+	
+	// Initialize connection pool
+	ss.connPool = connpool.NewPool(addr, 10, 5*time.Minute)
+	
+	return ss, nil
+}
+
+// Close closes the connection pool
+func (ss *Socks5) Close() {
+	if ss.connPool != nil {
+		ss.connPool.Close()
+	}
 }
 
 func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.Conn, err error) {
@@ -92,7 +108,11 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 		network = "unix"
 	}
 
-	c, err = dialer.DialContext(ctx, network, ss.Addr())
+	// Try to get connection from pool
+	c, err = ss.connPool.Get(ctx, func(dialCtx context.Context) (net.Conn, error) {
+		return dialer.DialContext(dialCtx, network, ss.Addr())
+	})
+	
 	if err != nil {
 		return nil, &DialError{
 			ProxyAddr: ss.Addr(),
@@ -101,10 +121,16 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 			Err:       fmt.Errorf("connect: %w", err),
 		}
 	}
+	
 	setKeepAlive(c)
 
 	defer func(c net.Conn) {
-		safeConnClose(c, err)
+		// Return connection to pool instead of closing
+		if err == nil {
+			ss.connPool.Put(c)
+		} else {
+			c.Close()
+		}
 	}(c)
 
 	var user *socks5.User

@@ -1479,13 +1479,19 @@ func performGracefulShutdown() {
 	// 7. Stop router and proxy groups
 	if _defaultProxy != nil {
 		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			router.StopHealthChecks()
 			router.Stop()
 			slog.Info("Router stopped")
-			// Stop proxy groups
-			for _, p := range router.Proxies {
+			// Stop proxy groups and close connection pools
+			for tag, p := range router.Proxies {
 				if group, ok := p.(*proxy.ProxyGroup); ok {
 					group.Stop()
 					slog.Debug("Proxy group stopped", "name", group.Addr())
+				}
+				// Close SOCKS5 connection pool
+				if socks5Proxy, ok := p.(*proxy.Socks5); ok {
+					socks5Proxy.Close()
+					slog.Debug("SOCKS5 connection pool closed", "proxy", tag)
 				}
 			}
 		}
