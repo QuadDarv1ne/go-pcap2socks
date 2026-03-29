@@ -1,14 +1,29 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 29 марта 2026 г. (Сессия 34)
-**Версия**: v3.34.0 (PS4 DHCP Stability & Auto-Recovery)
+**Последнее обновление**: 29 марта 2026 г. (Сессия 35)
+**Версия**: v3.35.0 (DHCP Metrics & Monitoring)
 **Статус**: ✅ стабилен, сборка успешна (25.7 MB), working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
-**🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery — ожидает подключения устройства
+**🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics — ожидает подключения устройства
+**📊 Мониторинг**: API /api/metrics/dhcp для статистики DHCP
 
 ---
 
 ## 📈 Последние улучшения
+
+### v3.35.0 - DHCP Metrics & Monitoring (29 марта 2026)
+
+**Часть 1: DHCP Server Metrics**
+- ✅ Metrics counters: packets_received, packets_sent, discover, offer, ack, errors
+- ✅ GetMetrics() method for statistics retrieval
+- ✅ Atomic counters for thread-safe updates
+- ✅ Metrics integration in processPacket() and sendDHCPResponse()
+
+**Часть 2: API Integration**
+- ✅ API endpoint: `/api/metrics/dhcp` (JSON response)
+- ✅ SetDHCPMetricsFn callback registration
+- ✅ handleDHCPMetrics handler with auth + rate limiting
+- ✅ Integration in main.go via windivert.DHCPServer
 
 ### v3.34.0 - PS4 DHCP Stability & Auto-Recovery (29 марта 2026)
 
@@ -357,7 +372,22 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 
 ## 📋 Актуальные задачи
 
-### ⏳ Сессия 35: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 35: DHCP Metrics & Monitoring (P2) — ЗАВЕРШЕНА
+- [x] **DHCP Server Metrics**
+  * [x] Metrics counters: packets_received, packets_sent, discover, offer, ack, errors
+  * [x] GetMetrics() method for statistics retrieval
+  * [x] Atomic counters for thread-safe updates
+  * [x] Metrics integration in processPacket() and sendDHCPResponse()
+- [x] **API Integration**
+  * [x] API endpoint: `/api/metrics/dhcp` (JSON response)
+  * [x] SetDHCPMetricsFn callback registration
+  * [x] handleDHCPMetrics handler with auth + rate limiting
+  * [x] Integration in main.go via windivert.DHCPServer
+- [x] **Code Quality**
+  * [x] go build: ✅ (25.7 MB)
+  * [x] Sync: dev → main → origin
+
+### ⏳ Сессия 36: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
