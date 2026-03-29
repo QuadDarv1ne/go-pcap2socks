@@ -1,320 +1,165 @@
-// Package di provides dependency injection container for go-pcap2socks.
+// Package di provides dependency injection container for go-pcap2socks
 package di
 
 import (
-	"context"
 	"fmt"
-	"reflect"
-	"sync"
+	"log/slog"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
+	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 )
 
-// Lifecycle defines the lifetime of a service.
-type Lifecycle int
-
-const (
-	Singleton Lifecycle = iota
-	Transient
-	Scoped
-)
-
-// Container is the dependency injection container.
+// Container holds all application dependencies
 type Container struct {
-	mu         sync.RWMutex
-	services   map[reflect.Type]*serviceDescriptor
-	instances  map[reflect.Type]interface{}
-	resolving  map[reflect.Type]bool
-	isDisposed bool
+	// Configuration
+	Config *cfg.Config
+
+	// Core services
+	DNSResolver   *dns.Resolver
+	ProfileManager *profiles.Manager
+	UPnPManager   *upnpmanager.Manager
+
+	// Initialized flags
+	dnsInitialized   bool
+	profileInitialized bool
+	upnpInitialized  bool
 }
 
-type serviceDescriptor struct {
-	serviceType reflect.Type
-	lifecycle   Lifecycle
-	constructor interface{}
-	instance    interface{}
-	initialized bool
-}
-
-// NewContainer creates a new DI container.
+// NewContainer creates a new dependency injection container
 func NewContainer() *Container {
 	return &Container{
-		services:  make(map[reflect.Type]*serviceDescriptor),
-		instances: make(map[reflect.Type]interface{}),
-		resolving: make(map[reflect.Type]bool),
+		Config: &cfg.Config{},
 	}
 }
 
-// RegisterSingleton registers a singleton service.
-func (c *Container) RegisterSingleton(serviceType interface{}, constructor interface{}) error {
-	return c.Register(serviceType, constructor, Singleton)
-}
-
-// RegisterTransient registers a transient service.
-func (c *Container) RegisterTransient(serviceType interface{}, constructor interface{}) error {
-	return c.Register(serviceType, constructor, Transient)
-}
-
-// Register registers a service with the specified lifecycle.
-func (c *Container) Register(serviceType interface{}, constructor interface{}, lifecycle Lifecycle) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.isDisposed {
-		return fmt.Errorf("container is disposed")
+// LoadConfig loads configuration from file
+func (c *Container) LoadConfig(configPath string) error {
+	config, err := cfg.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
 	}
-
-	typ := reflect.TypeOf(serviceType)
-	if typ == nil {
-		return fmt.Errorf("serviceType must be a non-nil pointer")
-	}
-
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-
-	ctorType := reflect.TypeOf(constructor)
-	if ctorType == nil || ctorType.Kind() != reflect.Func {
-		return fmt.Errorf("constructor must be a function")
-	}
-
-	c.services[typ] = &serviceDescriptor{
-		serviceType: typ,
-		lifecycle:   lifecycle,
-		constructor: constructor,
-	}
-
+	c.Config = config
+	slog.Info("Configuration loaded", "path", configPath)
 	return nil
 }
 
-// RegisterInstance registers an existing instance as a singleton.
-func (c *Container) RegisterInstance(serviceType interface{}, instance interface{}) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.isDisposed {
-		return fmt.Errorf("container is disposed")
+// InitDNS initializes DNS resolver
+func (c *Container) InitDNS() (*dns.Resolver, error) {
+	if c.dnsInitialized {
+		return c.DNSResolver, nil
 	}
 
-	typ := reflect.TypeOf(serviceType)
-	if typ == nil {
-		return fmt.Errorf("serviceType must be a non-nil pointer")
+	plainServers := make([]string, 0, len(c.Config.DNS.Servers))
+	for _, s := range c.Config.DNS.Servers {
+		plainServers = append(plainServers, s.Address)
 	}
 
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
+	dnsConfig := &dns.ResolverConfig{
+		Servers:      plainServers,
+		UseSystemDNS: c.Config.DNS.UseSystemDNS,
+		AutoBench:    c.Config.DNS.AutoBench,
+		CacheSize:    c.Config.DNS.CacheSize,
+		CacheTTL:     c.Config.DNS.CacheTTL,
+		PreWarmCache: c.Config.DNS.PreWarmCache,
+		PreWarmDomains: c.Config.DNS.PreWarmDomains,
+		PersistentCache: c.Config.DNS.PersistentCache,
+		CacheFile:    c.Config.DNS.CacheFile,
 	}
 
-	c.services[typ] = &serviceDescriptor{
-		serviceType: typ,
-		lifecycle:   Singleton,
-		instance:    instance,
-		initialized: true,
-	}
+	c.DNSResolver = dns.NewResolver(dnsConfig)
+	c.dnsInitialized = true
 
-	c.instances[typ] = instance
-	return nil
+	slog.Info("DNS resolver initialized via DI container")
+	return c.DNSResolver, nil
 }
 
-// Resolve retrieves a service instance.
-func (c *Container) Resolve(serviceType interface{}) (interface{}, error) {
-	return c.ResolveContext(context.Background(), serviceType)
-}
-
-// ResolveContext retrieves a service instance with context.
-func (c *Container) ResolveContext(ctx context.Context, serviceType interface{}) (interface{}, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.isDisposed {
-		return nil, fmt.Errorf("container is disposed")
+// InitProfileManager initializes Profile Manager
+func (c *Container) InitProfileManager() (*profiles.Manager, error) {
+	if c.profileInitialized {
+		return c.ProfileManager, nil
 	}
 
-	typ := reflect.TypeOf(serviceType)
-	if typ == nil {
-		return nil, fmt.Errorf("serviceType must be a non-nil pointer")
-	}
-
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-
-	return c.resolveType(ctx, typ)
-}
-
-func (c *Container) resolveType(ctx context.Context, typ reflect.Type) (interface{}, error) {
-	if c.resolving[typ] {
-		return nil, fmt.Errorf("circular dependency detected for type %v", typ)
-	}
-
-	desc, exists := c.services[typ]
-	if !exists {
-		return nil, fmt.Errorf("service not registered: %v", typ)
-	}
-
-	if desc.lifecycle == Singleton && desc.initialized {
-		return desc.instance, nil
-	}
-
-	c.resolving[typ] = true
-	defer func() { delete(c.resolving, typ) }()
-
-	instance, err := c.createInstance(ctx, desc)
+	var err error
+	c.ProfileManager, err = profiles.NewManager()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create profile manager: %w", err)
 	}
 
-	if desc.lifecycle == Singleton {
-		desc.instance = instance
-		desc.initialized = true
-		c.instances[typ] = instance
+	if err := c.ProfileManager.CreateDefaultProfiles(); err != nil {
+		slog.Warn("Failed to create default profiles", "err", err)
 	}
 
-	return instance, nil
+	c.profileInitialized = true
+	slog.Info("Profile manager initialized via DI container")
+	return c.ProfileManager, nil
 }
 
-func (c *Container) createInstance(ctx context.Context, desc *serviceDescriptor) (interface{}, error) {
-	ctorValue := reflect.ValueOf(desc.constructor)
-	ctorType := ctorValue.Type()
-
-	args := make([]reflect.Value, 0, ctorType.NumIn())
-
-	for i := 0; i < ctorType.NumIn(); i++ {
-		paramType := ctorType.In(i)
-
-		if paramType == reflect.TypeOf((*context.Context)(nil)).Elem() {
-			args = append(args, reflect.ValueOf(ctx))
-			continue
-		}
-
-		dep, err := c.resolveType(ctx, paramType)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve dependency %v: %w", paramType, err)
-		}
-		args = append(args, reflect.ValueOf(dep))
+// InitUPnPManager initializes UPnP Manager
+func (c *Container) InitUPnPManager(localIP string) (*upnpmanager.Manager, error) {
+	if c.upnpInitialized {
+		return c.UPnPManager, nil
 	}
 
-	results := ctorValue.Call(args)
-
-	if len(results) == 0 {
-		return nil, fmt.Errorf("constructor must return at least one value")
+	if c.Config.UPnP == nil || !c.Config.UPnP.Enabled {
+		slog.Info("UPnP disabled in config")
+		c.UPnPManager = nil
+		c.upnpInitialized = true
+		return nil, nil
 	}
 
-	instance := results[0].Interface()
-
-	if len(results) > 1 {
-		if err, ok := results[1].Interface().(error); ok && err != nil {
-			return nil, err
-		}
+	c.UPnPManager = upnpmanager.NewManager(c.Config.UPnP, localIP)
+	if c.UPnPManager == nil {
+		c.upnpInitialized = true
+		return nil, nil
 	}
 
-	return instance, nil
+	if err := c.UPnPManager.Start(); err != nil {
+		slog.Warn("UPnP manager start failed", "err", err)
+		c.UPnPManager = nil
+	}
+
+	c.upnpInitialized = true
+	slog.Info("UPnP manager initialized via DI container")
+	return c.UPnPManager, nil
 }
 
-// MustResolve resolves a service and panics on error.
-func (c *Container) MustResolve(serviceType interface{}) interface{} {
-	instance, err := c.Resolve(serviceType)
-	if err != nil {
-		panic(err)
+// GetDNSResolver returns initialized DNS resolver
+func (c *Container) GetDNSResolver() (*dns.Resolver, error) {
+	if !c.dnsInitialized {
+		return c.InitDNS()
 	}
-	return instance
+	return c.DNSResolver, nil
 }
 
-// Dispose disposes the container and all disposable services.
-func (c *Container) Dispose() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.isDisposed {
-		return nil
+// GetProfileManager returns initialized Profile Manager
+func (c *Container) GetProfileManager() (*profiles.Manager, error) {
+	if !c.profileInitialized {
+		return c.InitProfileManager()
 	}
-
-	c.isDisposed = true
-	c.services = nil
-	c.instances = nil
-	c.resolving = nil
-
-	return nil
+	return c.ProfileManager, nil
 }
 
-// Disposable is implemented by services that need cleanup.
-type Disposable interface {
-	Dispose() error
-}
-
-// ContainerBuilder provides a fluent interface for building containers.
-type ContainerBuilder struct {
-	container *Container
-	errors    []error
-}
-
-// NewContainerBuilder creates a new container builder.
-func NewContainerBuilder() *ContainerBuilder {
-	return &ContainerBuilder{
-		container: NewContainer(),
+// GetUPnPManager returns initialized UPnP Manager
+func (c *Container) GetUPnPManager(localIP string) (*upnpmanager.Manager, error) {
+	if !c.upnpInitialized {
+		return c.InitUPnPManager(localIP)
 	}
+	return c.UPnPManager, nil
 }
 
-// AddSingleton adds a singleton service.
-func (b *ContainerBuilder) AddSingleton(serviceType interface{}, constructor interface{}) *ContainerBuilder {
-	if err := b.container.RegisterSingleton(serviceType, constructor); err != nil {
-		b.errors = append(b.errors, err)
-	}
-	return b
-}
+// Close gracefully shuts down all services
+func (c *Container) Close() {
+	slog.Info("Shutting down DI container...")
 
-// AddTransient adds a transient service.
-func (b *ContainerBuilder) AddTransient(serviceType interface{}, constructor interface{}) *ContainerBuilder {
-	if err := b.container.RegisterTransient(serviceType, constructor); err != nil {
-		b.errors = append(b.errors, err)
-	}
-	return b
-}
-
-// AddInstance adds an existing instance.
-func (b *ContainerBuilder) AddInstance(serviceType interface{}, instance interface{}) *ContainerBuilder {
-	if err := b.container.RegisterInstance(serviceType, instance); err != nil {
-		b.errors = append(b.errors, err)
-	}
-	return b
-}
-
-// Build builds and returns the container.
-func (b *ContainerBuilder) Build() (*Container, error) {
-	if len(b.errors) > 0 {
-		return nil, fmt.Errorf("errors during container build: %v", b.errors)
-	}
-	return b.container, nil
-}
-
-// MustBuild builds the container and panics on error.
-func (b *ContainerBuilder) MustBuild() *Container {
-	c, err := b.Build()
-	if err != nil {
-		panic(err)
-	}
-	return c
-}
-
-// GetServiceCount returns the number of registered services.
-func (c *Container) GetServiceCount() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.services)
-}
-
-// IsRegistered checks if a service is registered.
-func (c *Container) IsRegistered(serviceType interface{}) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	typ := reflect.TypeOf(serviceType)
-	if typ == nil {
-		return false
+	if c.DNSResolver != nil {
+		c.DNSResolver.Stop()
 	}
 
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
+	if c.UPnPManager != nil {
+		// UPnP manager doesn't have Stop method yet
 	}
 
-	_, exists := c.services[typ]
-	return exists
+	slog.Info("DI container shut down completed")
 }
