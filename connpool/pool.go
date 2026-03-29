@@ -5,6 +5,8 @@ package connpool
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -326,6 +328,40 @@ func (p *Pool) Stats() PoolStats {
 	stats.InUseCount = stats.CurrentSize - stats.IdleCount
 
 	return stats
+}
+
+// ExportPrometheus exports pool stats in Prometheus format
+func (p *Pool) ExportPrometheus(w io.Writer, namespace, subsystem string) {
+	stats := p.Stats()
+	
+	// Write gauge metrics
+	fmt.Fprintf(w, "# HELP %s_%s_size Current pool size\n", namespace, subsystem)
+	fmt.Fprintf(w, "# TYPE %s_%s_size gauge\n", namespace, subsystem)
+	fmt.Fprintf(w, "%s_%s_size %d\n", namespace, subsystem, stats.CurrentSize)
+	
+	fmt.Fprintf(w, "# HELP %s_%s_idle Idle connections\n", namespace, subsystem)
+	fmt.Fprintf(w, "# TYPE %s_%s_idle gauge\n", namespace, subsystem)
+	fmt.Fprintf(w, "%s_%s_idle %d\n", namespace, subsystem, stats.IdleCount)
+	
+	fmt.Fprintf(w, "# HELP %s_%s_in_use In-use connections\n", namespace, subsystem)
+	fmt.Fprintf(w, "# TYPE %s_%s_in_use gauge\n", namespace, subsystem)
+	fmt.Fprintf(w, "%s_%s_in_use %d\n", namespace, subsystem, stats.InUseCount)
+	
+	fmt.Fprintf(w, "# HELP %s_%s_created Total connections created\n", namespace, subsystem)
+	fmt.Fprintf(w, "# TYPE %s_%s_created counter\n", namespace, subsystem)
+	fmt.Fprintf(w, "%s_%s_created %d\n", namespace, subsystem, stats.TotalCreated)
+	
+	fmt.Fprintf(w, "# HELP %s_%s_acquired Total connections acquired\n", namespace, subsystem)
+	fmt.Fprintf(w, "# TYPE %s_%s_acquired counter\n", namespace, subsystem)
+	fmt.Fprintf(w, "%s_%s_acquired %d\n", namespace, subsystem, stats.TotalAcquired)
+	
+	fmt.Fprintf(w, "# HELP %s_%s_wait_count Total wait count\n", namespace, subsystem)
+	fmt.Fprintf(w, "# TYPE %s_%s_wait_count counter\n", namespace, subsystem)
+	fmt.Fprintf(w, "%s_%s_wait_count %d\n", namespace, subsystem, stats.WaitCount)
+	
+	fmt.Fprintf(w, "# HELP %s_%s_max_used Maximum connections used\n", namespace, subsystem)
+	fmt.Fprintf(w, "# TYPE %s_%s_max_used gauge\n", namespace, subsystem)
+	fmt.Fprintf(w, "%s_%s_max_used %d\n", namespace, subsystem, stats.MaxUsed)
 }
 
 // getCurrentSize returns current pool size
