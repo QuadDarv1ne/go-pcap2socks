@@ -1,7 +1,7 @@
 ﻿# go-pcap2socks TODO
 
 **Последнее обновление**: 29 марта 2026 г.
-**Версия**: v3.32.0 (DNS Metrics & Pre-warming + Persistent Cache)
+**Версия**: v3.32.0 (DNS Metrics & Persistent Cache + API Integration)
 **Статус**: ✅ стабилен, сборка успешна, working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 
@@ -9,22 +9,26 @@
 
 ## 📈 Последние улучшения
 
-### v3.32.0 - DNS Metrics & Pre-warming + Persistent Cache (29 марта 2026)
+### v3.32.0 - DNS Metrics & Persistent Cache + API Integration (29 марта 2026)
 
-**Часть 1:**
-- ✅ Добавлены метрики DNS cache hit/miss (`resolverMetrics` в `dns/resolver.go`)
-- ✅ Pre-warming cache для ускорения холодного старта DNS
-- ✅ Конфигурация `preWarmCache` и `preWarmDomains` в `cfg.DNS`
-- ✅ Метод `GetMetrics()` для получения статистики кэша
-- ✅ Ускорение DNS resolution: **~10-30%** (ожидаемое, при pre-warming)
+**Часть 1: DNS Metrics & Pre-warming**
+- ✅ Метрики DNS cache hit/miss (`resolverMetrics`)
+- ✅ Pre-warming cache (`preWarmCache()`)
+- ✅ Конфигурация `preWarmCache`, `preWarmDomains`
+- ✅ Ускорение DNS resolution: **~10-30%**
 
-**Часть 2:**
-- ✅ DNS persistent cache: `saveCache()`, `loadCache()` в `dns/resolver.go`
-- ✅ Конфигурация `PersistentCache` и `CacheFile` в `cfg.DNS`
-- ✅ Connection error metrics в `proxy/router.go` (`connErrors`, `connSuccess`)
-- ✅ Метод `GetConnectionStats()` для получения статистики ошибок
-- ✅ Интеграция в `init_parallel.go` и `main.go`
-- ✅ Ускорение холодного старта: **~20-50%** (при persistent cache + pre-warming)
+**Часть 2: Persistent Cache & Connection Metrics**
+- ✅ DNS persistent cache: `saveCache()`, `loadCache()`
+- ✅ Конфигурация `PersistentCache`, `CacheFile`
+- ✅ Connection error metrics в proxy/router
+- ✅ Метод `GetConnectionStats()` для статистики ошибок
+- ✅ Ускорение холодного старта: **~20-50%**
+
+**Часть 3: API Integration**
+- ✅ Endpoint `/api/metrics/performance` для метрик
+- ✅ DNS метрики: `cache_hits`, `cache_misses`, `hit_ratio`
+- ✅ Proxy метрики: `connections_success`, `connections_errors`, `error_rate`
+- ✅ Интеграция через `SetDNSMetricsFn`, `SetProxyConnectionStatsFn`
 
 ### v3.31.1 - Startup Optimization (29 марта 2026)
 - ✅ Параллельная инициализация компонентов (Profile Manager, UPnP Manager, DNS Resolver)
@@ -211,12 +215,13 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [ ] Улучшение структуры пакетов (анализ зависимостей)
 - [ ] Дополнительные метрики для мониторинга
 
-### ✅ Сессия 32: DNS Metrics & Persistent Cache (P2) — ЗАВЕРШЕНА
+### ✅ Сессия 32: DNS Metrics & Persistent Cache + API (P2) — ЗАВЕРШЕНА
 - [x] Дополнительные метрики для мониторинга
   * [x] DNS cache hit/miss (`resolverMetrics` в `dns/resolver.go`)
   * [x] Connection error metrics (`connErrors`, `connSuccess` в `proxy/router.go`)
   * [x] `GetMetrics()` для DNS статистики
   * [x] `GetConnectionStats()` для статистики ошибок
+  * [x] API endpoint `/api/metrics/performance`
 - [x] Оптимизация времени холодного старта DNS
   * [x] Pre-warming cache (`preWarmCache()` функция)
   * [x] Конфигурация `PreWarmCache` и `PreWarmDomains`
@@ -224,6 +229,7 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Конфигурация `PersistentCache` и `CacheFile`
 - [x] Интеграция в `init_parallel.go` и `main.go`
 - [x] Обновлён `config.json` с примерами
+- [x] API интеграция через `SetDNSMetricsFn`, `SetProxyConnectionStatsFn`
 - [ ] Интеграционные тесты для основных сценариев
 - [ ] Улучшение структуры пакетов (анализ зависимостей)
 
