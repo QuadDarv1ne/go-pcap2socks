@@ -418,7 +418,7 @@ func (p *Pool) createIdleConnection() {
 	case p.idleConns <- pooled:
 		// Successfully added to pool
 	default:
-		// Pool is full
+		// Pool is full, close connection
 		p.closeConnection(pooled)
 	}
 }

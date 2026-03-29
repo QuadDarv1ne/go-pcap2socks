@@ -269,13 +269,15 @@ func (rlc *RateLimitedConn) Write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
 	}
+
+	// Wait for tokens to be available with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	
-	// Wait for tokens to be available
-	ctx := context.Background()
 	if err := rlc.writeBucket.Wait(ctx, len(b)); err != nil {
 		return 0, err
 	}
-	
+
 	// Write to underlying connection
 	n, err := rlc.Conn.Write(b)
 	if n > 0 {
