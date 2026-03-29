@@ -48,6 +48,9 @@ func GetAddr() []byte {
 
 // PutAddr returns a SOCKS address buffer to pool
 func PutAddr(b []byte) {
+	if b == nil {
+		return
+	}
 	b = b[:0]
 	addrPool.Put(b)
 }
@@ -59,6 +62,9 @@ func GetUDP() []byte {
 
 // PutUDP returns a UDP buffer to pool
 func PutUDP(b []byte) {
+	if b == nil {
+		return
+	}
 	udpBufferPool.Put(b)
 }
 
@@ -69,6 +75,9 @@ func GetDNS() []byte {
 
 // PutDNS returns a DNS buffer to pool
 func PutDNS(b []byte) {
+	if b == nil {
+		return
+	}
 	b = b[:0]
 	dnsBufferPool.Put(b)
 }
