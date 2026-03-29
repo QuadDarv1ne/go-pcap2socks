@@ -1,15 +1,40 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 29 марта 2026 г. (Сессия 35)
-**Версия**: v3.35.0 (DHCP Metrics & Monitoring)
+**Последнее обновление**: 29 марта 2026 г. (Сессия 36)
+**Версия**: v3.36.0 (Web UI DHCP Metrics Dashboard)
 **Статус**: ✅ стабилен, сборка успешна (25.7 MB), working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics — ожидает подключения устройства
-**📊 Мониторинг**: API /api/metrics/dhcp для статистики DHCP
+**📊 Мониторинг**: API /api/metrics/dhcp + Web UI /dhcp-metrics
+**🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
 
 ---
 
 ## 📈 Последние улучшения
+
+### v3.36.0 - Web UI DHCP Metrics Dashboard (29 марта 2026)
+
+**Часть 1: Web UI Dashboard**
+- ✅ Created /dhcp-metrics.html with responsive dark theme
+- ✅ Real-time metrics visualization (5s auto-refresh)
+- ✅ 8 metric cards: packets_received, packets_sent, discover, offer, request, ack, errors, active_leases
+- ✅ Success rate indicator with progress bar
+- ✅ Activity log with color-coded entries (info/warn/error)
+- ✅ Connection status indicator
+- ✅ Error handling with user-friendly messages
+
+**Часть 2: API Integration**
+- ✅ Added /dhcp-metrics endpoint for HTML page
+- ✅ handleDHCPMetricsPage handler
+- ✅ Static file serving from web/ directory
+
+**Часть 3: Features**
+- ✅ Auto-refresh every 5 seconds via setInterval
+- ✅ Metrics history tracking (last 100 data points)
+- ✅ Activity log with timestamps and change detection
+- ✅ Success rate calculation: (packets_sent / total) * 100
+- ✅ Total sessions counter from discover_count
+- ✅ Number formatting (K, M suffixes for large numbers)
 
 ### v3.35.0 - DHCP Metrics & Monitoring (29 марта 2026)
 
@@ -387,7 +412,31 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] go build: ✅ (25.7 MB)
   * [x] Sync: dev → main → origin
 
-### ⏳ Сессия 36: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 36: Web UI DHCP Metrics Dashboard (P2) — ЗАВЕРШЕНА
+- [x] **Web UI Dashboard**
+  * [x] Created /dhcp-metrics.html with responsive dark theme
+  * [x] Real-time metrics visualization (5s auto-refresh)
+  * [x] 8 metric cards: packets_received, packets_sent, discover, offer, request, ack, errors, active_leases
+  * [x] Success rate indicator with progress bar
+  * [x] Activity log with color-coded entries (info/warn/error)
+  * [x] Connection status indicator
+  * [x] Error handling with user-friendly messages
+- [x] **API Integration**
+  * [x] Added /dhcp-metrics endpoint for HTML page
+  * [x] handleDHCPMetricsPage handler
+  * [x] Static file serving from web/ directory
+- [x] **Features**
+  * [x] Auto-refresh every 5 seconds via setInterval
+  * [x] Metrics history tracking (last 100 data points)
+  * [x] Activity log with timestamps and change detection
+  * [x] Success rate calculation: (packets_sent / total) * 100
+  * [x] Total sessions counter from discover_count
+  * [x] Number formatting (K, M suffixes for large numbers)
+- [x] **Code Quality**
+  * [x] go build: ✅ (25.7 MB)
+  * [x] Sync: dev → main → origin
+
+### ⏳ Сессия 37: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
