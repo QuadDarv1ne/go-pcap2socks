@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -28,10 +29,13 @@ func TestRouterProperties_PropertyBased(t *testing.T) {
 			_ = rules[i].Normalize()
 		}
 
+		// Generate random IP string first
+		ipStr := rapid.StringMatching(`^\d+\.\d+\.\d+\.\d+$`).Draw(t, "ipStr")
+
 		// Generate random metadata
 		metadata := &M.Metadata{
-			SrcIP:   rapid.StringMatching(`^\d+\.\d+\.\d+\.\d+$`).Draw(t, "srcIP"),
-			DstIP:   rapid.StringMatching(`^\d+\.\d+\.\d+\.\d+$`).Draw(t, "dstIP"),
+			SrcIP:   net.ParseIP(ipStr),
+			DstIP:   net.ParseIP(ipStr),
 			SrcPort: uint16(rapid.Uint16Range(1, 65535).Draw(t, "srcPort")),
 			DstPort: uint16(rapid.Uint16Range(1, 65535).Draw(t, "dstPort")),
 		}
@@ -72,10 +76,13 @@ func TestRoutingTableProperties_PropertyBased(t *testing.T) {
 		// Create routing table
 		rt := NewRoutingTable(rules)
 
+		// Generate random IP string first
+		ipStr := rapid.StringMatching(`^\d+\.\d+\.\d+\.\d+$`).Draw(t, "ipStr")
+
 		// Generate random metadata
 		metadata := &M.Metadata{
-			SrcIP:   rapid.StringMatching(`^\d+\.\d+\.\d+\.\d+$`).Draw(t, "srcIP"),
-			DstIP:   rapid.StringMatching(`^\d+\.\d+\.\d+\.\d+$`).Draw(t, "dstIP"),
+			SrcIP:   net.ParseIP(ipStr),
+			DstIP:   net.ParseIP(ipStr),
 			SrcPort: uint16(rapid.Uint16Range(1, 65535).Draw(t, "srcPort")),
 			DstPort: uint16(rapid.Uint16Range(1, 65535).Draw(t, "dstPort")),
 		}

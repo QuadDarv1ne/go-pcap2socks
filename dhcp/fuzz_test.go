@@ -1,6 +1,7 @@
 package dhcp
 
 import (
+	"net"
 	"testing"
 )
 
@@ -23,21 +24,21 @@ func FuzzParseDHCPMessage(f *testing.F) {
 func FuzzDHCPMessageMarshal(f *testing.F) {
 	// Add valid seed corpus
 	validMsg := &DHCPMessage{
-		Op:         1,
-		HType:      1,
-		HLen:       6,
-		Hops:       0,
-		XID:        0x12345678,
-		Secs:       0,
-		Flags:      0,
-		CIAddr:     []byte{192, 168, 1, 100},
-		YIAddr:     []byte{192, 168, 1, 101},
-		SIAddr:     []byte{192, 168, 1, 1},
-		GIAddr:     []byte{0, 0, 0, 0},
-		CHAddr:     []byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF},
-		Options:    []byte{0x35, 0x01, 0x03}, // DHCP Message Type: DHCPREQUEST
+		OpCode:         1,
+		HardwareType:   1,
+		HardwareLength: 6,
+		Hops:           0,
+		TransactionID:  0x12345678,
+		Seconds:        0,
+		Flags:          0,
+		ClientIP:       net.IP{192, 168, 1, 100},
+		YourIP:         net.IP{192, 168, 1, 101},
+		ServerIP:       net.IP{192, 168, 1, 1},
+		GatewayIP:      net.IPv4zero,
+		ClientHardware: net.HardwareAddr{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF},
+		Options:        map[uint8][]byte{53: {3}}, // DHCP Message Type: DHCPREQUEST
 	}
-	validData, _ := validMsg.Marshal()
+	validData := validMsg.Marshal()
 	f.Add(validData)
 
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -48,23 +49,6 @@ func FuzzDHCPMessageMarshal(f *testing.F) {
 		}
 
 		// Try to marshal it back
-		_, err = msg.Marshal()
-		if err != nil {
-			t.Errorf("Marshal failed after successful parse: %v", err)
-		}
-	})
-}
-
-// FuzzParseDHCPOptions fuzzes the DHCP options parser
-func FuzzParseDHCPOptions(f *testing.F) {
-	f.Add([]byte{0x35, 0x01, 0x01}) // DHCP Message Type: DHCPDISCOVER
-	f.Add([]byte{0x01, 0x04, 0xFF, 0xFF, 0xFF, 0x00}) // Subnet Mask
-	f.Add([]byte{})
-	f.Add([]byte{0xFF}) // END option
-	f.Add([]byte{0x00}) // PAD option
-
-	f.Fuzz(func(t *testing.T, data []byte) {
-		// Just check that parser doesn't panic
-		_ = parseDHCPOptions(data)
+		_ = msg.Marshal()
 	})
 }

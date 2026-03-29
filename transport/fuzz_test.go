@@ -1,6 +1,7 @@
 package socks5
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -16,7 +17,8 @@ func FuzzReadAddr(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		// Just check that parser doesn't panic
-		_, _ = ReadAddr(data)
+		buf := make([]byte, 512)
+		_, _ = ReadAddr(bytes.NewReader(data), buf)
 	})
 }
 
@@ -43,7 +45,7 @@ func FuzzDecodeUDPPacket(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		// Just check that decoder doesn't panic
-		_, _ = DecodeUDPPacket(data)
+		_, _, _ = DecodeUDPPacket(data)
 	})
 }
 
