@@ -12,7 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // Disabled by default for security. Enable with PPROF_ENABLED=1
 	"os"
 	"os/exec"
 	"os/signal"
@@ -365,6 +365,12 @@ func main() {
 
 	// Optimize GOMAXPROCS for better performance
 	goroutine.OptimizeProcs()
+	
+	// Security: pprof disabled by default. Enable with PPROF_ENABLED=1
+	if os.Getenv("PPROF_ENABLED") != "1" {
+		// Clear pprof handlers to prevent exposure
+		http.DefaultServeMux = http.NewServeMux()
+	}
 
 	// Tune GC for low-latency network processing
 	// Reduce GC pauses for better real-time packet handling
@@ -470,7 +476,7 @@ func main() {
 	if !cfgExists {
 		slog.Info("Config file not found, creating a new one", "file", cfgFile)
 		//path to near executable file
-		err := os.WriteFile(cfgFile, []byte(configData), 0666)
+		err := os.WriteFile(cfgFile, []byte(configData), 0600)
 		if err != nil {
 			slog.Error("write config error", slog.Any("file", cfgFile), slog.Any("err", err))
 			return
@@ -1882,7 +1888,7 @@ func openConfigInEditor() {
 		localizer := i18n.NewLocalizer(i18n.DefaultLanguage)
 		msgs := localizer.GetMessages()
 		slog.Info(msgs.ConfigNotFound, "file", cfgFile)
-		err := os.WriteFile(cfgFile, []byte(configData), 0666)
+		err := os.WriteFile(cfgFile, []byte(configData), 0600)
 		if err != nil {
 			slog.Error(msgs.ConfigWriteError, slog.Any("file", cfgFile), slog.Any("err", err))
 			return
