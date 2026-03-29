@@ -410,6 +410,9 @@ type DNS struct {
 	CacheSize     int            `json:"cacheSize"`
 	CacheTTL      int            `json:"cacheTTL"`     // seconds
 	Server        *DoHServer     `json:"server,omitempty"`
+	// Pre-warming cache for faster DNS resolution on startup
+	PreWarmCache  bool     `json:"preWarmCache"`
+	PreWarmDomains []string `json:"preWarmDomains,omitempty"`
 }
 
 // DoHServer holds DNS-over-HTTPS server configuration

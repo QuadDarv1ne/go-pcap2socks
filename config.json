@@ -38,7 +38,13 @@
     "autoBench": false,
     "benchInterval": 0,
     "cacheSize": 0,
-    "cacheTTL": 0
+    "cacheTTL": 0,
+    "preWarmCache": false,
+    "preWarmDomains": [
+      "google.com",
+      "cloudflare.com",
+      "github.com"
+    ]
   },
   "routing": {
     "rules": [

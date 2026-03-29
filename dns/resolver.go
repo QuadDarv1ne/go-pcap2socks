@@ -120,11 +120,20 @@ type Resolver struct {
 	queryWorkers  int
 	queryWg       sync.WaitGroup
 	stopQueries   chan struct{}
-	
+
 	// Statistics
 	queriesProcessed atomic.Int64
 	queriesCached    atomic.Int64
 	queriesFailed    atomic.Int64
+
+	// Metrics
+	metrics *resolverMetrics
+}
+
+// resolverMetrics holds DNS resolver metrics
+type resolverMetrics struct {
+	cacheHits   *atomic.Uint64
+	cacheMisses *atomic.Uint64
 }
 
 // dnsQuery represents a DNS query request
@@ -150,6 +159,9 @@ type ResolverConfig struct {
 	BenchInterval int      `json:"benchInterval"` // seconds
 	CacheSize     int      `json:"cacheSize"`
 	CacheTTL      int      `json:"cacheTTL"` // seconds
+	// Pre-warming cache on startup
+	PreWarmCache  bool     `json:"preWarmCache"`
+	PreWarmDomains []string `json:"preWarmDomains,omitempty"`
 }
 
 // NewResolver creates a new DNS resolver
@@ -243,6 +255,17 @@ func NewResolver(config *ResolverConfig) *Resolver {
 	}
 	slog.Info("DNS resolver worker pool started", "workers", r.queryWorkers)
 
+	// Initialize metrics
+	r.metrics = &resolverMetrics{
+		cacheHits:   &atomic.Uint64{},
+		cacheMisses: &atomic.Uint64{},
+	}
+
+	// Pre-warm cache if enabled
+	if config != nil && config.PreWarmCache && len(config.PreWarmDomains) > 0 {
+		go r.preWarmCache(config.PreWarmDomains)
+	}
+
 	return r
 }
 
@@ -324,6 +347,11 @@ func (r *Resolver) LookupIP(ctx context.Context, hostname string) ([]net.IP, err
 		slog.Debug("DNS cache hit", "hostname", hostname, "ips", len(ips))
 		r.queriesCached.Add(1)
 		return ips, nil
+	}
+
+	// Record cache miss metric
+	if r.metrics != nil {
+		r.metrics.cacheMisses.Add(1)
 	}
 
 	// Submit to worker pool for async processing
@@ -457,10 +485,61 @@ func (r *Resolver) Stop() {
 	slog.Info("DNS cache cleared")
 
 	// Log final statistics
+	cacheHits := uint64(0)
+	cacheMisses := uint64(0)
+	if r.metrics != nil {
+		cacheHits = r.metrics.cacheHits.Load()
+		cacheMisses = r.metrics.cacheMisses.Load()
+	}
+
 	slog.Info("DNS resolver stopped",
 		"processed", r.queriesProcessed.Load(),
 		"cached", r.queriesCached.Load(),
-		"failed", r.queriesFailed.Load())
+		"failed", r.queriesFailed.Load(),
+		"cache_hits", cacheHits,
+		"cache_misses", cacheMisses)
+}
+
+// GetMetrics returns DNS resolver metrics
+func (r *Resolver) GetMetrics() (hits, misses uint64, hitRatio float64) {
+	if r.metrics == nil {
+		return 0, 0, 0
+	}
+
+	hits = r.metrics.cacheHits.Load()
+	misses = r.metrics.cacheMisses.Load()
+
+	total := hits + misses
+	if total > 0 {
+		hitRatio = float64(hits) / float64(total) * 100
+	}
+
+	return hits, misses, hitRatio
+}
+
+// preWarmCache pre-populates DNS cache with common domains
+func (r *Resolver) preWarmCache(domains []string) {
+	slog.Info("DNS cache pre-warming started", "domains", len(domains))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, domain := range domains {
+		select {
+		case <-ctx.Done():
+			slog.Warn("DNS cache pre-warming cancelled", "reason", ctx.Err())
+			return
+		default:
+			// Resolve and cache
+			ips, err := r.LookupIP(ctx, domain)
+			if err != nil {
+				slog.Debug("DNS pre-warm failed", "domain", domain, "err", err)
+			} else {
+				slog.Debug("DNS pre-warmed", "domain", domain, "ips", len(ips))
+			}
+		}
+	}
+
+	slog.Info("DNS cache pre-warming completed")
 }
 
 // prefetchLoop periodically checks cache for entries needing refresh
@@ -970,6 +1049,11 @@ func (r *Resolver) getCached(hostname string) ([]net.IP, bool) {
 
 	if time.Now().After(entry.Expires) {
 		return nil, false
+	}
+
+	// Record cache hit metric
+	if r.metrics != nil {
+		r.metrics.cacheHits.Add(1)
 	}
 
 	return entry.IPs, true
