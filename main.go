@@ -726,6 +726,27 @@ func main() {
 		return metrics
 	})
 
+	// Set DNS metrics getter for API
+	api.SetDNSMetricsFn(func() (hits, misses uint64, hitRatio float64, ok bool) {
+		if _dnsResolver == nil {
+			return 0, 0, 0, false
+		}
+		hits, misses, hitRatio = _dnsResolver.GetMetrics()
+		return hits, misses, hitRatio, true
+	})
+
+	// Set proxy connection stats getter for API
+	api.SetProxyConnectionStatsFn(func() (success, errors uint64, errorRate float64, ok bool) {
+		if _defaultProxy == nil {
+			return 0, 0, 0, false
+		}
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			success, errors, errorRate = router.GetConnectionStats()
+			return success, errors, errorRate, true
+		}
+		return 0, 0, 0, false
+	})
+
 	// Set service control callbacks for API
 	api.SetServiceCallbacks(
 		func() error {
@@ -2078,6 +2099,27 @@ func autoConfigureAndStart() {
 		}
 
 		return metrics
+	})
+
+	// Set DNS metrics getter for API
+	api.SetDNSMetricsFn(func() (hits, misses uint64, hitRatio float64, ok bool) {
+		if _dnsResolver == nil {
+			return 0, 0, 0, false
+		}
+		hits, misses, hitRatio = _dnsResolver.GetMetrics()
+		return hits, misses, hitRatio, true
+	})
+
+	// Set proxy connection stats getter for API
+	api.SetProxyConnectionStatsFn(func() (success, errors uint64, errorRate float64, ok bool) {
+		if _defaultProxy == nil {
+			return 0, 0, 0, false
+		}
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			success, errors, errorRate = router.GetConnectionStats()
+			return success, errors, errorRate, true
+		}
+		return 0, 0, 0, false
 	})
 
 	// Set service control callbacks for API

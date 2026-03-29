@@ -201,6 +201,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/devices/ratelimit", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceRateLimit)))
 	s.mux.HandleFunc("/api/interfaces", s.rateLimitMiddleware(s.authMiddleware(s.handleInterfaces)))
 	s.mux.HandleFunc("/ws", s.rateLimitMiddleware(s.authMiddleware(s.handleWebSocket)))
+	s.mux.HandleFunc("/api/metrics/performance", s.rateLimitMiddleware(s.authMiddleware(s.handlePerformanceMetrics)))
 }
 
 // Stop gracefully stops the API server and releases resources
@@ -277,10 +278,22 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // getIsRunningFn returns a function to check if service is running
 // This is set from main package
 var getIsRunningFn func() bool
+var getProxyConnectionStatsFn func() (success, errors uint64, errorRate float64, ok bool)
+var getDNSMetricsFn func() (hits, misses uint64, hitRatio float64, ok bool)
 
 // SetIsRunningFn sets the function to check if service is running
 func SetIsRunningFn(fn func() bool) {
 	getIsRunningFn = fn
+}
+
+// SetProxyConnectionStatsFn sets the function to get proxy connection stats
+func SetProxyConnectionStatsFn(fn func() (success, errors uint64, errorRate float64, ok bool)) {
+	getProxyConnectionStatsFn = fn
+}
+
+// SetDNSMetricsFn sets the function to get DNS metrics
+func SetDNSMetricsFn(fn func() (hits, misses uint64, hitRatio float64, ok bool)) {
+	getDNSMetricsFn = fn
 }
 
 // handleStart handles the /api/start endpoint to start the service
@@ -1334,6 +1347,45 @@ func (s *Server) handleDHCPMetrics(w http.ResponseWriter, r *http.Request) {
 			"available": false,
 			"message":   "DHCP metrics not available",
 		}
+	}
+
+	s.sendSuccess(w, metrics)
+}
+
+// handlePerformanceMetrics returns performance metrics (DNS, proxy connections)
+func (s *Server) handlePerformanceMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	metrics := make(map[string]interface{})
+
+	// DNS metrics
+	if getDNSMetricsFn != nil {
+		if hits, misses, hitRatio, ok := getDNSMetricsFn(); ok {
+			metrics["dns"] = map[string]interface{}{
+				"cache_hits":   hits,
+				"cache_misses": misses,
+				"hit_ratio":    hitRatio,
+			}
+		}
+	}
+
+	// Proxy connection metrics
+	if getProxyConnectionStatsFn != nil {
+		if success, errors, errorRate, ok := getProxyConnectionStatsFn(); ok {
+			metrics["proxy"] = map[string]interface{}{
+				"connections_success": success,
+				"connections_errors":  errors,
+				"error_rate":          errorRate,
+			}
+		}
+	}
+
+	if len(metrics) == 0 {
+		metrics["available"] = false
+		metrics["message"] = "No metrics available"
 	}
 
 	s.sendSuccess(w, metrics)
