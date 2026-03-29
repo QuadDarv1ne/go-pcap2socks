@@ -301,10 +301,15 @@ func (s *Server) handleDiscover(msg *DHCPMessage) ([]byte, error) {
 	s.metrics.RecordDiscover()
 	s.metrics.RecordLastRequest(macStr, "")
 
+	// Log DHCP Discover
+	slog.Info("DHCP: DISCOVER received",
+		"mac", macStr,
+		"hostname", getHostnameFromOptions(msg.Options))
+
 	// Allocate IP using Smart DHCP if enabled
 	ip, err := s.allocateIP(msg.ClientHardware)
 	if err != nil {
-		slog.Error("DHCP IP allocation failed", "err", err)
+		slog.Error("DHCP: IP allocation failed", "mac", macStr, "err", err)
 		s.metrics.RecordError()
 		return nil, err
 	}
@@ -318,12 +323,17 @@ func (s *Server) handleDiscover(msg *DHCPMessage) ([]byte, error) {
 				"mac", macStr,
 				"type", profile.Type,
 				"manufacturer", profile.Manufacturer,
-				"assigned_ip", ip)
+				"assigned_ip", ip.String())
 		}
 	}
 
 	// Build DHCPOFFER
 	response := s.buildResponse(msg, DHCPOffer, ip)
+
+	slog.Info("DHCP: OFFER sent",
+		"mac", macStr,
+		"offered_ip", ip.String(),
+		"lease_duration", s.config.LeaseDuration)
 
 	s.metrics.RecordOffer()
 
@@ -340,9 +350,15 @@ func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
 		requestedIP = msg.YourIP
 	}
 
+	// Log DHCP Request
+	slog.Info("DHCP: REQUEST received",
+		"mac", macStr,
+		"requested_ip", requestedIP.String())
+
 	// Validate requested IP
 	if requestedIP == nil || !s.config.Network.Contains(requestedIP) {
 		s.metrics.RecordError()
+		slog.Warn("DHCP: Invalid requested IP", "mac", macStr, "ip", requestedIP)
 		return nil, nil
 	}
 
@@ -358,19 +374,31 @@ func (s *Server) handleRequest(msg *DHCPMessage) ([]byte, error) {
 		lease.ExpiresAt = time.Now().Add(s.config.LeaseDuration)
 		s.leases.Store(macStr, lease)
 		isRenewal = true
+		slog.Info("DHCP: Lease renewed",
+			"mac", macStr,
+			"ip", requestedIP.String(),
+			"expires", lease.ExpiresAt.Format(time.RFC3339))
 	} else {
 		// New lease
 		var err error
 		requestedIP, err = s.allocateIP(msg.ClientHardware)
 		if err != nil {
-			slog.Error("DHCP IP allocation failed", "err", err)
+			slog.Error("DHCP: IP allocation failed", "mac", macStr, "err", err)
 			s.metrics.RecordError()
 			return nil, err
 		}
+		slog.Info("DHCP: New lease created",
+			"mac", macStr,
+			"ip", requestedIP.String())
 	}
 
 	// Build DHCPACK
 	response := s.buildResponse(msg, DHCPAck, requestedIP)
+
+	slog.Info("DHCP: ACK sent",
+		"mac", macStr,
+		"assigned_ip", requestedIP.String(),
+		"renewal", isRenewal)
 
 	s.metrics.RecordAck(macStr, requestedIP.String(), isRenewal)
 
@@ -764,4 +792,12 @@ func BuildDHCPRequestPacket(srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP net.IP
 	}
 
 	return buf.Bytes(), nil
+}
+
+// getHostnameFromOptions extracts hostname from DHCP options
+func getHostnameFromOptions(options map[uint8][]byte) string {
+	if hostname, ok := options[OptionHostName]; ok {
+		return string(hostname)
+	}
+	return ""
 }
