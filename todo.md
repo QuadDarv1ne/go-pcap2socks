@@ -235,6 +235,13 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Автообнаружение Wi-Fi и Ethernet интерфейсов
   * [x] Конфигурация `nat.enabled` в config.json
   * [x] Интеграция в main.go при старте
+- [x] **Улучшение #2: Улучшенное логирование DHCP**
+  * [x] Логирование DHCP Discover с MAC и hostname
+  * [x] Логирование DHCP Offer с IP и lease duration
+  * [x] Логирование DHCP Request с запрошенным IP
+  * [x] Логирование DHCP Ack с подтверждением
+  * [x] Логирование продления lease
+  * [x] Helper функция getHostnameFromOptions()
 - [ ] Интеграционные тесты для основных сценариев
 - [ ] Улучшение структуры пакетов (анализ зависимостей)
 
