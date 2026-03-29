@@ -227,8 +227,8 @@ func (h *Histogram) Sum() uint64 {
 // Buckets returns histogram bucket counts
 func (h *Histogram) Buckets() []uint64 {
 	result := make([]uint64, len(h.buckets))
-	for i, bucket := range h.buckets {
-		result[i] = bucket.Load()
+	for i := range h.buckets {
+		result[i] = h.buckets[i].Load()
 	}
 	return result
 }
