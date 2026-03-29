@@ -1,9 +1,9 @@
 {
   "pcap": {
-    "interfaceGateway": "169.254.159.243",
-    "mtu": 1486,
-    "network": "169.254.0.0/16",
-    "localIP": "169.254.159.243",
+    "interfaceGateway": "192.168.31.227",
+    "mtu": 1472,
+    "network": "192.168.31.0/24",
+    "localIP": "192.168.31.227",
     "localMAC": "0a:00:27:00:00:15",
     "networkIPv6": "fd00::/64",
     "localIPv6": "fd00::1",
@@ -11,14 +11,14 @@
   },
   "dhcp": {
     "enabled": true,
-    "poolStart": "169.254.160.87",
-    "poolEnd": "169.254.160.187",
+    "poolStart": "192.168.31.150",
+    "poolEnd": "192.168.31.200",
     "leaseDuration": 86400,
     "ipv6Enabled": true,
     "ipv6PoolStart": "fd00::64:64:64:64",
     "ipv6PoolEnd": "fd00::64:64:64:ce",
     "ipv6Prefix": "fd00::/64",
-    "dnsServers": ["2001:4860:4860::8888", "2001:4860:4860::8844"],
+    "dnsServers": ["8.8.8.8", "1.1.1.1"],
     "ntpServers": ["time.google.com"],
     "wpadURL": ""
   },
@@ -29,23 +29,22 @@
       },
       {
         "address": "1.1.1.1:53"
-      },
-      {
-        "address": "2001:4860:4860::8888:53"
       }
     ],
     "useSystemDNS": false,
-    "autoBench": false,
-    "benchInterval": 0,
-    "cacheSize": 0,
-    "cacheTTL": 0,
-    "preWarmCache": false,
+    "autoBench": true,
+    "benchInterval": 300,
+    "cacheSize": 1024,
+    "cacheTTL": 300,
+    "preWarmCache": true,
     "preWarmDomains": [
+      "playstation.com",
+      "playstation.net",
+      "sonyentertainmentnetwork.com",
       "google.com",
-      "cloudflare.com",
-      "github.com"
+      "cloudflare.com"
     ],
-    "persistentCache": false,
+    "persistentCache": true,
     "cacheFile": "dns_cache.json"
   },
   "routing": {
@@ -62,7 +61,8 @@
   },
   "outbounds": [
     {
-      "direct": {}
+      "direct": {},
+      "tag": "direct"
     },
     {
       "dns": {},
