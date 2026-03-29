@@ -120,18 +120,22 @@ func (bp *bufferPool) get() []byte {
 
 // Put returns a buffer to the pool
 func (bp *bufferPool) put(buf []byte) {
+	if buf == nil {
+		return
+	}
+
 	if bp.enabled.Load() {
 		bp.stats.Frees++
 		atomic.AddInt64(&bp.stats.Active, -1)
 		bp.stats.Hits++
 	}
-	
+
 	// Reset buffer before returning to pool
 	buf = buf[:cap(buf)]
 	for i := range buf {
 		buf[i] = 0
 	}
-	
+
 	bp.pool.Put(buf)
 }
 
@@ -142,6 +146,9 @@ func Get(size int) []byte {
 
 // Put returns a buffer to the default pool
 func Put(buf []byte) {
+	if buf == nil {
+		return
+	}
 	defaultPool.Put(buf)
 }
 
@@ -164,8 +171,12 @@ func (mp *MultiPool) Get(size int) []byte {
 
 // Put returns a buffer to the appropriate pool
 func (mp *MultiPool) Put(buf []byte) {
+	if buf == nil {
+		return
+	}
+
 	cap := cap(buf)
-	
+
 	// Route to appropriate pool based on capacity
 	switch {
 	case cap <= SizeSmall:
@@ -188,6 +199,9 @@ func (mp *MultiPool) GetSmall() []byte {
 
 // PutSmall returns a small buffer
 func (mp *MultiPool) PutSmall(buf []byte) {
+	if buf == nil {
+		return
+	}
 	mp.small.put(buf)
 }
 
@@ -198,6 +212,9 @@ func (mp *MultiPool) GetMedium() []byte {
 
 // PutMedium returns a medium buffer
 func (mp *MultiPool) PutMedium(buf []byte) {
+	if buf == nil {
+		return
+	}
 	mp.medium.put(buf)
 }
 
@@ -208,6 +225,9 @@ func (mp *MultiPool) GetLarge() []byte {
 
 // PutLarge returns a large buffer
 func (mp *MultiPool) PutLarge(buf []byte) {
+	if buf == nil {
+		return
+	}
 	mp.large.put(buf)
 }
 
@@ -218,6 +238,9 @@ func (mp *MultiPool) GetHuge() []byte {
 
 // PutHuge returns a huge buffer
 func (mp *MultiPool) PutHuge(buf []byte) {
+	if buf == nil {
+		return
+	}
 	mp.huge.put(buf)
 }
 
@@ -228,6 +251,9 @@ func (mp *MultiPool) GetMax() []byte {
 
 // PutMax returns a max buffer
 func (mp *MultiPool) PutMax(buf []byte) {
+	if buf == nil {
+		return
+	}
 	mp.max.put(buf)
 }
 

@@ -689,7 +689,7 @@ func (r *Resolver) queryDoH(ctx context.Context, hostname string, server string)
 
 		// Read response
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		resp.Body.Close() // Always close, even on error
 		if err != nil {
 			continue
 		}
