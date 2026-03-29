@@ -55,6 +55,7 @@ type Trace struct {
 // Span represents a trace span
 type Span struct {
 	trace     *Trace
+	tracer    *Tracer // Reference to tracer for pool return
 	name      string
 	startTime time.Time
 	tags      map[string]string
@@ -66,6 +67,7 @@ type Tracer struct {
 	traces   map[string]*Trace
 	sampler  Sampler
 	exporter TraceExporter
+	spanPool sync.Pool // Pool for Span objects to reduce allocations
 }
 
 // Stop stops the tracer and exports remaining traces
@@ -352,11 +354,17 @@ func (m *Metrics) WritePrometheus(w io.Writer) {
 
 // NewTracer creates a new tracer
 func NewTracer(sampler Sampler, exporter TraceExporter) *Tracer {
-	return &Tracer{
+	t := &Tracer{
 		traces:   make(map[string]*Trace),
 		sampler:  sampler,
 		exporter: exporter,
 	}
+	t.spanPool.New = func() interface{} {
+		return &Span{
+			tags: make(map[string]string, 4), // Pre-allocate small map
+		}
+	}
+	return t
 }
 
 // StartSpan starts a new trace span
@@ -366,11 +374,12 @@ func (t *Tracer) StartSpan(ctx context.Context, name string, opts ...SpanOption)
 		return ctx, nil
 	}
 
-	span := &Span{
-		name:      name,
-		startTime: time.Now(),
-		tags:      make(map[string]string),
-	}
+	// Get span from pool
+	span := t.spanPool.Get().(*Span)
+	span.name = name
+	span.startTime = time.Now()
+	span.tags = make(map[string]string, 4) // Reset tags
+	span.tracer = t // Set tracer reference
 
 	// Apply options
 	for _, opt := range opts {
@@ -432,6 +441,12 @@ func (s *Span) End() {
 	if s.trace.ParentID == "" {
 		if s.trace.exporter != nil {
 			s.trace.exporter.Export(s.trace)
+		}
+
+		// Return span to pool after export
+		if s.tracer != nil {
+			s.tags = nil // Help GC
+			s.tracer.spanPool.Put(s)
 		}
 	}
 }
