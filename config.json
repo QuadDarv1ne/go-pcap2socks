@@ -1,154 +1,165 @@
 {
-  "pcap": {
-    "interfaceGateway": "192.168.31.227",
-    "mtu": 1472,
-    "network": "192.168.31.0/24",
-    "localIP": "192.168.31.227",
-    "localMAC": "0a:00:27:00:00:15",
-    "networkIPv6": "fd00::/64",
-    "localIPv6": "fd00::1",
-    "interfaceGatewayIPv6": "fd00::1"
-  },
-  "dhcp": {
-    "enabled": true,
-    "poolStart": "192.168.31.150",
-    "poolEnd": "192.168.31.200",
-    "leaseDuration": 86400,
-    "ipv6Enabled": true,
-    "ipv6PoolStart": "fd00::64:64:64:64",
-    "ipv6PoolEnd": "fd00::64:64:64:ce",
-    "ipv6Prefix": "fd00::/64",
-    "dnsServers": ["8.8.8.8", "1.1.1.1"],
-    "ntpServers": ["time.google.com"],
-    "wpadURL": ""
-  },
-  "dns": {
-    "servers": [
-      {
-        "address": "8.8.8.8:53"
-      },
-      {
-        "address": "1.1.1.1:53"
-      }
-    ],
-    "useSystemDNS": false,
-    "autoBench": true,
-    "benchInterval": 300,
-    "cacheSize": 1024,
-    "cacheTTL": 300,
-    "preWarmCache": true,
-    "preWarmDomains": [
-      "playstation.com",
-      "playstation.net",
-      "sonyentertainmentnetwork.com",
-      "google.com",
-      "cloudflare.com"
-    ],
-    "persistentCache": true,
-    "cacheFile": "dns_cache.json"
-  },
-  "routing": {
-    "rules": [
-      {
-        "dstPort": "53",
-        "outboundTag": "dns-out",
-        "SrcPortMatcher": null,
-        "DstPortMatcher": null,
-        "SrcIPs": null,
-        "DstIPs": null
-      }
-    ]
-  },
-  "outbounds": [
-    {
-      "direct": {},
-      "tag": "direct"
-    },
-    {
-      "dns": {},
-      "tag": "dns-out"
-    },
-    {
-      "socks": {
-        "address": "proxy1.example.com:1080",
-        "username": "",
-        "password": ""
-      },
-      "tag": "proxy1"
-    },
-    {
-      "socks": {
-        "address": "proxy2.example.com:1080",
-        "username": "",
-        "password": ""
-      },
-      "tag": "proxy2"
-    }
-  ],
-  "wanBalancer": {
-    "enabled": false,
-    "policy": "round-robin",
-    "uplinks": [
-      {
-        "tag": "proxy1",
-        "weight": 3,
-        "priority": 1,
-        "description": "Primary WAN - high bandwidth"
-      },
-      {
-        "tag": "proxy2",
-        "weight": 1,
-        "priority": 2,
-        "description": "Secondary WAN - backup"
-      }
-    ],
-    "healthCheck": {
-      "enabled": true,
-      "interval": "10s",
-      "timeout": "5s",
-      "target": "8.8.8.8:53",
-      "failThreshold": 3,
-      "passThreshold": 2
-    }
-  },
-  "capture": {},
-  "language": "ru",
-  "hotkey": {
-    "enabled": true,
-    "toggle": "Ctrl+Alt+P"
-  },
-  "upnp": {
-    "enabled": true,
-    "autoForward": true,
-    "leaseDuration": 3600,
-    "gamePresets": {
-      "ps4": [
-        3478,
-        3479,
-        3480
-      ],
-      "ps5": [
-        3478,
-        3479,
-        3480
-      ],
-      "switch": [
-        12400,
-        12401,
-        12402,
-        6657,
-        6667
-      ],
-      "xbox": [
-        3074,
-        3075,
-        3478,
-        3479,
-        3480
-      ]
-    }
-  },
-  "windivert": {
-    "enabled": true
-  }
+    "pcap":  {
+                 "interfaceGateway":  "192.168.100.1",
+                 "mtu":  1472,
+                 "network":  "192.168.100.0/24",
+                 "localIP":  "192.168.100.1",
+                 "localMAC":  "0a:00:27:00:00:13",
+                 "networkIPv6":  "fd00::/64",
+                 "localIPv6":  "fd00::1",
+                 "interfaceGatewayIPv6":  "fd00::1"
+             },
+    "dhcp":  {
+                 "enabled":  true,
+                 "poolStart":  "192.168.100.100",
+                 "poolEnd":  "192.168.100.200",
+                 "leaseDuration":  86400,
+                 "ipv6Enabled":  true,
+                 "ipv6PoolStart":  "fd00::64:64:64:64",
+                 "ipv6PoolEnd":  "fd00::64:64:64:ce",
+                 "ipv6Prefix":  "fd00::/64",
+                 "dnsServers":  [
+                                    "8.8.8.8",
+                                    "1.1.1.1"
+                                ],
+                 "ntpServers":  [
+                                    "time.google.com"
+                                ],
+                 "wpadURL":  ""
+             },
+    "dns":  {
+                "servers":  [
+                                {
+                                    "address":  "8.8.8.8:53"
+                                },
+                                {
+                                    "address":  "1.1.1.1:53"
+                                }
+                            ],
+                "useSystemDNS":  false,
+                "autoBench":  true,
+                "benchInterval":  300,
+                "cacheSize":  1024,
+                "cacheTTL":  300,
+                "preWarmCache":  true,
+                "preWarmDomains":  [
+                                       "playstation.com",
+                                       "playstation.net",
+                                       "sonyentertainmentnetwork.com",
+                                       "google.com",
+                                       "cloudflare.com"
+                                   ],
+                "persistentCache":  true,
+                "cacheFile":  "dns_cache.json"
+            },
+    "routing":  {
+                    "rules":  [
+                                  {
+                                      "dstPort":  "53",
+                                      "outboundTag":  "dns-out",
+                                      "SrcPortMatcher":  null,
+                                      "DstPortMatcher":  null,
+                                      "SrcIPs":  null,
+                                      "DstIPs":  null
+                                  }
+                              ]
+                },
+    "outbounds":  [
+                      {
+                          "direct":  {
+
+                                     },
+                          "tag":  "direct"
+                      },
+                      {
+                          "dns":  {
+
+                                  },
+                          "tag":  "dns-out"
+                      },
+                      {
+                          "socks":  {
+                                        "address":  "proxy1.example.com:1080",
+                                        "username":  "",
+                                        "password":  ""
+                                    },
+                          "tag":  "proxy1"
+                      },
+                      {
+                          "socks":  {
+                                        "address":  "proxy2.example.com:1080",
+                                        "username":  "",
+                                        "password":  ""
+                                    },
+                          "tag":  "proxy2"
+                      }
+                  ],
+    "wanBalancer":  {
+                        "enabled":  false,
+                        "policy":  "round-robin",
+                        "uplinks":  [
+                                        {
+                                            "tag":  "proxy1",
+                                            "weight":  3,
+                                            "priority":  1,
+                                            "description":  "Primary WAN - high bandwidth"
+                                        },
+                                        {
+                                            "tag":  "proxy2",
+                                            "weight":  1,
+                                            "priority":  2,
+                                            "description":  "Secondary WAN - backup"
+                                        }
+                                    ],
+                        "healthCheck":  {
+                                            "enabled":  true,
+                                            "interval":  "10s",
+                                            "timeout":  "5s",
+                                            "target":  "8.8.8.8:53",
+                                            "failThreshold":  3,
+                                            "passThreshold":  2
+                                        }
+                    },
+    "capture":  {
+
+                },
+    "language":  "ru",
+    "hotkey":  {
+                   "enabled":  true,
+                   "toggle":  "Ctrl+Alt+P"
+               },
+    "upnp":  {
+                 "enabled":  true,
+                 "autoForward":  true,
+                 "leaseDuration":  3600,
+                 "gamePresets":  {
+                                     "ps4":  [
+                                                 3478,
+                                                 3479,
+                                                 3480
+                                             ],
+                                     "ps5":  [
+                                                 3478,
+                                                 3479,
+                                                 3480
+                                             ],
+                                     "switch":  [
+                                                    12400,
+                                                    12401,
+                                                    12402,
+                                                    6657,
+                                                    6667
+                                                ],
+                                     "xbox":  [
+                                                  3074,
+                                                  3075,
+                                                  3478,
+                                                  3479,
+                                                  3480
+                                              ]
+                                 }
+             },
+    "windivert":  {
+                      "enabled":  true
+                  }
 }
