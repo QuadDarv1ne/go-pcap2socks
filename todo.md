@@ -1,13 +1,22 @@
 ﻿# go-pcap2socks TODO
 
 **Последнее обновление**: 29 марта 2026 г.
-**Версия**: v3.31.1 (Startup Optimization)
+**Версия**: v3.32.0 (DNS Metrics & Pre-warming)
 **Статус**: ✅ стабилен, сборка успешна, working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 
 ---
 
 ## 📈 Последние улучшения
+
+### v3.32.0 - DNS Metrics & Pre-warming (29 марта 2026)
+- ✅ Добавлены метрики DNS cache hit/miss (`resolverMetrics` в `dns/resolver.go`)
+- ✅ Pre-warming cache для ускорения холодного старта DNS
+- ✅ Конфигурация `preWarmCache` и `preWarmDomains` в `cfg.DNS`
+- ✅ Метод `GetMetrics()` для получения статистики кэша
+- ✅ Интеграция в `init_parallel.go` и `main.go`
+- ✅ Обновлён `config.json` с примером pre-warm domains
+- ✅ Ускорение DNS resolution: **~10-30%** (ожидаемое, при pre-warming)
 
 ### v3.31.1 - Startup Optimization (29 марта 2026)
 - ✅ Параллельная инициализация компонентов (Profile Manager, UPnP Manager, DNS Resolver)
@@ -194,12 +203,20 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [ ] Улучшение структуры пакетов (анализ зависимостей)
 - [ ] Дополнительные метрики для мониторинга
 
-### 🟢 Сессия 32: Будущие улучшения (P2) — НОВАЯ
+### ✅ Сессия 32: DNS Metrics & Pre-warming (P2) — ЗАВЕРШЕНА (часть 1)
+- [x] Дополнительные метрики для мониторинга (DNS cache hit/miss)
+  * [x] `resolverMetrics` struct в `dns/resolver.go`
+  * [x] `RecordCacheHit()` в `getCached()`
+  * [x] `RecordCacheMiss()` в `LookupIP()`
+  * [x] `GetMetrics()` метод для получения статистики
+- [x] Оптимизация времени холодного старта DNS (pre-warming cache)
+  * [x] `preWarmCache()` функция для пре-заполнения кэша
+  * [x] Конфигурация `PreWarmCache` и `PreWarmDomains` в `cfg.DNS`
+  * [x] Интеграция в `init_parallel.go` и `main.go`
+  * [x] Обновлён `config.json` с примером domains
 - [ ] Интеграционные тесты для основных сценариев
 - [ ] Улучшение структуры пакетов (анализ зависимостей)
-- [ ] Дополнительные метрики для мониторинга
-- [ ] Оптимизация времени холодного старта DNS
-- [ ] Кэширование результатов инициализации
+- [ ] Кэширование результатов инициализации (persistent cache на диске)
 
 ---
 
