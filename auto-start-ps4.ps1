@@ -124,8 +124,10 @@ if ($null -eq $macConfig) {
     Write-Host "WARNING: Не удалось получить MAC адрес, используем запасной" -ForegroundColor Yellow
     $localMAC = "0a:00:27:00:00:15"
 } else {
-    $localMAC = $macConfig.MacAddress -replace '..', '$&' -replace '^-', '' -replace '(.{2})(?!$)', '$1:'
-    $localMAC = $localMAC.ToLower()
+    # Форматируем MAC адрес в формате xx:xx:xx:xx:xx:xx
+    $macRaw = $macConfig.MacAddress -replace '-', ''
+    $macParts = $macRaw -split '(.{2})' | Where-Object { $_ -ne '' }
+    $localMAC = ($macParts -join ':').ToLower()
 }
 
 Write-Host "[OK] MAC адрес: $localMAC" -ForegroundColor Green
