@@ -83,11 +83,17 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [x] Оптимизация memory footprint — **не требуется**
 - [x] Добавление новых бенчмарков для ключевых компонентов — **6 бенчмарков**
 
-### 🟢 Сессия 20: Стабильность (P1) — НОВАЯ
-- [ ] Graceful shutdown для всех компонентов
-- [ ] Auto-recovery при ошибках DNS/Proxy
-- [ ] Улучшение обработки edge cases
-- [ ] Расширенное логирование ошибок
+### ✅ Сессия 20: Стабильность (P1) — ЗАВЕРШЕНА
+- [x] Graceful shutdown для всех компонентов (`shutdown/manager.go`, `main.go`)
+- [x] Auto-recovery при ошибках DNS/Proxy (`health/checker.go`, `retry/retry.go`)
+- [x] Улучшение обработки edge cases (`errors/errors.go`, `circuitbreaker/breaker.go`)
+- [x] Расширенное логирование ошибок (`asynclogger/async_handler.go`, `slog`)
+
+### 🟢 Сессия 21: Расширения (P2) — НОВАЯ
+- [ ] WireGuard интеграция (`wireguard/`)
+- [ ] UPnP проброс для игр (`upnp/`)
+- [ ] Web UI улучшение (`web/`)
+- [ ] Telegram/Discord уведомления
 
 ---
 
