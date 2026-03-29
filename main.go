@@ -51,7 +51,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/tray"
 	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
 	updaterpkg "github.com/QuadDarv1ne/go-pcap2socks/updater"
-	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	"github.com/QuadDarv1ne/go-pcap2socks/validation"
 	"github.com/QuadDarv1ne/go-pcap2socks/wanbalancer"
@@ -2419,7 +2418,7 @@ func runAPIServer() {
 func discoverUPnP() {
 	slog.Info("Discovering UPnP devices...")
 
-	u := upnp.New()
+	u := upnpmanager.New()
 	devices, err := u.Discover()
 	if err != nil {
 		slog.Error("UPnP discovery error", slog.Any("err", err))

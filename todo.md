@@ -122,11 +122,18 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [x] Error handling improvement (`errors/errors.go` — ToLogAttr, LogAttrs, LogError, LogWarn)
 - [x] Logging enhancement (структурированное логирование ошибок с контекстом)
 
-### 🟢 Сессия 26: Рефакторинг (P2) — НОВАЯ
-- [ ] Улучшение структуры пакетов
-- [ ] Code deduplication
-- [ ] Interface improvement
+### ✅ Сессия 26: Рефакторинг (P2) — ЗАВЕРШЕНА
+- [x] Code deduplication
+  * Удалён дублирующий импорт upnp в main.go
+  * upnpmanager.New() вместо upnp.New()
+- [x] Interface improvement (единый интерфейс для UPnP)
+- [ ] Улучшение структуры пакетов (требуется анализ)
 - [ ] Documentation update
+
+### 🟢 Сессия 27: Поддержка (P2) — НОВАЯ
+- [ ] Обновление зависимостей (go mod tidy)
+- [ ] Актуализация документации
+- [ ] Code review критических компонентов
 
 ---
 
