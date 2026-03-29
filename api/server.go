@@ -155,6 +155,7 @@ func (s *Server) setupRoutes() {
 	// Public endpoints (no auth required, with rate limiting)
 	s.mux.HandleFunc("/api/status", s.rateLimitMiddleware(s.handleStatus))
 	s.mux.HandleFunc("/metrics", s.handleMetrics)
+	s.mux.HandleFunc("/ps4-setup", s.handlePS4SetupPage)
 	s.mux.HandleFunc("/", s.handleStatic)
 
 	// Protected endpoints (require auth if token is set, with rate limiting)
@@ -169,6 +170,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/config/update", s.rateLimitMiddleware(s.authMiddleware(s.handleConfigUpdate)))
 	s.mux.HandleFunc("/api/config/reload", s.rateLimitMiddleware(s.authMiddleware(s.handleConfigReload)))
 	s.mux.HandleFunc("/api/config/auto", s.rateLimitMiddleware(s.authMiddleware(s.handleAutoConfig)))
+	s.mux.HandleFunc("/api/ps4/setup", s.rateLimitMiddleware(s.authMiddleware(s.handlePS4Setup)))
 	s.mux.HandleFunc("/api/dhcp", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCP)))
 	s.mux.HandleFunc("/api/dhcp/leases", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPLeases)))
 	s.mux.HandleFunc("/api/dhcp/metrics", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPMetrics)))
@@ -880,6 +882,13 @@ func (s *Server) handleHotkeyToggle(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handlePS4SetupPage(w http.ResponseWriter, r *http.Request) {
+	// Serve PS4 setup page
+	webPath := filepath.Join(filepath.Dir(s.configPath), "web")
+	filePath := filepath.Join(webPath, "ps4-setup.html")
+	http.ServeFile(w, r, filePath)
+}
+
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	// Serve web UI files
 	webPath := filepath.Join(filepath.Dir(s.configPath), "web")
@@ -1248,6 +1257,85 @@ func (s *Server) handleDHCPGet(w http.ResponseWriter, r *http.Request) {
 		"pool_end":       poolEnd,
 		"lease_duration": leaseDuration,
 	})
+}
+
+// handlePS4Setup handles quick PS4 setup
+func (s *Server) handlePS4Setup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		WiFi      string `json:"wifi"`
+		Ethernet  string `json:"ethernet"`
+		DHCPStart string `json:"dhcpStart"`
+		DHCPEnd   string `json:"dhcpEnd"`
+		MTU       int    `json:"mtu"`
+		NAT       bool   `json:"nat"`
+		UPnP      bool   `json:"upnp"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Load current config
+	data, err := os.ReadFile(s.configPath)
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Update PCAP settings
+	if pcap, ok := config["pcap"].(map[string]interface{}); ok {
+		pcap["interfaceGateway"] = req.WiFi
+		pcap["localIP"] = "192.168.100.1"
+		pcap["network"] = "192.168.100.0/24"
+		pcap["mtu"] = req.MTU
+	}
+
+	// Update DHCP settings
+	if dhcp, ok := config["dhcp"].(map[string]interface{}); ok {
+		dhcp["enabled"] = true
+		dhcp["poolStart"] = req.DHCPStart
+		dhcp["poolEnd"] = req.DHCPEnd
+		dhcp["leaseDuration"] = 86400
+	}
+
+	// Update NAT settings
+	config["nat"] = map[string]interface{}{
+		"enabled":           req.NAT,
+		"externalInterface": req.WiFi,
+		"internalInterface": req.Ethernet,
+	}
+
+	// Update UPnP settings
+	if upnp, ok := config["upnp"].(map[string]interface{}); ok {
+		upnp["enabled"] = req.UPnP
+		upnp["autoForward"] = req.UPnP
+	}
+
+	// Save config
+	data, err = json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.sendSuccess(w, "PS4 setup completed. Service will restart with new configuration.")
 }
 
 // handleDHCPUpdate updates DHCP configuration

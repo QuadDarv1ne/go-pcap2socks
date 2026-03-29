@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>go-pcap2socks - Настройка PS4</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --accent: #0f3460;
+            --text: #eee;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --error: #f44336;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary), var(--bg-secondary));
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: var(--accent);
+            border-radius: 10px;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .status.running { background: var(--success); }
+        .status.stopped { background: var(--error); }
+        
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .card h2 {
+            margin-bottom: 15px;
+            color: #4fc3f7;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--accent);
+            border-radius: 5px;
+            background: var(--bg-primary);
+            color: var(--text);
+            font-size: 1rem;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #4fc3f7;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .checkbox-group input {
+            width: auto;
+        }
+        
+        button {
+            background: #4fc3f7;
+            color: var(--bg-primary);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #29b6f6;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #43a047; }
+        
+        .btn-danger { background: var(--error); color: white; }
+        .btn-danger:hover { background: #e53935; }
+        
+        .device-list {
+            list-style: none;
+        }
+        
+        .device-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: var(--bg-primary);
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .device-info {
+            flex: 1;
+        }
+        
+        .device-mac {
+            font-family: monospace;
+            color: #4fc3f7;
+        }
+        
+        .device-ip {
+            margin-left: 15px;
+            color: #aaa;
+        }
+        
+        .log-container {
+            background: #000;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 3px 0;
+        }
+        
+        .log-info { color: #4fc3f7; }
+        .log-warn { color: var(--warning); }
+        .log-error { color: var(--error); }
+        .log-success { color: var(--success); }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            flex: 1;
+            min-width: 150px;
+            background: var(--bg-primary);
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4fc3f7;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #aaa;
+            margin-top: 5px;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .alert-info {
+            background: rgba(79, 195, 247, 0.1);
+            border-left: 4px solid #4fc3f7;
+        }
+        
+        .alert-success {
+            background: rgba(76, 175, 80, 0.1);
+            border-left: 4px solid var(--success);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 go-pcap2socks - Настройка PS4</h1>
+            <div id="serviceStatus" class="status stopped">Остановлен</div>
+        </header>
+        
+        <div class="alert alert-info">
+            <strong>ℹ️ Быстрый старт:</strong> Выберите Wi-Fi и Ethernet адаптеры, нажмите "Сохранить и запустить"
+        </div>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>⚙️ Настройка сети</h2>
+                <form id="configForm">
+                    <div class="form-group">
+                        <label for="wifiInterface">Wi-Fi интерфейс (внешний):</label>
+                        <select id="wifiInterface" required>
+                            <option value="">Выберите Wi-Fi адаптер...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ethernetInterface">Ethernet интерфейс (внутренний):</label>
+                        <select id="ethernetInterface" required>
+                            <option value="">Выберите Ethernet адаптер...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dhcpStart">DHCP диапазон (начало):</label>
+                        <input type="text" id="dhcpStart" value="192.168.100.100" pattern="^(\d{1,3}\.){3}\d{1,3}$">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dhcpEnd">DHCP диапазон (конец):</label>
+                        <input type="text" id="dhcpEnd" value="192.168.100.200" pattern="^(\d{1,3}\.){3}\d{1,3}$">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="mtu">MTU:</label>
+                        <input type="number" id="mtu" value="1472" min="576" max="9000">
+                    </div>
+                    
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="natEnabled" checked>
+                        <label for="natEnabled">Включить NAT маршрутизацию</label>
+                    </div>
+                    
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="upnpEnabled" checked>
+                        <label for="upnpEnabled">Включить UPnP для PS4</label>
+                    </div>
+                    
+                    <button type="submit" class="btn-success">💾 Сохранить и запустить</button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h2>📊 Статистика</h2>
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="uptimeValue">0s</div>
+                        <div class="stat-label">Uptime</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="devicesValue">0</div>
+                        <div class="stat-label">Устройств</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="trafficValue">0 B</div>
+                        <div class="stat-label">Трафик</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 20px; margin-bottom: 10px;">Подключённые устройства:</h3>
+                <ul class="device-list" id="deviceList">
+                    <li class="device-item">
+                        <div class="device-info">Нет подключённых устройств</div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>📋 Логи в реальном времени</h2>
+            <div class="log-container" id="logContainer"></div>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button onclick="clearLogs()">🗑️ Очистить логи</button>
+                <button onclick="toggleAutoScroll()" id="autoScrollBtn">⏸️ Автопрокрутка: ВКЛ</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>🎮 Настройки PS4</h2>
+            <div class="alert alert-success">
+                <strong>✅ Как подключить PS4:</strong>
+                <ol style="margin-top: 10px; margin-left: 20px;">
+                    <li>Подключите PS4 к ПК через Ethernet кабель</li>
+                    <li>На PS4: Настройки → Сеть → Настроить соединение с Интернетом</li>
+                    <li>Выберите "Легко" (автоматически)</li>
+                    <li>PS4 должна получить IP автоматически</li>
+                </ol>
+            </div>
+            
+            <h3 style="margin-top: 20px;">Ручная настройка (если автоматическая не работает):</h3>
+            <table style="width: 100%; margin-top: 10px; border-collapse: collapse;">
+                <tr style="background: var(--accent);">
+                    <th style="padding: 10px; text-align: left;">Параметр</th>
+                    <th style="padding: 10px;">Значение</th>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent);">IP-адрес</td>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent); text-align: center;">192.168.100.100</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent);">Маска подсети</td>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent); text-align: center;">255.255.255.0</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent);">Шлюз</td>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent); text-align: center;">192.168.100.1</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent);">DNS</td>
+                    <td style="padding: 10px; border-bottom: 1px solid var(--accent); text-align: center;">8.8.8.8</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px;">MTU</td>
+                    <td style="padding: 10px; text-align: center;">1472</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        let autoScroll = true;
+        let lastLogIndex = 0;
+        
+        // Загрузка списка интерфейсов
+        async function loadInterfaces() {
+            try {
+                const response = await fetch('/api/interfaces');
+                const data = await response.json();
+                
+                const wifiSelect = document.getElementById('wifiInterface');
+                const ethernetSelect = document.getElementById('ethernetInterface');
+                
+                if (data.success && Array.isArray(data.data)) {
+                    data.data.forEach(iface => {
+                        const option = document.createElement('option');
+                        option.value = iface.name;
+                        option.textContent = `${iface.name} (${iface.ip || 'Нет IP'})`;
+                        
+                        if (iface.name.toLowerCase().includes('wi-fi') || 
+                            iface.name.toLowerCase().includes('беспроводная')) {
+                            wifiSelect.appendChild(option.cloneNode(true));
+                        }
+                        if (iface.name.toLowerCase().includes('ethernet')) {
+                            ethernetSelect.appendChild(option.cloneNode(true));
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки интерфейсов:', error);
+            }
+        }
+        
+        // Загрузка статуса
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const statusEl = document.getElementById('serviceStatus');
+                    if (data.data.running) {
+                        statusEl.textContent = 'Работает';
+                        statusEl.className = 'status running';
+                        document.getElementById('uptimeValue').textContent = data.data.uptime;
+                        document.getElementById('devicesValue').textContent = data.data.devices?.length || 0;
+                        
+                        const traffic = data.data.traffic;
+                        const totalBytes = traffic ? (traffic.total_bytes || traffic.upload_bytes + traffic.download_bytes) : 0;
+                        document.getElementById('trafficValue').textContent = formatBytes(totalBytes);
+                        
+                        updateDeviceList(data.data.devices);
+                    } else {
+                        statusEl.textContent = 'Остановлен';
+                        statusEl.className = 'status stopped';
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки статуса:', error);
+            }
+        }
+        
+        function updateDeviceList(devices) {
+            const deviceList = document.getElementById('deviceList');
+            if (!devices || devices.length === 0) {
+                deviceList.innerHTML = '<li class="device-item"><div class="device-info">Нет подключённых устройств</div></li>';
+                return;
+            }
+            
+            deviceList.innerHTML = devices.map(device => `
+                <li class="device-item">
+                    <div class="device-info">
+                        <strong>${device.hostname || 'Неизвестное устройство'}</strong>
+                        <div class="device-mac">${device.mac}</div>
+                    </div>
+                    <div class="device-ip">${device.ip}</div>
+                </li>
+            `).join('');
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Отправка формы
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const config = {
+                wifi: document.getElementById('wifiInterface').value,
+                ethernet: document.getElementById('ethernetInterface').value,
+                dhcpStart: document.getElementById('dhcpStart').value,
+                dhcpEnd: document.getElementById('dhcpEnd').value,
+                mtu: parseInt(document.getElementById('mtu').value),
+                nat: document.getElementById('natEnabled').checked,
+                upnp: document.getElementById('upnpEnabled').checked
+            };
+            
+            try {
+                const response = await fetch('/api/config/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    addLog('✅ Конфигурация сохранена и сервис запущен', 'success');
+                    setTimeout(loadStatus, 2000);
+                } else {
+                    addLog('❌ Ошибка: ' + result.error, 'error');
+                }
+            } catch (error) {
+                addLog('❌ Ошибка: ' + error.message, 'error');
+            }
+        });
+        
+        // Логирование
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString('ru-RU');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            
+            if (autoScroll) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+        
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+        
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            document.getElementById('autoScrollBtn').textContent = 
+                autoScroll ? '⏸️ Автопрокрутка: ВКЛ' : '▶️ Автопрокрутка: ВЫКЛ';
+        }
+        
+        // Инициализация
+        loadInterfaces();
+        loadStatus();
+        setInterval(loadStatus, 5000);
+        
+        // Добавим тестовые логи для демонстрации
+        addLog('🚀 Web UI загружен', 'success');
+        addLog('📡 Поиск сетевых интерфейсов...', 'info');
+    </script>
+</body>
+</html>
