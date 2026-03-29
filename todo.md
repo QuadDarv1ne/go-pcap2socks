@@ -1,13 +1,32 @@
 ﻿# go-pcap2socks TODO
 
 **Последнее обновление**: 29 марта 2026 г.
-**Версия**: v3.32.0 (DNS Metrics & Persistent Cache + API Integration)
+**Версия**: v3.33.0 (Optimization & Polishing)
 **Статус**: ✅ стабилен, сборка успешна, working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 
 ---
 
 ## 📈 Последние улучшения
+
+### v3.33.0 - Optimization & Polishing (29 марта 2026)
+
+**Часть 1: Per-client Bandwidth Limiting**
+- ✅ bandwidth.BandwidthLimiter интегрирован в proxy.Router
+- ✅ Метод SetBandwidthLimit() для установки лимитов по MAC/IP
+- ✅ Default лимит 10Mbps для всех клиентов
+- ✅ Поддержка cfg.RateLimitRule для правил
+
+**Часть 2: Graceful Shutdown улучшения**
+- ✅ dhcp/lease_db.go: Close() явно сохраняет leases перед закрытием
+- ✅ main.go: улучшенное логирование сохранения DHCP leases
+- ✅ Логи: 'Saving DHCP leases...' → 'DHCP leases saved'
+
+**Часть 3: Connection Pool DoS Protection**
+- ✅ connpool/pool.go: добавлена защита от DoS атак
+- ✅ Статистика Rejected для отслеживания отклонённых соединений
+- ✅ Логирование при срабатывании защиты
+- ✅ MaxSize лимит (100 соединений по умолчанию)
 
 ### v3.32.0 - DNS Metrics & Persistent Cache + API Integration (29 марта 2026)
 
@@ -262,6 +281,20 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] api/server_integration_test.go — тесты Web UI API
   * [x] Тесты покрывают: кэш, pre-warming, persistent cache, concurrent access
   * [x] Бенчмарки для производительности
+
+### ✅ Сессия 33: Optimization & Polishing (P1) — ЗАВЕРШЕНА
+- [x] **Улучшение #1: Per-client Bandwidth Limiting**
+  * [x] bandwidth.BandwidthLimiter интегрирован в proxy.Router
+  * [x] Метод SetBandwidthLimit() для установки лимитов по MAC/IP
+  * [x] Методы GetBandwidthStats(), GetTotalBandwidthStats() (placeholder)
+  * [x] Default лимит 10Mbps для всех клиентов
+- [x] **Улучшение #2: Graceful Shutdown улучшения**
+  * [x] dhcp/lease_db.go: Close() явно сохраняет leases перед закрытием
+  * [x] main.go: улучшенное логирование сохранения DHCP leases
+- [x] **Улучшение #3: Connection Pool DoS Protection**
+  * [x] connpool/pool.go: добавлена защита от DoS атак
+  * [x] Статистика Rejected для отслеживания отклонённых соединений
+  * [x] Логирование при срабатывании защиты
 
 ---
 
