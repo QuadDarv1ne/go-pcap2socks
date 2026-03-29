@@ -32,7 +32,8 @@ func newDNSCache(maxSize int) *dnsCache {
 }
 
 // get retrieves a cached DNS response if valid
-// Returns a copy to prevent concurrent modification of cached data
+// Returns the cached response directly (no copy) for better performance
+// Caller should not modify the returned message
 // Optimized with sync.Map Load for lock-free reads
 func (c *dnsCache) get(key string) (*dns.Msg, bool) {
 	val, exists := c.entries.Load(key)
@@ -51,8 +52,8 @@ func (c *dnsCache) get(key string) (*dns.Msg, bool) {
 	}
 
 	c.hits.Add(1)
-	// Return a copy to avoid concurrent modification
-	return entry.response.Copy(), true
+	// Return cached response directly (zero-copy for performance)
+	return entry.response, true
 }
 
 // set stores a DNS response in cache with TTL

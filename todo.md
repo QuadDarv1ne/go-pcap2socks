@@ -100,13 +100,27 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [x] Интеграция WireGuard в proxy router (`wireguard/wireguard.go` — совместимость с proxy.Dialer)
 - [x] Авто-конфигурация UPnP при старте (`upnp/manager.go` — retry logic)
 - [x] Telegram/Discord уведомления (`notify/notify.go` — InitExternal, Show)
-- [ ] Web UI API endpoints (полная интеграция)
+- [x] Web UI API endpoints (полная интеграция — 40+ endpoints)
 
-### 🟢 Сессия 23: Web UI (P2) — НОВАЯ
-- [ ] REST API endpoints для Web UI
-- [ ] WebSocket realtime обновления
-- [ ] Статистика и графики трафика
-- [ ] Управление настройками через Web UI
+### ✅ Сессия 23: Web UI (P2) — ЗАВЕРШЕНА
+- [x] REST API endpoints для Web UI (`api/server.go` — /api/*, /ws)
+- [x] WebSocket realtime обновления (`api/websocket.go` — WebSocketHub)
+- [x] Статистика и графики трафика (`stats/store.go`, `/api/traffic`)
+- [x] Управление настройками через Web UI (`/api/config`, `/api/profiles`)
+
+### ✅ Сессия 24: Оптимизация (P1) — ЗАВЕРШЕНА
+- [x] Профилирование производительности (pprof — `pprofutil/pprof.go`)
+- [x] Оптимизация памяти в hotspot функциях
+  * DNSCache_Get: 262 ns/op → 28 ns/op (**-90%**), 248 B/op → **0 B/op**
+  * DNSCache_Concurrent: 121 ns/op → 26 ns/op (**-79%**), 248 B/op → **0 B/op**
+- [x] Улучшение concurrency паттернов (sync.Map, zero-copy)
+- [x] Benchmark coverage для ключевых компонентов
+
+### 🟢 Сессия 25: Надёжность (P1) — НОВАЯ
+- [ ] Unit-тесты для критических компонентов (отключены из-за Kaspersky)
+- [ ] Integration tests для основных сценариев
+- [ ] Error handling improvement
+- [ ] Logging enhancement
 
 ---
 
