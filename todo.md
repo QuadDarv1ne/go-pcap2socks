@@ -1,18 +1,40 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 29 марта 2026 г. (Сессия 38)
-**Версия**: v3.38.0 (Health Checks for Proxies)
+**Последнее обновление**: 29 марта 2026 г. (Сессия 39)
+**Версия**: v3.39.0 (Connection Pooling for SOCKS5)
 **Статус**: ✅ стабилен, сборка успешна (25.8 MB), working tree clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
-**🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks — ожидает подключения устройства
+**🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
 **📊 Мониторинг**: API /api/metrics/dhcp + Web UI /dhcp-metrics
 **🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек
+**🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle)
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
 **🔒 Безопасность**: config 0600, pprof отключен, ExecuteOnStart whitelist
 
 ---
 
 ## 📈 Последние улучшения
+
+### v3.39.0 - Connection Pooling for SOCKS5 (29 марта 2026)
+
+**Часть 1: Connection Pool Implementation**
+- ✅ Created connpool.Pool for reusable connections
+- ✅ Pool size: 10 connections (configurable)
+- ✅ Idle timeout: 5 minutes
+- ✅ Connection alive check before reuse
+- ✅ Thread-safe with sync.Mutex
+- ✅ Pool.Stats() for monitoring
+
+**Часть 2: SOCKS5 Integration**
+- ✅ Auto-initialized in NewSocks5()
+- ✅ Close() method for cleanup
+- ✅ Connections returned to pool on success
+- ✅ Fallback to new connection if pool empty
+
+**Часть 3: Graceful Shutdown**
+- ✅ StopHealthChecks() call added
+- ✅ Connection pools closed on shutdown
+- ✅ Debug logging for pool cleanup
 
 ### v3.38.0 - Health Checks for Proxies (29 марта 2026)
 
@@ -516,7 +538,29 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] go build: ✅ (25.8 MB)
   * [x] Sync: dev → main → origin
 
-### ⏳ Сессия 39: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 39: Connection Pooling for SOCKS5 (P2) — ЗАВЕРШЕНА
+- [x] **Connection Pool Implementation**
+  * [x] Created connpool.Pool for reusable connections
+  * [x] Pool size: 10 connections (configurable)
+  * [x] Idle timeout: 5 minutes
+  * [x] Connection alive check before reuse
+  * [x] Thread-safe with sync.Mutex
+  * [x] Pool.Stats() for monitoring
+- [x] **SOCKS5 Integration**
+  * [x] Auto-initialized in NewSocks5()
+  * [x] Close() method for cleanup
+  * [x] Connections returned to pool on success
+  * [x] Fallback to new connection if pool empty
+- [x] **Graceful Shutdown**
+  * [x] StopHealthChecks() call added
+  * [x] Connection pools closed on shutdown
+  * [x] Debug logging for pool cleanup
+- [x] **Code Quality**
+  * [x] go build: ✅ (25.8 MB)
+  * [x] Unit tests included
+  * [x] Sync: dev → main → origin
+
+### ⏳ Сессия 40: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
