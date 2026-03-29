@@ -89,11 +89,18 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [x] Улучшение обработки edge cases (`errors/errors.go`, `circuitbreaker/breaker.go`)
 - [x] Расширенное логирование ошибок (`asynclogger/async_handler.go`, `slog`)
 
-### 🟢 Сессия 21: Расширения (P2) — НОВАЯ
-- [ ] WireGuard интеграция (`wireguard/`)
-- [ ] UPnP проброс для игр (`upnp/`)
-- [ ] Web UI улучшение (`web/`)
-- [ ] Telegram/Discord уведомления
+### ✅ Сессия 21: Расширения (P2) — ЗАВЕРШЕНА
+- [x] WireGuard интеграция (`wireguard/wireguard.go`)
+- [x] UPnP проброс для игр (`upnp/manager.go`, `upnp/upnp.go`)
+- [x] Web UI (`web/index.html` — тёмная/светлая тема, WebSocket)
+- [x] Telegram бот (`telegram/bot.go` — команды /status, /traffic, /devices)
+- [x] Discord webhook (`discord/webhook.go` — уведомления о событиях)
+
+### 🟢 Сессия 22: Интеграция (P1) — НОВАЯ
+- [ ] Интеграция WireGuard в proxy router
+- [ ] Авто-конфигурация UPnP при старте
+- [ ] Web UI API endpoints (полная интеграция)
+- [ ] Telegram/Discord — отправка уведомлений о событиях
 
 ---
 
