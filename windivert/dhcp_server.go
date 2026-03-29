@@ -6,6 +6,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
@@ -48,6 +49,18 @@ type DHCPServer struct {
 	localMAC      net.HardwareAddr
 	localIP       net.IP
 	lastRequest   sync.Map // Rate limiting per MAC: map[string]int64 (nanoseconds)
+	
+	// Metrics for monitoring
+	metrics       struct {
+		packetsReceived  atomic.Int64
+		packetsSent      atomic.Int64
+		discoverCount    atomic.Int64
+		requestCount     atomic.Int64
+		offerCount       atomic.Int64
+		ackCount         atomic.Int64
+		errorsCount      atomic.Int64
+		activeLeases     atomic.Int32
+	}
 }
 
 // NewDHCPServer creates a new DHCP server using WinDivert
@@ -280,6 +293,7 @@ func (s *DHCPServer) processPacket(packet *Packet, dhcpPacketCount *int) {
 
 	// Increment DHCP packet counter
 	*dhcpPacketCount++
+	s.metrics.packetsReceived.Add(1)
 
 	// Log DHCP request
 	slog.Info("========== WinDivert DHCP request received ==========",
@@ -385,10 +399,12 @@ func (s *DHCPServer) processPacket(packet *Packet, dhcpPacketCount *int) {
 	// Build and send response with Ethernet header
 	err = s.sendDHCPResponseWithMAC(clientMAC, packet, responseData, broadcastFlag)
 	if err != nil {
+		s.metrics.errorsCount.Add(1)
 		slog.Error("DHCP send error",
 			"err", err,
 			"mac", clientMAC.String())
 	} else {
+		s.metrics.packetsSent.Add(1)
 		slog.Info("========== DHCP response sent successfully ==========",
 			"mac", clientMAC.String(),
 			"broadcast", broadcastFlag,
@@ -725,4 +741,23 @@ func calculateUDPChecksum(packet []byte, srcIP, dstIP net.IP, ethOffset int) uin
 	}
 
 	return checksum
+}
+
+// GetMetrics returns DHCP server statistics
+func (s *DHCPServer) GetMetrics() map[string]interface{} {
+	return map[string]interface{}{
+		"packets_received": s.metrics.packetsReceived.Load(),
+		"packets_sent":     s.metrics.packetsSent.Load(),
+		"discover_count":   s.metrics.discoverCount.Load(),
+		"request_count":    s.metrics.requestCount.Load(),
+		"offer_count":      s.metrics.offerCount.Load(),
+		"ack_count":        s.metrics.ackCount.Load(),
+		"errors_count":     s.metrics.errorsCount.Load(),
+		"active_leases":    s.metrics.activeLeases.Load(),
+	}
+}
+
+// IncrementMetrics safely increments a metric counter
+func (s *DHCPServer) incrementMetric(counter *atomic.Int64, value int64) {
+	counter.Add(value)
 }

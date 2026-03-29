@@ -57,6 +57,7 @@ import (
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 	"github.com/QuadDarv1ne/go-pcap2socks/validation"
 	"github.com/QuadDarv1ne/go-pcap2socks/wanbalancer"
+	"github.com/QuadDarv1ne/go-pcap2socks/windivert"
 	"github.com/jackpal/gateway"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
@@ -942,6 +943,18 @@ func main() {
 			return success, errors, errorRate, true
 		}
 		return 0, 0, 0, false
+	})
+
+	// Set DHCP metrics getter for API
+	api.SetDHCPMetricsFn(func() (map[string]interface{}, bool) {
+		if _dhcpServer == nil {
+			return nil, false
+		}
+		// Try to get metrics from WinDivert DHCP server
+		if dhcpServer, ok := _dhcpServer.(*windivert.DHCPServer); ok {
+			return dhcpServer.GetMetrics(), true
+		}
+		return nil, false
 	})
 
 	// Set service control callbacks for API
@@ -2504,6 +2517,18 @@ func autoConfigureAndStart() {
 			return success, errors, errorRate, true
 		}
 		return 0, 0, 0, false
+	})
+
+	// Set DHCP metrics getter for API
+	api.SetDHCPMetricsFn(func() (map[string]interface{}, bool) {
+		if _dhcpServer == nil {
+			return nil, false
+		}
+		// Try to get metrics from WinDivert DHCP server
+		if dhcpServer, ok := _dhcpServer.(*windivert.DHCPServer); ok {
+			return dhcpServer.GetMetrics(), true
+		}
+		return nil, false
 	})
 
 	// Set service control callbacks for API

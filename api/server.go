@@ -204,6 +204,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/interfaces", s.rateLimitMiddleware(s.authMiddleware(s.handleInterfaces)))
 	s.mux.HandleFunc("/ws", s.rateLimitMiddleware(s.authMiddleware(s.handleWebSocket)))
 	s.mux.HandleFunc("/api/metrics/performance", s.rateLimitMiddleware(s.authMiddleware(s.handlePerformanceMetrics)))
+	s.mux.HandleFunc("/api/metrics/dhcp", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPMetrics)))
 }
 
 // Stop gracefully stops the API server and releases resources
@@ -282,6 +283,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 var getIsRunningFn func() bool
 var getProxyConnectionStatsFn func() (success, errors uint64, errorRate float64, ok bool)
 var getDNSMetricsFn func() (hits, misses uint64, hitRatio float64, ok bool)
+var getDHCPMetricsFn func() (map[string]interface{}, bool)
 
 // SetIsRunningFn sets the function to check if service is running
 func SetIsRunningFn(fn func() bool) {
@@ -296,6 +298,11 @@ func SetProxyConnectionStatsFn(fn func() (success, errors uint64, errorRate floa
 // SetDNSMetricsFn sets the function to get DNS metrics
 func SetDNSMetricsFn(fn func() (hits, misses uint64, hitRatio float64, ok bool)) {
 	getDNSMetricsFn = fn
+}
+
+// SetDHCPMetricsFn sets the function to get DHCP metrics
+func SetDHCPMetricsFn(fn func() (map[string]interface{}, bool)) {
+	getDHCPMetricsFn = fn
 }
 
 // handleStart handles the /api/start endpoint to start the service
