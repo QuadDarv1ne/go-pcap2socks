@@ -156,6 +156,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/status", s.rateLimitMiddleware(s.handleStatus))
 	s.mux.HandleFunc("/metrics", s.handleMetrics)
 	s.mux.HandleFunc("/ps4-setup", s.handlePS4SetupPage)
+	s.mux.HandleFunc("/dhcp-metrics", s.handleDHCPMetricsPage)
 	s.mux.HandleFunc("/", s.handleStatic)
 
 	// Protected endpoints (require auth if token is set, with rate limiting)
@@ -893,6 +894,13 @@ func (s *Server) handlePS4SetupPage(w http.ResponseWriter, r *http.Request) {
 	// Serve PS4 setup page
 	webPath := filepath.Join(filepath.Dir(s.configPath), "web")
 	filePath := filepath.Join(webPath, "ps4-setup.html")
+	http.ServeFile(w, r, filePath)
+}
+
+func (s *Server) handleDHCPMetricsPage(w http.ResponseWriter, r *http.Request) {
+	// Serve DHCP metrics dashboard
+	webPath := filepath.Join(filepath.Dir(s.configPath), "web")
+	filePath := filepath.Join(webPath, "dhcp-metrics.html")
 	http.ServeFile(w, r, filePath)
 }
 
