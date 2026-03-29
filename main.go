@@ -29,6 +29,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
 	"github.com/QuadDarv1ne/go-pcap2socks/auto"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/nat"
 	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
@@ -890,6 +891,46 @@ func main() {
 
 func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	msgs := localizer.GetMessages()
+
+	// Configure NAT routing if enabled
+	if cfg.NAT != nil && cfg.NAT.Enabled {
+		slog.Info("NAT routing enabled, configuring...")
+		
+		// Auto-detect interfaces if not specified
+		natConfig := &nat.Config{
+			Enabled:           cfg.NAT.Enabled,
+			ExternalInterface: cfg.NAT.ExternalInterface,
+			InternalInterface: cfg.NAT.InternalInterface,
+		}
+		
+		// Auto-detect Wi-Fi interface
+		if natConfig.ExternalInterface == "" {
+			_, guid, err := nat.FindWiFiInterface()
+			if err != nil {
+				slog.Warn("Failed to auto-detect Wi-Fi interface", "err", err)
+			} else {
+				natConfig.ExternalInterface = guid
+				slog.Info("Auto-detected Wi-Fi interface", "guid", guid)
+			}
+		}
+		
+		// Auto-detect Ethernet interface
+		if natConfig.InternalInterface == "" {
+			_, guid, err := nat.FindEthernetInterface()
+			if err != nil {
+				slog.Warn("Failed to auto-detect Ethernet interface", "err", err)
+			} else {
+				natConfig.InternalInterface = guid
+				slog.Info("Auto-detected Ethernet interface", "guid", guid)
+			}
+		}
+		
+		if err := nat.Setup(natConfig); err != nil {
+			slog.Error("NAT setup failed", "err", err)
+		} else {
+			slog.Info("NAT routing configured successfully")
+		}
+	}
 
 	// Find the interface first
 	ifce, err := findInterface(cfg.PCAP.InterfaceGateway, localizer)

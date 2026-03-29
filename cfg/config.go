@@ -85,6 +85,14 @@ type Config struct {
 	MACFilter    *MACFilter    `json:"macFilter,omitempty"`
 	WinDivert    *WinDivert    `json:"windivert,omitempty"`
 	RateLimit    *RateLimit    `json:"rateLimit,omitempty"`
+	NAT          *NAT          `json:"nat,omitempty"`
+}
+
+// NAT holds NAT routing configuration
+type NAT struct {
+	Enabled           bool   `json:"enabled"`
+	ExternalInterface string `json:"externalInterface,omitempty"` // Wi-Fi interface GUID
+	InternalInterface string `json:"internalInterface,omitempty"` // Ethernet interface GUID
 }
 
 // RateLimit holds bandwidth limiting configuration

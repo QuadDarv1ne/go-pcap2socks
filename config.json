@@ -4,7 +4,7 @@
                  "mtu":  1472,
                  "network":  "192.168.100.0/24",
                  "localIP":  "192.168.100.1",
-                 "localMAC":  "0a:00:27:00:00:13",
+                 "localMAC":  "b0:25:aa:65:67:bb",
                  "networkIPv6":  "fd00::/64",
                  "localIPv6":  "fd00::1",
                  "interfaceGatewayIPv6":  "fd00::1"
@@ -161,5 +161,10 @@
              },
     "windivert":  {
                       "enabled":  true
-                  }
+                  },
+    "nat": {
+        "enabled": true,
+        "externalInterface": "",
+        "internalInterface": ""
+    }
 }
