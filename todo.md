@@ -59,21 +59,29 @@ go test -fuzz ./... # ❌ Огромная нагрузка
 - [x] Примеры конфигураций для разных сценариев (`docs/examples/{home,office,multi-wan}.json`)
 - [x] Troubleshooting guide (`docs/TROUBLESHOOTING.md` — 8 проблем)
 - [x] API документация (`docs/API.md` — REST + WebSocket)
+- [x] Prometheus metrics документация (`docs/METRICS.md`)
 
-### 🟡 Сессия 17: Observability & Reliability (P2)
+### ✅ Сессия 17: Observability & Reliability (P2) — ЗАВЕРШЕНА
 - [x] Prometheus metrics export (`observability/metrics.go`)
 - [x] Connection pool statistics (`connpool/pool.go`)
 - [x] Runtime метрики (`observability/runtime.go`)
 - [x] WAN balancer metrics (`wanbalancer/metrics.go`)
 - [x] DNS retry logic (`retry/retry.go`)
 - [x] Context-based timeouts
+- [x] Бенчмарки для observability (`observability/metrics_test.go` — 6 бенчмарков)
+- [x] Profiling с pprof (`pprofutil/pprof.go` — heap, goroutine, stats)
 - [ ] Unit-тесты для observability (отключены из-за Kaspersky)
 - [ ] Интеграционные тесты reliability
 
-### 🟢 Сессия 18: Производительность (P1)
-- [ ] Бенчмарки для observability компонентов
-- [ ] Оптимизация аллокаций в metrics
-- [ ] Profiling с pprof (pprofutil/pprof.go)
+### ✅ Сессия 18: Производительность (P1) — ЗАВЕРШЕНА
+- [x] Бенчмарки для observability компонентов
+- [x] Profiling с pprof (`pprofutil/pprof.go`)
+- [ ] Оптимизация аллокаций в metrics (требуется анализ)
+
+### 🟢 Сессия 19: Улучшения (P2) — В ПРОЦЕССЕ
+- [ ] Анализ аллокаций в observability/metrics.go
+- [ ] Оптимизация memory footprint
+- [ ] Добавление новых бенчмарков для ключевых компонентов
 
 ---
 
