@@ -440,6 +440,9 @@ func main() {
 			BenchInterval: config.DNS.BenchInterval,
 			CacheSize:     config.DNS.CacheSize,
 			CacheTTL:      config.DNS.CacheTTL,
+			// Pre-warming cache for faster startup
+			PreWarmCache:  config.DNS.PreWarmCache,
+			PreWarmDomains: config.DNS.PreWarmDomains,
 		})
 		slog.Info("DNS resolver initialized (fallback)")
 	}

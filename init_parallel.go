@@ -83,6 +83,9 @@ func initComponentsParallel(config *cfg.Config) (
 			AutoBench:    config.DNS.AutoBench,
 			CacheSize:    config.DNS.CacheSize,
 			CacheTTL:     config.DNS.CacheTTL,
+			// Pre-warming cache for faster startup
+			PreWarmCache:   config.DNS.PreWarmCache,
+			PreWarmDomains: config.DNS.PreWarmDomains,
 		}
 
 		dr := dns.NewResolver(dnsConfig)
