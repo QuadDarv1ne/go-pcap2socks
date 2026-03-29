@@ -214,6 +214,25 @@ func (h *Histogram) Stats() (count, sum, min, max uint64, avg float64) {
 	return
 }
 
+// Count returns histogram count
+func (h *Histogram) Count() uint64 {
+	return h.count.Load()
+}
+
+// Sum returns histogram sum
+func (h *Histogram) Sum() uint64 {
+	return h.sum.Load()
+}
+
+// Buckets returns histogram bucket counts
+func (h *Histogram) Buckets() []uint64 {
+	result := make([]uint64, len(h.buckets))
+	for i, bucket := range h.buckets {
+		result[i] = bucket.Load()
+	}
+	return result
+}
+
 // Label sets a metric label
 func (m *Metrics) Label(key, value string) {
 	m.mu.Lock()
@@ -269,6 +288,47 @@ func (m *Metrics) RegisterCollector(c Collector) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.collectors = append(m.collectors, c)
+}
+
+// GetStartTime returns the metrics start time
+func (m *Metrics) GetStartTime() time.Time {
+	return m.startTime
+}
+
+// GetCounters returns all counter values
+func (m *Metrics) GetCounters() map[string]uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	result := make(map[string]uint64, len(m.counters))
+	for name, counter := range m.counters {
+		result[name] = counter.Load()
+	}
+	return result
+}
+
+// GetGauges returns all gauge values
+func (m *Metrics) GetGauges() map[string]int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	result := make(map[string]int64, len(m.gauges))
+	for name, gauge := range m.gauges {
+		result[name] = gauge.Load()
+	}
+	return result
+}
+
+// GetHistograms returns all histograms
+func (m *Metrics) GetHistograms() map[string]*Histogram {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	result := make(map[string]*Histogram, len(m.histograms))
+	for name, hist := range m.histograms {
+		result[name] = hist
+	}
+	return result
 }
 
 // WritePrometheus writes metrics in Prometheus format

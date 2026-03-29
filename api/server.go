@@ -19,6 +19,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
+	"github.com/QuadDarv1ne/go-pcap2socks/observability"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
@@ -220,8 +221,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Use new Prometheus exporter
+	exporter := observability.NewPrometheusExporter("go_pcap2socks", nil)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-	s.metrics.WriteMetrics(w)
+	exporter.Export(w)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
