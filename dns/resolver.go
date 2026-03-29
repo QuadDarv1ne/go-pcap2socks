@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -128,6 +129,9 @@ type Resolver struct {
 
 	// Metrics
 	metrics *resolverMetrics
+
+	// Persistent cache
+	cacheFile string
 }
 
 // resolverMetrics holds DNS resolver metrics
@@ -162,6 +166,9 @@ type ResolverConfig struct {
 	// Pre-warming cache on startup
 	PreWarmCache  bool     `json:"preWarmCache"`
 	PreWarmDomains []string `json:"preWarmDomains,omitempty"`
+	// Persistent cache on disk
+	PersistentCache bool   `json:"persistentCache"`
+	CacheFile       string `json:"cacheFile,omitempty"` // Path to cache file
 }
 
 // NewResolver creates a new DNS resolver
@@ -259,6 +266,16 @@ func NewResolver(config *ResolverConfig) *Resolver {
 	r.metrics = &resolverMetrics{
 		cacheHits:   &atomic.Uint64{},
 		cacheMisses: &atomic.Uint64{},
+	}
+
+	// Initialize persistent cache
+	if config != nil && config.PersistentCache {
+		r.cacheFile = config.CacheFile
+		if r.cacheFile == "" {
+			r.cacheFile = "dns_cache.json"
+		}
+		// Load cache from disk
+		r.loadCache()
 	}
 
 	// Pre-warm cache if enabled
@@ -478,6 +495,9 @@ func (r *Resolver) Stop() {
 	// Stop prefetch
 	r.StopPrefetch()
 
+	// Save cache to disk before clearing
+	r.saveCache()
+
 	// Clear cache
 	r.cacheMu.Lock()
 	r.cache = make(map[string]*CacheEntry)
@@ -515,6 +535,105 @@ func (r *Resolver) GetMetrics() (hits, misses uint64, hitRatio float64) {
 	}
 
 	return hits, misses, hitRatio
+}
+
+// saveCache saves DNS cache to disk
+func (r *Resolver) saveCache() {
+	if r.cacheFile == "" {
+		return
+	}
+
+	r.cacheMu.RLock()
+	defer r.cacheMu.RUnlock()
+
+	// Prepare cache data for serialization
+	type cacheEntry struct {
+		IPs     []string `json:"ips"`
+		Expires int64    `json:"expires"` // Unix timestamp
+	}
+	cacheData := make(map[string]*cacheEntry, len(r.cache))
+
+	now := time.Now()
+	for hostname, entry := range r.cache {
+		if entry.Expires.After(now) {
+			ips := make([]string, len(entry.IPs))
+			for i, ip := range entry.IPs {
+				ips[i] = ip.String()
+			}
+			cacheData[hostname] = &cacheEntry{
+				IPs:     ips,
+				Expires: entry.Expires.Unix(),
+			}
+		}
+	}
+
+	// Marshal to JSON
+	data, err := json.MarshalIndent(cacheData, "", "  ")
+	if err != nil {
+		slog.Debug("DNS cache save failed", "err", err)
+		return
+	}
+
+	// Write to file
+	if err := os.WriteFile(r.cacheFile, data, 0644); err != nil {
+		slog.Debug("DNS cache write failed", "err", err)
+		return
+	}
+
+	slog.Info("DNS cache saved", "entries", len(cacheData), "file", r.cacheFile)
+}
+
+// loadCache loads DNS cache from disk
+func (r *Resolver) loadCache() {
+	if r.cacheFile == "" {
+		return
+	}
+
+	data, err := os.ReadFile(r.cacheFile)
+	if err != nil {
+		slog.Debug("DNS cache load failed", "err", err)
+		return
+	}
+
+	// Unmarshal JSON
+	type cacheEntry struct {
+		IPs     []string `json:"ips"`
+		Expires int64    `json:"expires"`
+	}
+	var cacheData map[string]*cacheEntry
+
+	if err := json.Unmarshal(data, &cacheData); err != nil {
+		slog.Debug("DNS cache unmarshal failed", "err", err)
+		return
+	}
+
+	// Load valid entries into cache
+	r.cacheMu.Lock()
+	defer r.cacheMu.Unlock()
+
+	now := time.Now()
+	loaded := 0
+	for hostname, entry := range cacheData {
+		expires := time.Unix(entry.Expires, 0)
+		if expires.After(now) {
+			ips := make([]net.IP, len(entry.IPs))
+			for i, ipStr := range entry.IPs {
+				ips[i] = net.ParseIP(ipStr)
+				if ips[i] == nil {
+					ips[i] = net.IPv4zero
+				}
+			}
+			r.cache[hostname] = &CacheEntry{
+				IPs:     ips,
+				Expires: expires,
+			}
+			loaded++
+		}
+	}
+
+	if loaded > 0 {
+		slog.Info("DNS cache loaded", "entries", loaded, "file", r.cacheFile)
+	}
 }
 
 // preWarmCache pre-populates DNS cache with common domains

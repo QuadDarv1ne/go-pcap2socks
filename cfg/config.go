@@ -413,6 +413,9 @@ type DNS struct {
 	// Pre-warming cache for faster DNS resolution on startup
 	PreWarmCache  bool     `json:"preWarmCache"`
 	PreWarmDomains []string `json:"preWarmDomains,omitempty"`
+	// Persistent cache on disk for faster cold start
+	PersistentCache bool   `json:"persistentCache"`
+	CacheFile       string `json:"cacheFile,omitempty"`
 }
 
 // DoHServer holds DNS-over-HTTPS server configuration
