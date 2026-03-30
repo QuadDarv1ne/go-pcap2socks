@@ -207,6 +207,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/metrics/performance", s.rateLimitMiddleware(s.authMiddleware(s.handlePerformanceMetrics)))
 	s.mux.HandleFunc("/api/metrics/dhcp", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPMetrics)))
 	s.mux.HandleFunc("/api/metrics/connpool", s.rateLimitMiddleware(s.authMiddleware(s.handleConnPoolMetrics)))
+	s.mux.HandleFunc("/api/metrics/circuitbreaker", s.rateLimitMiddleware(s.authMiddleware(s.handleCircuitBreakerStats)))
 	s.mux.HandleFunc("/api/health", s.rateLimitMiddleware(s.authMiddleware(s.handleHealth)))
 }
 
@@ -320,6 +321,14 @@ var getConnPoolMetricsFn func() (map[string]interface{}, bool)
 // SetConnPoolMetricsFn sets the function to get connection pool metrics
 func SetConnPoolMetricsFn(fn func() (map[string]interface{}, bool)) {
 	getConnPoolMetricsFn = fn
+}
+
+// SetCircuitBreakerStatsFn sets the function to get circuit breaker stats
+var getCircuitBreakerStatsFn func() (map[string]interface{}, bool)
+
+// SetCircuitBreakerStatsFn sets the function to get circuit breaker stats
+func SetCircuitBreakerStatsFn(fn func() (map[string]interface{}, bool)) {
+	getCircuitBreakerStatsFn = fn
 }
 
 // handleStart handles the /api/start endpoint to start the service
@@ -1560,6 +1569,32 @@ func (s *Server) handleConnPoolMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendSuccess(w, metrics)
+}
+
+// handleCircuitBreakerStats returns circuit breaker statistics
+func (s *Server) handleCircuitBreakerStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stats := make(map[string]interface{})
+
+	// Get circuit breaker stats from callback if available
+	if getCircuitBreakerStatsFn != nil {
+		if cbStats, ok := getCircuitBreakerStatsFn(); ok {
+			stats["circuit_breaker"] = cbStats
+			stats["available"] = true
+		} else {
+			stats["available"] = false
+			stats["message"] = "Circuit breaker stats not available"
+		}
+	} else {
+		stats["available"] = false
+		stats["message"] = "Circuit breaker stats not initialized"
+	}
+
+	s.sendSuccess(w, stats)
 }
 
 // handleWebSocket handles WebSocket connections for real-time updates

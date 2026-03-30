@@ -1002,6 +1002,26 @@ func main() {
 		return nil, false
 	})
 
+	// Set circuit breaker stats getter for API
+	api.SetCircuitBreakerStatsFn(func() (map[string]interface{}, bool) {
+		if _defaultProxy == nil {
+			return nil, false
+		}
+		// Get circuit breaker stats from Router
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			stats := router.GetCircuitBreakerStats()
+			return map[string]interface{}{
+				"available":       stats.Available,
+				"state":           stats.State,
+				"total_requests":  stats.TotalRequests,
+				"successful_reqs": stats.SuccessfulReqs,
+				"failed_reqs":     stats.FailedReqs,
+				"rejected_reqs":   stats.RejectedReqs,
+			}, true
+		}
+		return nil, false
+	})
+
 	// Set service control callbacks for API
 	api.SetServiceCallbacks(
 		func() error {
@@ -2623,6 +2643,26 @@ func autoConfigureAndStart() {
 			if len(metrics) > 0 {
 				return metrics, true
 			}
+		}
+		return nil, false
+	})
+
+	// Set circuit breaker stats getter for API
+	api.SetCircuitBreakerStatsFn(func() (map[string]interface{}, bool) {
+		if _defaultProxy == nil {
+			return nil, false
+		}
+		// Get circuit breaker stats from Router
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			stats := router.GetCircuitBreakerStats()
+			return map[string]interface{}{
+				"available":       stats.Available,
+				"state":           stats.State,
+				"total_requests":  stats.TotalRequests,
+				"successful_reqs": stats.SuccessfulReqs,
+				"failed_reqs":     stats.FailedReqs,
+				"rejected_reqs":   stats.RejectedReqs,
+			}, true
 		}
 		return nil, false
 	})
