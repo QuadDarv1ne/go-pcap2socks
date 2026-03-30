@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
@@ -28,6 +29,17 @@ type Proxy struct {
 	config  Config
 	mu      sync.RWMutex
 	started bool
+
+	// Health check fields
+	lastHealthCheck  time.Time
+	lastHealthStatus bool
+	healthCheckMu    sync.RWMutex
+
+	// Statistics
+	totalConnections    atomic.Uint64
+	successfulConns     atomic.Uint64
+	failedConns         atomic.Uint64
+	lastConnectionError atomic.Value // string
 }
 
 // New creates a new WireGuard proxy.
@@ -73,25 +85,80 @@ func (p *Proxy) Stop() error {
 	return nil
 }
 
+// HealthStatus returns the last known health status
+func (p *Proxy) HealthStatus() (bool, time.Time) {
+	p.healthCheckMu.RLock()
+	defer p.healthCheckMu.RUnlock()
+	return p.lastHealthStatus, p.lastHealthCheck
+}
+
+// CheckHealth performs a health check
+func (p *Proxy) CheckHealth() bool {
+	p.mu.RLock()
+	started := p.started
+	p.mu.RUnlock()
+
+	start := time.Now()
+	// For WireGuard, health check is just checking if interface is started
+	// In real implementation, would ping peer or check interface status
+	healthy := started
+
+	p.healthCheckMu.Lock()
+	p.lastHealthStatus = healthy
+	p.lastHealthCheck = start
+	p.healthCheckMu.Unlock()
+
+	return healthy
+}
+
+// GetStats returns WireGuard proxy statistics
+func (p *Proxy) GetStats() WireGuardStats {
+	return WireGuardStats{
+		TotalConnections:    p.totalConnections.Load(),
+		SuccessfulConns:     p.successfulConns.Load(),
+		FailedConns:         p.failedConns.Load(),
+		LastConnectionError: p.lastConnectionError.Load().(string),
+		Started:             p.started,
+	}
+}
+
 // DialContext establishes a TCP connection through WireGuard.
 func (p *Proxy) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
+	p.totalConnections.Add(1)
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+
 	if !p.started {
+		p.failedConns.Add(1)
+		p.lastConnectionError.Store("wireguard not started")
 		return nil, fmt.Errorf("wireguard not started")
 	}
+
 	// TODO: Implement WireGuard TCP dial
+	// For now, return not implemented error
+	p.failedConns.Add(1)
+	p.lastConnectionError.Store("wireguard TCP dial not implemented")
 	return nil, fmt.Errorf("wireguard TCP dial not implemented")
 }
 
 // DialUDP establishes a UDP connection through WireGuard.
 func (p *Proxy) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
+	p.totalConnections.Add(1)
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+
 	if !p.started {
+		p.failedConns.Add(1)
+		p.lastConnectionError.Store("wireguard not started")
 		return nil, fmt.Errorf("wireguard not started")
 	}
+
 	// TODO: Implement WireGuard UDP dial
+	// For now, return not implemented error
+	p.failedConns.Add(1)
+	p.lastConnectionError.Store("wireguard UDP dial not implemented")
 	return nil, fmt.Errorf("wireguard UDP dial not implemented")
 }
 
@@ -131,6 +198,15 @@ type ProxyStatus struct {
 	Addr  string
 	Mode  string
 	Alive bool
+}
+
+// WireGuardStats holds WireGuard proxy statistics
+type WireGuardStats struct {
+	TotalConnections    uint64 `json:"total_connections"`
+	SuccessfulConns     uint64 `json:"successful_conns"`
+	FailedConns         uint64 `json:"failed_conns"`
+	LastConnectionError string `json:"last_connection_error"`
+	Started             bool   `json:"started"`
 }
 
 // Factory creates WireGuard proxies
