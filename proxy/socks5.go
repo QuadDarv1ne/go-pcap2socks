@@ -102,6 +102,24 @@ func (ss *Socks5) Close() {
 	}
 }
 
+// ConnPoolStats returns connection pool statistics
+func (ss *Socks5) ConnPoolStats() map[string]interface{} {
+	if ss.connPool == nil {
+		return nil
+	}
+	stats := ss.connPool.Stats()
+	return map[string]interface{}{
+		"available":  stats.Available,
+		"max_size":   stats.MaxSize,
+		"closed":     stats.Closed,
+		"hits":       stats.Hits,
+		"misses":     stats.Misses,
+		"hit_ratio":  stats.HitRatio,
+		"put_count":  stats.PutCount,
+		"drop_count": stats.DropCount,
+	}
+}
+
 func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.Conn, err error) {
 	network := "tcp"
 	if ss.unix {

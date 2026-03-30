@@ -122,7 +122,7 @@ func TestPool_PutAfterClose(t *testing.T) {
 func TestPool_Stats(t *testing.T) {
 	pool := NewPool("localhost:1080", 10, 1*time.Minute)
 	defer pool.Close()
-	
+
 	// Initial stats
 	stats := pool.Stats()
 	if stats.Available != 0 {
@@ -134,13 +134,68 @@ func TestPool_Stats(t *testing.T) {
 	if stats.Closed {
 		t.Error("Expected pool to be open")
 	}
-	
+	if stats.Hits != 0 {
+		t.Errorf("Expected 0 hits, got %d", stats.Hits)
+	}
+	if stats.Misses != 0 {
+		t.Errorf("Expected 0 misses, got %d", stats.Misses)
+	}
+	if stats.HitRatio != 0 {
+		t.Errorf("Expected 0 hit ratio, got %f", stats.HitRatio)
+	}
+
 	// Put connection
 	pool.Put(&mockConn{})
-	
+
 	stats = pool.Stats()
 	if stats.Available != 1 {
 		t.Errorf("Expected 1 available connection, got %d", stats.Available)
+	}
+	if stats.PutCount != 1 {
+		t.Errorf("Expected PutCount 1, got %d", stats.PutCount)
+	}
+}
+
+func TestPool_Metrics(t *testing.T) {
+	pool := NewPool("localhost:1080", 5, 1*time.Minute)
+	defer pool.Close()
+
+	// Initial: miss (pool empty)
+	_, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
+		return &mockConn{}, nil
+	})
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+
+	stats := pool.Stats()
+	if stats.Misses != 1 {
+		t.Errorf("Expected 1 miss, got %d", stats.Misses)
+	}
+	if stats.Hits != 0 {
+		t.Errorf("Expected 0 hits, got %d", stats.Hits)
+	}
+
+	// Put connection back
+	pool.Put(&mockConn{})
+
+	// Get: hit (connection from pool)
+	_, err = pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
+		return &mockConn{}, nil
+	})
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+
+	stats = pool.Stats()
+	if stats.Hits != 1 {
+		t.Errorf("Expected 1 hit, got %d", stats.Hits)
+	}
+	if stats.Misses != 1 {
+		t.Errorf("Expected 1 miss, got %d", stats.Misses)
+	}
+	if stats.HitRatio != 50.0 {
+		t.Errorf("Expected 50%% hit ratio, got %f", stats.HitRatio)
 	}
 }
 

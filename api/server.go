@@ -206,6 +206,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/ws", s.rateLimitMiddleware(s.authMiddleware(s.handleWebSocket)))
 	s.mux.HandleFunc("/api/metrics/performance", s.rateLimitMiddleware(s.authMiddleware(s.handlePerformanceMetrics)))
 	s.mux.HandleFunc("/api/metrics/dhcp", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPMetrics)))
+	s.mux.HandleFunc("/api/metrics/connpool", s.rateLimitMiddleware(s.authMiddleware(s.handleConnPoolMetrics)))
 	s.mux.HandleFunc("/api/health", s.rateLimitMiddleware(s.authMiddleware(s.handleHealth)))
 }
 
@@ -311,6 +312,14 @@ func SetDHCPMetricsFn(fn func() (map[string]interface{}, bool)) {
 // SetProxyHealthFn sets the function to get proxy health status
 func SetProxyHealthFn(fn func() (map[string]interface{}, bool)) {
 	getProxyHealthFn = fn
+}
+
+// SetConnPoolMetricsFn sets the function to get connection pool metrics
+var getConnPoolMetricsFn func() (map[string]interface{}, bool)
+
+// SetConnPoolMetricsFn sets the function to get connection pool metrics
+func SetConnPoolMetricsFn(fn func() (map[string]interface{}, bool)) {
+	getConnPoolMetricsFn = fn
 }
 
 // handleStart handles the /api/start endpoint to start the service
@@ -1525,6 +1534,32 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendSuccess(w, health)
+}
+
+// handleConnPoolMetrics returns connection pool metrics
+func (s *Server) handleConnPoolMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	metrics := make(map[string]interface{})
+
+	// Get connection pool metrics
+	if getConnPoolMetricsFn != nil {
+		if poolMetrics, ok := getConnPoolMetricsFn(); ok {
+			metrics["pools"] = poolMetrics
+			metrics["available"] = true
+		} else {
+			metrics["available"] = false
+			metrics["message"] = "Connection pool metrics not available"
+		}
+	} else {
+		metrics["available"] = false
+		metrics["message"] = "Connection pool metrics not initialized"
+	}
+
+	s.sendSuccess(w, metrics)
 }
 
 // handleWebSocket handles WebSocket connections for real-time updates

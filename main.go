@@ -981,6 +981,27 @@ func main() {
 		return nil, false
 	})
 
+	// Set connection pool metrics getter for API
+	api.SetConnPoolMetricsFn(func() (map[string]interface{}, bool) {
+		if _defaultProxy == nil {
+			return nil, false
+		}
+		// Get metrics from Router's SOCKS5 proxies
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			metrics := make(map[string]interface{})
+			for tag, p := range router.Proxies {
+				if socks5, ok := p.(*proxy.Socks5); ok {
+					stats := socks5.ConnPoolStats()
+					metrics[tag] = stats
+				}
+			}
+			if len(metrics) > 0 {
+				return metrics, true
+			}
+		}
+		return nil, false
+	})
+
 	// Set service control callbacks for API
 	api.SetServiceCallbacks(
 		func() error {
@@ -2581,6 +2602,27 @@ func autoConfigureAndStart() {
 				result[k] = v
 			}
 			return result, true
+		}
+		return nil, false
+	})
+
+	// Set connection pool metrics getter for API
+	api.SetConnPoolMetricsFn(func() (map[string]interface{}, bool) {
+		if _defaultProxy == nil {
+			return nil, false
+		}
+		// Get metrics from Router's SOCKS5 proxies
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			metrics := make(map[string]interface{})
+			for tag, p := range router.Proxies {
+				if socks5, ok := p.(*proxy.Socks5); ok {
+					stats := socks5.ConnPoolStats()
+					metrics[tag] = stats
+				}
+			}
+			if len(metrics) > 0 {
+				return metrics, true
+			}
 		}
 		return nil, false
 	})

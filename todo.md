@@ -1,13 +1,13 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 30 марта 2026 г. (Сессия 40)
-**Версия**: v3.40.0 (Test Fixes & Code Quality)
-**Статус**: ✅ стабилен, сборка успешна (18.2 MB), go vet clean
+**Последнее обновление**: 30 марта 2026 г. (Сессия 41)
+**Версия**: v3.41.0 (Connection Pool Metrics & Observability)
+**Статус**: ✅ стабилен, сборка успешна (18.3 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
-**📊 Мониторинг**: API /api/metrics/dhcp + Web UI /dhcp-metrics
+**📊 Мониторинг**: API /api/metrics/dhcp + /api/metrics/connpool + Web UI /dhcp-metrics
 **🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек
-**🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle)
+**🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
 **🔒 Безопасность**: config 0600, pprof отключен, ExecuteOnStart whitelist
 
@@ -574,7 +574,30 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Изменения в dev ветке
   * [x] Готово к merge в main
 
-### ⏳ Сессия 41: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 41: Connection Pool Metrics & Observability (P2) — ЗАВЕРШЕНА
+- [x] **Connection Pool метрики**
+  * [x] Добавлены atomic счётчики: hits, misses, putCnt, dropCnt
+  * [x] PoolStats расширен: Hits, Misses, HitRatio, PutCount, DropCount
+  * [x] HitRatio вычисляется как процент: hits/total*100
+- [x] **SOCKS5 интеграция метрик**
+  * [x] Метод ConnPoolStats() в proxy/socks5.go
+  * [x] Возвращает map с all statistics для API
+- [x] **API endpoint**
+  * [x] /api/metrics/connpool — получение метрик connection pool
+  * [x] SetConnPoolMetricsFn() callback в api/server.go
+  * [x] handleConnPoolMetrics handler
+  * [x] Интеграция в main.go через router.Proxies
+- [x] **Тесты**
+  * [x] TestPool_Stats: проверка всех полей статистики
+  * [x] TestPool_Metrics: проверка hits/misses/hitRatio
+- [x] **Проверка качества**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.3 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 42: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
