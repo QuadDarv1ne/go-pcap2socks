@@ -267,3 +267,23 @@ func (cb *CircuitBreaker) GetLastFailureTime() time.Time {
 	}
 	return time.Unix(0, ns)
 }
+
+// TotalRequests returns total number of requests
+func (cb *CircuitBreaker) TotalRequests() int64 {
+	return cb.totalRequests.Load()
+}
+
+// SuccessfulRequests returns number of successful requests
+func (cb *CircuitBreaker) SuccessfulRequests() int64 {
+	return cb.successfulReqs.Load()
+}
+
+// FailedRequests returns number of failed requests
+func (cb *CircuitBreaker) FailedRequests() int64 {
+	return cb.failedReqs.Load()
+}
+
+// RejectedRequests returns number of rejected requests
+func (cb *CircuitBreaker) RejectedRequests() int64 {
+	return cb.rejectedReqs.Load()
+}

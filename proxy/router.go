@@ -15,6 +15,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/bandwidth"
+	"github.com/QuadDarv1ne/go-pcap2socks/circuitbreaker"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/armon/go-radix"
 )
@@ -296,12 +297,16 @@ type Router struct {
 	// Connection error metrics
 	connErrors  atomic.Uint64
 	connSuccess atomic.Uint64
-	
+
 	// Health check fields
 	healthCheckInterval time.Duration
 	healthCheckTicker   *time.Ticker
 	healthCheckStop     chan struct{}
 	healthCheckWg       sync.WaitGroup
+
+	// Circuit breaker for proxy protection
+	circuitBreaker *circuitbreaker.CircuitBreaker
+	cbMu           sync.RWMutex
 }
 
 // HealthStatus returns health status for all proxies
@@ -398,6 +403,13 @@ func NewRouter(rules []cfg.Rule, proxies map[string]Proxy) *Router {
 		},
 		routeCache:  newRouteCache(10000, 60*time.Second), // 10k entries, 60s TTL
 		stopCleanup: make(chan struct{}),
+		// Initialize circuit breaker with default config
+		circuitBreaker: circuitbreaker.New(circuitbreaker.Config{
+			FailureThreshold: 5,
+			SuccessThreshold: 3,
+			Timeout:          30 * time.Second,
+			Name:             "proxy-router",
+		}),
 	}
 
 	// Initialize bandwidth limiter with defaults
@@ -565,17 +577,30 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 		"dst", metadata.DestinationAddress(),
 		"outbound", selectedTag)
 
-	// Dial using selected proxy
+	// Dial using selected proxy with circuit breaker protection
 	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
-		conn, err := proxy.DialContext(ctx, metadata)
-		if err != nil {
+		var conn net.Conn
+		cbErr := d.circuitBreaker.Execute(ctx, func() error {
+			var dialErr error
+			conn, dialErr = proxy.DialContext(ctx, metadata)
+			return dialErr
+		})
+
+		if cbErr != nil {
 			d.connErrors.Add(1)
-			slog.Debug("Proxy dial failed", "outbound", selectedTag, "dst", metadata.DestinationAddress(), "err", err)
-		} else {
-			d.connSuccess.Add(1)
-			slog.Info("Proxy dial success", "outbound", selectedTag, "dst", metadata.DestinationAddress())
+			if errors.Is(cbErr, circuitbreaker.ErrCircuitOpen) {
+				slog.Warn("Circuit breaker open, connection rejected",
+					"outbound", selectedTag,
+					"dst", metadata.DestinationAddress())
+			} else {
+				slog.Debug("Proxy dial failed", "outbound", selectedTag, "dst", metadata.DestinationAddress(), "err", cbErr)
+			}
+			return nil, cbErr
 		}
-		return conn, err
+
+		d.connSuccess.Add(1)
+		slog.Info("Proxy dial success", "outbound", selectedTag, "dst", metadata.DestinationAddress())
+		return conn, nil
 	}
 
 	d.connErrors.Add(1)
@@ -614,6 +639,46 @@ func matchRuleNoIP(metadata *M.Metadata, rule *cfg.Rule) bool {
 		return true
 	}
 	return false
+}
+
+// GetCircuitBreakerStats returns circuit breaker statistics
+func (r *Router) GetCircuitBreakerStats() CircuitBreakerStats {
+	r.cbMu.RLock()
+	defer r.cbMu.RUnlock()
+
+	if r.circuitBreaker == nil {
+		return CircuitBreakerStats{Available: false}
+	}
+
+	return CircuitBreakerStats{
+		Available:      true,
+		State:          r.circuitBreaker.State().String(),
+		TotalRequests:  r.circuitBreaker.TotalRequests(),
+		SuccessfulReqs: r.circuitBreaker.SuccessfulRequests(),
+		FailedReqs:     r.circuitBreaker.FailedRequests(),
+		RejectedReqs:   r.circuitBreaker.RejectedRequests(),
+	}
+}
+
+// ResetCircuitBreaker resets the circuit breaker to closed state
+func (r *Router) ResetCircuitBreaker() {
+	r.cbMu.Lock()
+	defer r.cbMu.Unlock()
+
+	if r.circuitBreaker != nil {
+		r.circuitBreaker.Reset()
+		slog.Info("Circuit breaker reset")
+	}
+}
+
+// CircuitBreakerStats holds circuit breaker statistics
+type CircuitBreakerStats struct {
+	Available      bool   `json:"available"`
+	State          string `json:"state"`
+	TotalRequests  int64  `json:"total_requests"`
+	SuccessfulReqs int64  `json:"successful_requests"`
+	FailedReqs     int64  `json:"failed_requests"`
+	RejectedReqs   int64  `json:"rejected_requests"`
 }
 
 // matchRule checks if metadata matches a routing rule
