@@ -203,6 +203,11 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/devices/names", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceNames)))
 	s.mux.HandleFunc("/api/devices/ratelimit", s.rateLimitMiddleware(s.authMiddleware(s.handleDeviceRateLimit)))
 	s.mux.HandleFunc("/api/interfaces", s.rateLimitMiddleware(s.authMiddleware(s.handleInterfaces)))
+	// WireGuard endpoints
+	s.mux.HandleFunc("/api/wireguard/config", s.rateLimitMiddleware(s.authMiddleware(s.handleWireGuardConfig)))
+	s.mux.HandleFunc("/api/wireguard/status", s.rateLimitMiddleware(s.authMiddleware(s.handleWireGuardStatus)))
+	s.mux.HandleFunc("/api/wireguard/start", s.rateLimitMiddleware(s.authMiddleware(s.handleWireGuardStart)))
+	s.mux.HandleFunc("/api/wireguard/stop", s.rateLimitMiddleware(s.authMiddleware(s.handleWireGuardStop)))
 	s.mux.HandleFunc("/ws", s.rateLimitMiddleware(s.authMiddleware(s.handleWebSocket)))
 	s.mux.HandleFunc("/api/metrics/performance", s.rateLimitMiddleware(s.authMiddleware(s.handlePerformanceMetrics)))
 	s.mux.HandleFunc("/api/metrics/dhcp", s.rateLimitMiddleware(s.authMiddleware(s.handleDHCPMetrics)))
@@ -1782,6 +1787,129 @@ func (s *Server) handleInterfaces(w http.ResponseWriter, r *http.Request) {
 
 // getInterfaceList returns list of network interfaces (delegated to auto package)
 var getInterfaceList func() []interface{}
+
+// WireGuard API handlers
+
+// handleWireGuardConfig returns WireGuard configuration
+func (s *Server) handleWireGuardConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleWireGuardConfigGet(w, r)
+	case http.MethodPost:
+		s.handleWireGuardConfigUpdate(w, r)
+	default:
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleWireGuardConfigGet(w http.ResponseWriter, r *http.Request) {
+	// Get config from global configuration
+	config := getWireGuardConfig()
+	s.sendSuccess(w, config)
+}
+
+func (s *Server) handleWireGuardConfigUpdate(w http.ResponseWriter, r *http.Request) {
+	var config WireGuardConfigRequest
+	if err := s.decodeJSONBody(w, r, &config); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate configuration
+	if err := validateWireGuardConfig(&config); err != nil {
+		s.sendError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Save configuration
+	if err := saveWireGuardConfig(&config); err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.sendSuccess(w, map[string]string{"status": "ok", "message": "WireGuard configuration saved"})
+}
+
+// handleWireGuardStatus returns WireGuard tunnel status
+func (s *Server) handleWireGuardStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
+		return
+	}
+
+	status := getWireGuardStatus()
+	s.sendSuccess(w, status)
+}
+
+// handleWireGuardStart starts WireGuard tunnel
+func (s *Server) handleWireGuardStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := startWireGuard(); err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.sendSuccess(w, map[string]string{"status": "ok", "message": "WireGuard tunnel started"})
+}
+
+// handleWireGuardStop stops WireGuard tunnel
+func (s *Server) handleWireGuardStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.sendError(w, ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := stopWireGuard(); err != nil {
+		s.sendError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.sendSuccess(w, map[string]string{"status": "ok", "message": "WireGuard tunnel stopped"})
+}
+
+// WireGuard config request structure
+type WireGuardConfigRequest struct {
+	PrivateKey string   `json:"private_key"`
+	PublicKey  string   `json:"public_key"`
+	PreauthKey string   `json:"preauth_key,omitempty"`
+	Endpoint   string   `json:"endpoint"`
+	LocalIP    string   `json:"local_ip"`
+	RemoteIP   string   `json:"remote_ip"`
+	AllowedIPs []string `json:"allowed_ips"`
+}
+
+// WireGuard configuration functions (to be implemented in main.go)
+var (
+	getWireGuardConfig   func() map[string]interface{}
+	saveWireGuardConfig  func(config *WireGuardConfigRequest) error
+	getWireGuardStatus   func() map[string]interface{}
+	startWireGuard       func() error
+	stopWireGuard        func() error
+)
+
+// validateWireGuardConfig validates WireGuard configuration
+func validateWireGuardConfig(config *WireGuardConfigRequest) error {
+	if config.PrivateKey == "" {
+		return fmt.Errorf("private_key is required")
+	}
+	if config.PublicKey == "" {
+		return fmt.Errorf("public_key is required")
+	}
+	if config.Endpoint == "" {
+		return fmt.Errorf("endpoint is required")
+	}
+	if config.LocalIP == "" {
+		return fmt.Errorf("local_ip is required")
+	}
+	if config.RemoteIP == "" {
+		return fmt.Errorf("remote_ip is required")
+	}
+	return nil
+}
 
 // SetInterfaceListFn sets the function to get interface list
 func SetInterfaceListFn(fn func() []interface{}) {
