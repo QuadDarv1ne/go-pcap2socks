@@ -1,7 +1,7 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 30 марта 2026 г. (Сессия 44)
-**Версия**: v3.44.0 (Enhanced Circuit Breaker Logging)
+**Последнее обновление**: 30 марта 2026 г. (Сессия 45)
+**Версия**: v3.45.0 (WireGuard Health & Stats)
 **Статус**: ✅ стабилен, сборка успешна (18.3 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
@@ -9,6 +9,7 @@
 **🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек + метрики health checker
 **🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики
 **⚡ Circuit Breaker**: Защита proxy операций + расширенное логирование
+**🛡️ WireGuard**: Health checks + статистика подключений
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
 **🔒 Безопасность**: config 0600, pprof отключен, ExecuteOnStart whitelist
 
@@ -655,7 +656,27 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Изменения в dev ветке
   * [x] Готово к merge в main
 
-### ⏳ Сессия 45: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 45: WireGuard Health & Stats (P2) — ЗАВЕРШЕНА
+- [x] **WireGuard health checks**
+  * [x] HealthStatus() метод для получения статуса
+  * [x] CheckHealth() метод для проверки здоровья
+  * [x] lastHealthCheck, lastHealthStatus поля
+- [x] **WireGuard статистика**
+  * [x] atomic счётчики: totalConnections, successfulConns, failedConns
+  * [x] lastConnectionError для последней ошибки
+  * [x] GetStats() метод возвращает WireGuardStats
+  * [x] WireGuardStats struct с JSON tags
+- [x] **Улучшение DialContext/DialUDP**
+  * [x] Подсчёт подключений (total/failed)
+  * [x] Сохранение последней ошибки
+- [x] **Проверка качества**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.3 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 46: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
