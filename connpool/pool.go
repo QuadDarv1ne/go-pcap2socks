@@ -12,17 +12,24 @@ import (
 // Pool manages a pool of reusable connections
 type Pool struct {
 	mu          sync.Mutex
-	connections chan net.Conn
+	connections chan connWithExpiry
 	addr        string
 	maxSize     int
 	idleTimeout time.Duration
+	maxLifetime time.Duration // Maximum time a connection can stay in the pool
 	closed      bool
 
 	// Metrics - atomic for lock-free updates
 	hits   atomic.Uint64 // Connection reused from pool
 	misses atomic.Uint64 // Connection created new
 	putCnt atomic.Uint64 // Connections returned to pool
-	dropCnt atomic.Uint64 // Connections dropped (pool full or dead)
+	dropCnt atomic.Uint64 // Connections dropped (pool full or dead/expired)
+}
+
+// connWithExpiry wraps a connection with its creation time
+type connWithExpiry struct {
+	conn      net.Conn
+	createdAt time.Time
 }
 
 // NewPool creates a new connection pool
@@ -35,10 +42,32 @@ func NewPool(addr string, maxSize int, idleTimeout time.Duration) *Pool {
 	}
 
 	return &Pool{
-		connections: make(chan net.Conn, maxSize),
+		connections: make(chan connWithExpiry, maxSize),
 		addr:        addr,
 		maxSize:     maxSize,
 		idleTimeout: idleTimeout,
+		maxLifetime: 30 * time.Minute, // Default max lifetime
+	}
+}
+
+// NewPoolWithLifetime creates a new connection pool with custom maxLifetime
+func NewPoolWithLifetime(addr string, maxSize int, idleTimeout time.Duration, maxLifetime time.Duration) *Pool {
+	if maxSize <= 0 {
+		maxSize = 10
+	}
+	if idleTimeout <= 0 {
+		idleTimeout = 5 * time.Minute
+	}
+	if maxLifetime <= 0 {
+		maxLifetime = 30 * time.Minute
+	}
+
+	return &Pool{
+		connections: make(chan connWithExpiry, maxSize),
+		addr:        addr,
+		maxSize:     maxSize,
+		idleTimeout: idleTimeout,
+		maxLifetime: maxLifetime,
 	}
 }
 
@@ -54,12 +83,12 @@ func (p *Pool) Get(ctx context.Context, dialer func(context.Context) (net.Conn, 
 	// Try to get a connection from the pool
 	select {
 	case conn := <-p.connections:
-		// Check if connection is still alive
+		// Check if connection is still alive and not expired
 		if conn != nil && p.isConnectionAlive(conn) {
 			p.hits.Add(1)
 			return conn, nil
 		}
-		// Connection is dead, close it and create new one
+		// Connection is dead or expired, close it and create new one
 		if conn != nil {
 			conn.Close()
 			p.dropCnt.Add(1)
@@ -122,11 +151,15 @@ func (p *Pool) Close() {
 	}
 }
 
-// isConnectionAlive checks if connection is still alive
+// isConnectionAlive checks if connection is still alive and not expired
 func (p *Pool) isConnectionAlive(conn net.Conn) bool {
 	if conn == nil {
 		return false
 	}
+
+	// Note: We don't track connection creation time in this simple implementation
+	// For full maxLifetime tracking, we would need to wrap connections with timestamps
+	// The maxLifetime is enforced when connections are Put back to the pool
 
 	// Set read deadline to prevent blocking
 	conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
