@@ -1022,6 +1022,28 @@ func main() {
 		return nil, false
 	})
 
+	// Set health checker stats getter for API
+	api.SetHealthCheckerStatsFn(func() (map[string]interface{}, bool) {
+		if _healthChecker == nil {
+			return nil, false
+		}
+		// Get health checker stats
+		stats := _healthChecker.GetStats()
+		return map[string]interface{}{
+			"total_checks":          stats.TotalChecks,
+			"consecutive_failures":  stats.ConsecutiveFailures,
+			"total_recoveries":      stats.TotalRecoveries,
+			"total_probes":          stats.TotalProbes,
+			"successful_probes":     stats.SuccessfulProbes,
+			"failed_probes":         stats.FailedProbes,
+			"success_rate":          stats.SuccessRate,
+			"probe_count":           stats.ProbeCount,
+			"current_backoff":       stats.CurrentBackoff.String(),
+			"last_check_time":       stats.LastCheckTime.Format(time.RFC3339),
+			"last_success_time":     stats.LastSuccessTime.Format(time.RFC3339),
+		}, true
+	})
+
 	// Set service control callbacks for API
 	api.SetServiceCallbacks(
 		func() error {
@@ -2665,6 +2687,28 @@ func autoConfigureAndStart() {
 			}, true
 		}
 		return nil, false
+	})
+
+	// Set health checker stats getter for API
+	api.SetHealthCheckerStatsFn(func() (map[string]interface{}, bool) {
+		if _healthChecker == nil {
+			return nil, false
+		}
+		// Get health checker stats
+		stats := _healthChecker.GetStats()
+		return map[string]interface{}{
+			"total_checks":          stats.TotalChecks,
+			"consecutive_failures":  stats.ConsecutiveFailures,
+			"total_recoveries":      stats.TotalRecoveries,
+			"total_probes":          stats.TotalProbes,
+			"successful_probes":     stats.SuccessfulProbes,
+			"failed_probes":         stats.FailedProbes,
+			"success_rate":          stats.SuccessRate,
+			"probe_count":           stats.ProbeCount,
+			"current_backoff":       stats.CurrentBackoff.String(),
+			"last_check_time":       stats.LastCheckTime.Format(time.RFC3339),
+			"last_success_time":     stats.LastSuccessTime.Format(time.RFC3339),
+		}, true
 	})
 
 	// Set service control callbacks for API
