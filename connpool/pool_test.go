@@ -260,3 +260,103 @@ type timeoutError struct{}
 func (t *timeoutError) Error() string   { return "timeout" }
 func (t *timeoutError) Timeout() bool   { return true }
 func (t *timeoutError) Temporary() bool { return true }
+
+// liveMockConn implements net.Conn that appears alive for isConnectionAlive
+type liveMockConn struct {
+	closed bool
+}
+
+func (m *liveMockConn) Read(b []byte) (n int, err error) {
+	// Simulate timeout (connection alive)
+	time.Sleep(200 * time.Millisecond)
+	return 0, &net.OpError{Op: "read", Err: &timeoutError{}}
+}
+
+func (m *liveMockConn) Write(b []byte) (n int, err error) {
+	return len(b), nil
+}
+
+func (m *liveMockConn) Close() error {
+	m.closed = true
+	return nil
+}
+
+func (m *liveMockConn) LocalAddr() net.Addr { return nil }
+func (m *liveMockConn) RemoteAddr() net.Addr { return nil }
+func (m *liveMockConn) SetDeadline(t time.Time) error { return nil }
+func (m *liveMockConn) SetReadDeadline(t time.Time) error { return nil }
+func (m *liveMockConn) SetWriteDeadline(t time.Time) error { return nil }
+
+// BenchmarkPool_GetPut benchmarks connection pool Get/Put operations
+func BenchmarkPool_GetPut(b *testing.B) {
+	pool := NewPool("localhost:1080", 10, 5*time.Minute)
+	defer pool.Close()
+
+	// Pre-populate pool with connections
+	for i := 0; i < 10; i++ {
+		pool.Put(&liveMockConn{})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		conn, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
+			return &liveMockConn{}, nil
+		})
+		if err != nil {
+			b.Fatalf("Get failed: %v", err)
+		}
+		pool.Put(conn)
+	}
+}
+
+// BenchmarkPool_GetEmpty benchmarks getting from empty pool
+func BenchmarkPool_GetEmpty(b *testing.B) {
+	pool := NewPool("localhost:1080", 10, 5*time.Minute)
+	defer pool.Close()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		conn, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
+			return &liveMockConn{}, nil
+		})
+		if err != nil {
+			b.Fatalf("Get failed: %v", err)
+		}
+		pool.Put(conn)
+	}
+}
+
+// BenchmarkPool_Concurrent benchmarks concurrent Get/Put
+func BenchmarkPool_Concurrent(b *testing.B) {
+	pool := NewPool("localhost:1080", 100, 5*time.Minute)
+	defer pool.Close()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			conn, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
+				return &liveMockConn{}, nil
+			})
+			if err != nil {
+				b.Fatalf("Get failed: %v", err)
+			}
+			pool.Put(conn)
+		}
+	})
+}
+
+// BenchmarkPool_Stats benchmarks pool statistics retrieval
+func BenchmarkPool_Stats(b *testing.B) {
+	pool := NewPool("localhost:1080", 10, 5*time.Minute)
+	defer pool.Close()
+
+	// Pre-populate pool
+	for i := 0; i < 5; i++ {
+		pool.Put(&liveMockConn{})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = pool.Stats()
+	}
+}

@@ -1,13 +1,13 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 30 марта 2026 г. (Сессия 45)
-**Версия**: v3.45.0 (WireGuard Health & Stats)
+**Последнее обновление**: 30 марта 2026 г. (Сессия 46)
+**Версия**: v3.46.0 (Connection Pool Benchmarks)
 **Статус**: ✅ стабилен, сборка успешна (18.3 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
 **📊 Мониторинг**: API /api/metrics/dhcp + /api/metrics/connpool + /api/metrics/circuitbreaker + /api/metrics/health + Web UI /dhcp-metrics
 **🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек + метрики health checker
-**🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики
+**🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики + бенчмарки
 **⚡ Circuit Breaker**: Защита proxy операций + расширенное логирование
 **🛡️ WireGuard**: Health checks + статистика подключений
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
@@ -676,7 +676,23 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Изменения в dev ветке
   * [x] Готово к merge в main
 
-### ⏳ Сессия 46: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 46: Connection Pool Benchmarks (P2) — ЗАВЕРШЕНА
+- [x] **Бенчмарки connection pool**
+  * [x] BenchmarkPool_GetPut: Get/Put с заполненным pool
+  * [x] BenchmarkPool_GetEmpty: Get/Put с пустым pool
+  * [x] BenchmarkPool_Concurrent: конкурентный доступ (RunParallel)
+  * [x] BenchmarkPool_Stats: получение статистики
+- [x] **Улучшение тестов**
+  * [x] liveMockConn: mock connection с "alive" статусом
+  * [x] Разделение mockConn и liveMockConn для разных тестов
+- [x] **Проверка качества**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.3 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 47: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
