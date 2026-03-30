@@ -291,6 +291,9 @@ type HealthChecker struct {
 	consecutiveFailures atomic.Int32
 	totalChecks         atomic.Int64
 	totalRecoveries     atomic.Int64
+	totalProbes         atomic.Int64 // Total probes executed
+	successfulProbes    atomic.Int64 // Successful probes
+	failedProbes        atomic.Int64 // Failed probes
 	lastCheckTime       atomic.Value // time.Time
 	lastSuccessTime     atomic.Value // time.Time
 
@@ -453,12 +456,15 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 	
 	// Collect results
 	for result := range results {
+		hc.totalProbes.Add(1)
 		if result.Success {
+			hc.successfulProbes.Add(1)
 			hc.lastSuccessTime.Store(result.Timestamp)
-			slog.Debug("Health probe passed", 
+			slog.Debug("Health probe passed",
 				"name", result.Type.String(),
 				"latency_ms", result.Latency.Milliseconds())
 		} else {
+			hc.failedProbes.Add(1)
 			failedProbes = append(failedProbes, result)
 			slog.Warn("Health probe failed",
 				"name", result.Type.String(),
@@ -571,6 +577,14 @@ func (hc *HealthChecker) triggerRecovery(ctx context.Context, failedProbes []Pro
 
 // GetStats returns health checker statistics with backoff details
 func (hc *HealthChecker) GetStats() HealthStats {
+	totalProbes := hc.totalProbes.Load()
+	successfulProbes := hc.successfulProbes.Load()
+	failedProbes := hc.failedProbes.Load()
+	successRate := float64(0)
+	if totalProbes > 0 {
+		successRate = float64(successfulProbes) / float64(totalProbes) * 100
+	}
+
 	return HealthStats{
 		TotalChecks:         hc.totalChecks.Load(),
 		ConsecutiveFailures: hc.consecutiveFailures.Load(),
@@ -578,6 +592,10 @@ func (hc *HealthChecker) GetStats() HealthStats {
 		LastCheckTime:       hc.lastCheckTime.Load().(time.Time),
 		LastSuccessTime:     hc.lastSuccessTime.Load().(time.Time),
 		ProbeCount:          len(hc.probes),
+		TotalProbes:         totalProbes,
+		SuccessfulProbes:    successfulProbes,
+		FailedProbes:        failedProbes,
+		SuccessRate:         successRate,
 		CurrentBackoff:      time.Duration(hc.backoffInterval.Load()),
 		MinBackoff:          hc.minBackoff,
 		MaxBackoff:          hc.maxBackoff,
@@ -588,12 +606,16 @@ func (hc *HealthChecker) GetStats() HealthStats {
 
 // HealthStats holds health checker statistics
 type HealthStats struct {
-	TotalChecks         int64
-	ConsecutiveFailures int32
-	TotalRecoveries     int64
-	LastCheckTime       time.Time
-	LastSuccessTime     time.Time
-	ProbeCount          int
+	TotalChecks         int64   `json:"total_checks"`
+	ConsecutiveFailures int32   `json:"consecutive_failures"`
+	TotalRecoveries     int64   `json:"total_recoveries"`
+	LastCheckTime       time.Time `json:"last_check_time"`
+	LastSuccessTime     time.Time `json:"last_success_time"`
+	ProbeCount          int     `json:"probe_count"`
+	TotalProbes         int64   `json:"total_probes"`
+	SuccessfulProbes    int64   `json:"successful_probes"`
+	FailedProbes        int64   `json:"failed_probes"`
+	SuccessRate         float64 `json:"success_rate"`
 	CurrentBackoff      time.Duration `json:"current_backoff"`
 	MinBackoff          time.Duration `json:"min_backoff"`
 	MaxBackoff          time.Duration `json:"max_backoff"`
