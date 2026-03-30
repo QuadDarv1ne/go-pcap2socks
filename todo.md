@@ -1,8 +1,8 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 29 марта 2026 г. (Сессия 39)
-**Версия**: v3.39.0 (Connection Pooling for SOCKS5)
-**Статус**: ✅ стабилен, сборка успешна (25.8 MB), working tree clean
+**Последнее обновление**: 30 марта 2026 г. (Сессия 40)
+**Версия**: v3.40.0 (Test Fixes & Code Quality)
+**Статус**: ✅ стабилен, сборка успешна (18.2 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
 **📊 Мониторинг**: API /api/metrics/dhcp + Web UI /dhcp-metrics
@@ -560,7 +560,21 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Unit tests included
   * [x] Sync: dev → main → origin
 
-### ⏳ Сессия 40: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 40: Test Fixes & Code Quality (P1) — ЗАВЕРШЕНА
+- [x] **Исправление ошибок в тестах**
+  * [x] connpool/pool_test.go: исправлено затенение mockConn (переменная → conn)
+  * [x] bandwidth/limiter_bench_test.go: заменён несуществующий API (Allow → LimitConn)
+  * [x] bandwidth/limiter_bench_test.go: исправлен тип конфигурации (Config → cfg.RateLimit)
+  * [x] bandwidth/limiter_bench_test.go: добавлен mockConn для тестов
+  * [x] Удалён неиспользуемый импорт fmt
+- [x] **Проверка качества кода**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.2 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 41: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
