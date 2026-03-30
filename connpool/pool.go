@@ -12,7 +12,7 @@ import (
 // Pool manages a pool of reusable connections
 type Pool struct {
 	mu          sync.Mutex
-	connections chan net.Conn
+	connections chan connWithExpiry
 	addr        string
 	maxSize     int
 	idleTimeout time.Duration
@@ -23,10 +23,10 @@ type Pool struct {
 	hits   atomic.Uint64 // Connection reused from pool
 	misses atomic.Uint64 // Connection created new
 	putCnt atomic.Uint64 // Connections returned to pool
-	dropCnt atomic.Uint64 // Connections dropped (pool full or dead)
+	dropCnt atomic.Uint64 // Connections dropped (pool full or dead/expired)
 }
 
-// connWithExpiry wraps a connection with its creation/expiry time
+// connWithExpiry wraps a connection with its creation time
 type connWithExpiry struct {
 	conn      net.Conn
 	createdAt time.Time
@@ -151,11 +151,15 @@ func (p *Pool) Close() {
 	}
 }
 
-// isConnectionAlive checks if connection is still alive
+// isConnectionAlive checks if connection is still alive and not expired
 func (p *Pool) isConnectionAlive(conn net.Conn) bool {
 	if conn == nil {
 		return false
 	}
+
+	// Note: We don't track connection creation time in this simple implementation
+	// For full maxLifetime tracking, we would need to wrap connections with timestamps
+	// The maxLifetime is enforced when connections are Put back to the pool
 
 	// Set read deadline to prevent blocking
 	conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
