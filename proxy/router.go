@@ -589,17 +589,28 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 		if cbErr != nil {
 			d.connErrors.Add(1)
 			if errors.Is(cbErr, circuitbreaker.ErrCircuitOpen) {
+				cbState := d.circuitBreaker.State()
+				total, _, failed, rejected, _ := d.circuitBreaker.Stats()
 				slog.Warn("Circuit breaker open, connection rejected",
 					"outbound", selectedTag,
-					"dst", metadata.DestinationAddress())
+					"dst", metadata.DestinationAddress(),
+					"circuit_state", cbState.String(),
+					"total_requests", total,
+					"failed_requests", failed,
+					"rejected_requests", rejected)
 			} else {
-				slog.Debug("Proxy dial failed", "outbound", selectedTag, "dst", metadata.DestinationAddress(), "err", cbErr)
+				slog.Debug("Proxy dial failed",
+					"outbound", selectedTag,
+					"dst", metadata.DestinationAddress(),
+					"err", cbErr)
 			}
 			return nil, cbErr
 		}
 
 		d.connSuccess.Add(1)
-		slog.Info("Proxy dial success", "outbound", selectedTag, "dst", metadata.DestinationAddress())
+		slog.Debug("Proxy dial success",
+			"outbound", selectedTag,
+			"dst", metadata.DestinationAddress())
 		return conn, nil
 	}
 

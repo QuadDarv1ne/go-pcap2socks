@@ -1,14 +1,14 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 30 марта 2026 г. (Сессия 43)
-**Версия**: v3.43.0 (Health Checker Metrics)
+**Последнее обновление**: 30 марта 2026 г. (Сессия 44)
+**Версия**: v3.44.0 (Enhanced Circuit Breaker Logging)
 **Статус**: ✅ стабилен, сборка успешна (18.3 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
 **📊 Мониторинг**: API /api/metrics/dhcp + /api/metrics/connpool + /api/metrics/circuitbreaker + /api/metrics/health + Web UI /dhcp-metrics
 **🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек + метрики health checker
 **🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики
-**⚡ Circuit Breaker**: Защита proxy операций (5 failures → open, 30s timeout)
+**⚡ Circuit Breaker**: Защита proxy операций + расширенное логирование
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
 **🔒 Безопасность**: config 0600, pprof отключен, ExecuteOnStart whitelist
 
@@ -642,7 +642,20 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Изменения в dev ветке
   * [x] Готово к merge в main
 
-### ⏳ Сессия 44: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 44: Enhanced Circuit Breaker Logging (P2) — ЗАВЕРШЕНА
+- [x] **Расширенное логирование circuit breaker**
+  * [x] proxy/router.go: логирование circuit_state при ErrCircuitOpen
+  * [x] proxy/router.go: логирование total_requests, failed_requests, rejected_requests
+  * [x] proxy/router.go: использование circuitBreaker.Stats() для статистики
+  * [x] proxy/router.go: снижение уровня логирования успеха на Debug
+- [x] **Проверка качества**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.3 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 45: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
