@@ -82,15 +82,20 @@ func (p *Pool) Get(ctx context.Context, dialer func(context.Context) (net.Conn, 
 
 	// Try to get a connection from the pool
 	select {
-	case conn := <-p.connections:
-		// Check if connection is still alive and not expired
-		if conn != nil && p.isConnectionAlive(conn) {
-			p.hits.Add(1)
-			return conn, nil
+	case wrapped, ok := <-p.connections:
+		if !ok {
+			// Channel closed, create new connection
+			p.misses.Add(1)
+			return dialer(ctx)
 		}
-		// Connection is dead or expired, close it and create new one
-		if conn != nil {
-			conn.Close()
+		// Check if connection is alive and not expired
+		if wrapped.conn != nil && p.isConnectionAlive(wrapped.conn) && !p.isConnectionExpired(wrapped.createdAt) {
+			p.hits.Add(1)
+			return wrapped.conn, nil
+		}
+		// Connection is dead or expired, close it
+		if wrapped.conn != nil {
+			wrapped.conn.Close()
 			p.dropCnt.Add(1)
 		}
 		p.misses.Add(1)
@@ -120,9 +125,15 @@ func (p *Pool) Put(conn net.Conn) {
 
 	p.putCnt.Add(1)
 
+	// Wrap connection with creation time
+	wrapped := connWithExpiry{
+		conn:      conn,
+		createdAt: time.Now(),
+	}
+
 	// Try to put connection back to pool
 	select {
-	case p.connections <- conn:
+	case p.connections <- wrapped:
 		// Successfully returned to pool
 	default:
 		// Pool is full, close connection
