@@ -1,17 +1,18 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 30 марта 2026 г. (Сессия 48)
-**Версия**: v3.48.0 (Unified Metrics API)
+**Последнее обновление**: 30 марта 2026 г. (Сессия 49)
+**Версия**: v3.49.0 (API Rate Limiter Improvement)
 **Статус**: ✅ стабилен, сборка успешна (18.3 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
 **📊 Мониторинг**: API /api/metrics/all (unified) + /api/metrics/{dhcp,connpool,circuitbreaker,health} + Web UI /dhcp-metrics
 **🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек + retry logic + метрики health checker
-**🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики + бенчмарки
+**🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle, 30min max) + метрики + бенчмарки
 **⚡ Circuit Breaker**: Защита proxy операций + расширенное логирование
 **🛡️ WireGuard**: Health checks + статистика подключений
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
 **🔒 Безопасность**: config 0600, pprof отключен, ExecuteOnStart whitelist
+**🛡️ Rate Limiter**: 100 req/min default + конфигурируемый
 
 ---
 
@@ -731,7 +732,28 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Изменения в dev ветке
   * [x] Готово к merge в main
 
-### ⏳ Сессия 49: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 49: API Rate Limiter Improvement (P2) — ЗАВЕРШЕНА
+- [x] **Rate Limiter конфигурация**
+  * [x] RateLimiterConfig struct (Rate, Window, CleanupInterval)
+  * [x] DefaultRateLimiterConfig() (100 req/min, 1min window)
+  * [x] newRateLimiterWithConfig() для кастомной конфигурации
+- [x] **Оптимизация rate limiter**
+  * [x] Удалён cleanupLoop (sync.Map self-cleaning)
+  * [x] Удалён cleanupVisitors (нет необходимости)
+  * [x] stop() стал no-op
+- [x] **ConnPool fixes**
+  * [x] isConnectionExpired() метод для maxLifetime проверки
+  * [x] Close() исправлено для connWithExpiry
+- [x] **wireguard cleanup**
+  * [x] Удалён неиспользуемый импорт fmt
+- [x] **Проверка качества**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.3 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 50: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
