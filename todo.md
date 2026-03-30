@@ -1,12 +1,12 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 30 марта 2026 г. (Сессия 42)
-**Версия**: v3.42.0 (Circuit Breaker Integration)
+**Последнее обновление**: 30 марта 2026 г. (Сессия 43)
+**Версия**: v3.43.0 (Health Checker Metrics)
 **Статус**: ✅ стабилен, сборка успешна (18.3 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
-**📊 Мониторинг**: API /api/metrics/dhcp + /api/metrics/connpool + /api/metrics/circuitbreaker + Web UI /dhcp-metrics
-**🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек
+**📊 Мониторинг**: API /api/metrics/dhcp + /api/metrics/connpool + /api/metrics/circuitbreaker + /api/metrics/health + Web UI /dhcp-metrics
+**🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек + метрики health checker
 **🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики
 **⚡ Circuit Breaker**: Защита proxy операций (5 failures → open, 30s timeout)
 **🌐 Web UI**: 3 страницы (index, ps4-setup, dhcp-metrics)
@@ -624,7 +624,25 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Изменения в dev ветке
   * [x] Готово к merge в main
 
-### ⏳ Сессия 43: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 43: Health Checker Metrics (P2) — ЗАВЕРШЕНА
+- [x] **Health Checker метрики**
+  * [x] Добавлены atomic счётчики: totalProbes, successfulProbes, failedProbes
+  * [x] HealthStats расширен: TotalProbes, SuccessfulProbes, FailedProbes, SuccessRate
+  * [x] SuccessRate вычисляется как процент: successful/total*100
+  * [x] GetStats() возвращает расширенную статистику
+- [x] **API integration**
+  * [x] /api/metrics/health endpoint
+  * [x] handleHealthStats handler
+  * [x] SetHealthCheckerStatsFn callback
+  * [x] Интеграция в main.go через _healthChecker.GetStats()
+- [x] **Проверка качества**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.3 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 44: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct
