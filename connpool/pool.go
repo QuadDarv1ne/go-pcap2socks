@@ -155,22 +155,18 @@ func (p *Pool) Close() {
 
 	// Close all connections in the pool
 	close(p.connections)
-	for conn := range p.connections {
-		if conn != nil {
-			conn.Close()
+	for wrapped := range p.connections {
+		if wrapped.conn != nil {
+			wrapped.conn.Close()
 		}
 	}
 }
 
-// isConnectionAlive checks if connection is still alive and not expired
+// isConnectionAlive checks if connection is still alive
 func (p *Pool) isConnectionAlive(conn net.Conn) bool {
 	if conn == nil {
 		return false
 	}
-
-	// Note: We don't track connection creation time in this simple implementation
-	// For full maxLifetime tracking, we would need to wrap connections with timestamps
-	// The maxLifetime is enforced when connections are Put back to the pool
 
 	// Set read deadline to prevent blocking
 	conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
@@ -194,6 +190,14 @@ func (p *Pool) isConnectionAlive(conn net.Conn) bool {
 
 	// Connection is dead
 	return false
+}
+
+// isConnectionExpired checks if connection has exceeded maxLifetime
+func (p *Pool) isConnectionExpired(createdAt time.Time) bool {
+	if p.maxLifetime <= 0 {
+		return false // No max lifetime configured
+	}
+	return time.Since(createdAt) > p.maxLifetime
 }
 
 // Stats returns pool statistics

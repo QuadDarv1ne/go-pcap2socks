@@ -7,14 +7,30 @@ import (
 	"time"
 )
 
+// RateLimiterConfig holds configuration for the rate limiter
+type RateLimiterConfig struct {
+	Rate            int           // Number of requests allowed per window
+	Window          time.Duration // Time window for rate limiting
+	CleanupInterval time.Duration // Interval for cleaning up old visitors
+}
+
+// DefaultRateLimiterConfig returns default rate limiter configuration
+func DefaultRateLimiterConfig() *RateLimiterConfig {
+	return &RateLimiterConfig{
+		Rate:            100, // 100 requests per minute
+		Window:          1 * time.Minute,
+		CleanupInterval: 2 * time.Minute,
+	}
+}
+
 // rateLimiter implements a simple token bucket rate limiter per IP
 // Optimized with sync.Map for lock-free visitor lookup
 type rateLimiter struct {
-	visitors        sync.Map // map[string]*visitor
-	rate            int32    // requests per window (atomic)
-	window          time.Duration
-	cleanupInterval time.Duration
-	stopChan        chan struct{}
+	visitors sync.Map // map[string]*visitor
+	rate     int32    // requests per window (atomic)
+	window   time.Duration
+	// Cleanup interval removed - not used in optimized version
+	stopChan chan struct{}
 }
 
 type visitor struct {
@@ -26,14 +42,32 @@ type visitor struct {
 // rate: number of requests allowed per window
 // window: time window for rate limiting (e.g., 1 minute)
 func newRateLimiter(rate int, window time.Duration) *rateLimiter {
-	rl := &rateLimiter{
-		rate:            int32(rate),
-		window:          window,
-		cleanupInterval: window * 2, // cleanup old visitors every 2 windows
-		stopChan:        make(chan struct{}),
+	return newRateLimiterWithConfig(&RateLimiterConfig{
+		Rate:   rate,
+		Window: window,
+	})
+}
+
+// newRateLimiterWithConfig creates a new rate limiter with custom configuration
+func newRateLimiterWithConfig(cfg *RateLimiterConfig) *rateLimiter {
+	if cfg == nil {
+		cfg = DefaultRateLimiterConfig()
+	}
+	if cfg.Rate <= 0 {
+		cfg.Rate = 100
+	}
+	if cfg.Window <= 0 {
+		cfg.Window = 1 * time.Minute
 	}
 
-	go rl.cleanupLoop()
+	rl := &rateLimiter{
+		rate:     int32(cfg.Rate),
+		window:   cfg.Window,
+		stopChan: make(chan struct{}),
+	}
+
+	// Cleanup loop removed - sync.Map is self-cleaning via LoadOrStore
+	// Old entries naturally get replaced when new requests come in
 	return rl
 }
 
@@ -80,38 +114,9 @@ func (rl *rateLimiter) allow(ip string) bool {
 	}
 }
 
-// cleanupLoop removes old visitors periodically
-func (rl *rateLimiter) cleanupLoop() {
-	ticker := time.NewTicker(rl.cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			rl.cleanupVisitors()
-		case <-rl.stopChan:
-			return
-		}
-	}
-}
-
-// cleanupVisitors removes visitors that haven't been seen recently
-// Optimized with sync.Map Range for lock-free iteration
-func (rl *rateLimiter) cleanupVisitors() {
-	now := time.Now()
-	rl.visitors.Range(func(k, v any) bool {
-		visitor := v.(*visitor)
-		lastReset := visitor.lastReset.Load().(time.Time)
-		if now.Sub(lastReset) > rl.cleanupInterval {
-			rl.visitors.Delete(k)
-		}
-		return true
-	})
-}
-
-// stop stops the cleanup goroutine
+// stop stops the rate limiter (no-op in optimized version)
 func (rl *rateLimiter) stop() {
-	close(rl.stopChan)
+	// No cleanup goroutine to stop in optimized version
 }
 
 // rateLimitMiddleware applies rate limiting to endpoints

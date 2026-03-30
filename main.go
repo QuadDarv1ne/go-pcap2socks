@@ -1564,6 +1564,12 @@ func performGracefulShutdown() {
 	tunnel.Stop()
 	slog.Info("Tunnel stopped")
 
+	// 7b. Stop WAN balancer (Multi-WAN load balancing)
+	if _wanBalancerDialer != nil {
+		_wanBalancerDialer.Stop()
+		slog.Info("WAN balancer stopped")
+	}
+
 	// 8. Stop stats store
 	if _statsStore != nil {
 		_statsStore.Stop()
