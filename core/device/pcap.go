@@ -317,6 +317,23 @@ func (t *PCAP) handleDHCP(data []byte) ([]byte, error) {
 	return responsePacket, nil
 }
 
+// handleDHCPAsync processes DHCP packets asynchronously
+func (t *PCAP) handleDHCPAsync(data []byte) {
+	response, err := t.handleDHCP(data)
+	if err != nil {
+		slog.Error("DHCP async handle error", "err", err)
+		return
+	}
+	if response == nil {
+		return
+	}
+
+	// Send DHCP response
+	if err := t.handle.WritePacketData(response); err != nil {
+		slog.Error("DHCP async write error", "err", err)
+	}
+}
+
 func (t *PCAP) Write(p []byte) (n int, err error) {
 	err = t.handle.WritePacketData(p)
 	if err != nil {
