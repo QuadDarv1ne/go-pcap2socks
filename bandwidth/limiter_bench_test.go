@@ -2,66 +2,68 @@
 package bandwidth_test
 
 import (
-	"fmt"
+	"context"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/bandwidth"
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 )
 
 // BenchmarkBandwidthLimiter_Creation benchmarks limiter creation
 func BenchmarkBandwidthLimiter_Creation(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
+		limiter, err := bandwidth.NewBandwidthLimiter(&cfg.RateLimit{
 			Default: "10Mbps",
-			Rules:   []bandwidth.Rule{},
+			Rules:   []cfg.RateLimitRule{},
 		})
+		if err != nil {
+			b.Fatalf("NewBandwidthLimiter() error: %v", err)
+		}
 		if limiter == nil {
 			b.Fatal("NewBandwidthLimiter() returned nil")
 		}
 	}
 }
 
-// BenchmarkBandwidthLimiter_Allow benchmarks bandwidth allowance check
-func BenchmarkBandwidthLimiter_Allow(b *testing.B) {
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
+// BenchmarkBandwidthLimiter_LimitConn benchmarks connection limiting
+func BenchmarkBandwidthLimiter_LimitConn(b *testing.B) {
+	limiter, err := bandwidth.NewBandwidthLimiter(&cfg.RateLimit{
 		Default: "100Mbps",
-		Rules:   []bandwidth.Rule{},
+		Rules:   []cfg.RateLimitRule{},
 	})
-
-	mac := "AA:BB:CC:DD:EE:FF"
-	ip := "192.168.100.100"
-	bytes := uint64(1500) // Typical packet size
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = limiter.Allow(mac, ip, bytes)
+	if err != nil {
+		b.Fatalf("NewBandwidthLimiter() error: %v", err)
 	}
-}
-
-// BenchmarkBandwidthLimiter_RecordBytes benchmarks bandwidth recording
-func BenchmarkBandwidthLimiter_RecordBytes(b *testing.B) {
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
-		Default: "100Mbps",
-		Rules:   []bandwidth.Rule{},
-	})
 
 	mac := "AA:BB:CC:DD:EE:FF"
 	ip := "192.168.100.100"
-	bytes := uint64(1500)
+
+	// Create mock connections
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		limiter.RecordBytes(mac, ip, bytes)
+		limitedConn := limiter.LimitConn(client, mac, ip)
+		if limitedConn == nil {
+			b.Fatal("Expected limited connection")
+		}
 	}
 }
 
 // BenchmarkBandwidthLimiter_MultipleClients benchmarks multiple clients
 func BenchmarkBandwidthLimiter_MultipleClients(b *testing.B) {
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
+	limiter, err := bandwidth.NewBandwidthLimiter(&cfg.RateLimit{
 		Default: "100Mbps",
-		Rules:   []bandwidth.Rule{},
+		Rules:   []cfg.RateLimitRule{},
 	})
+	if err != nil {
+		b.Fatalf("NewBandwidthLimiter() error: %v", err)
+	}
 
 	clients := []struct {
 		mac string
@@ -74,117 +76,190 @@ func BenchmarkBandwidthLimiter_MultipleClients(b *testing.B) {
 		{"AA:BB:CC:DD:EE:05", "192.168.100.5"},
 	}
 
-	bytes := uint64(1500)
-
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, client := range clients {
-			_ = limiter.Allow(client.mac, client.ip, bytes)
-			limiter.RecordBytes(client.mac, client.ip, bytes)
+			server, clientConn := net.Pipe()
+			limitedConn := limiter.LimitConn(clientConn, client.mac, client.ip)
+			if limitedConn == nil {
+				b.Fatal("Expected limited connection")
+			}
+			server.Close()
+			clientConn.Close()
 		}
 	}
 }
 
 // BenchmarkBandwidthLimiter_WithRules benchmarks with bandwidth rules
 func BenchmarkBandwidthLimiter_WithRules(b *testing.B) {
-	rules := []bandwidth.Rule{
-		{MAC: "AA:BB:CC:DD:EE:FF", Limit: "50Mbps", Burst: "5MB"},
-		{IP: "192.168.100.100", Limit: "5Mbps", Burst: "500KB"},
-		{MAC: "AA:BB:CC:DD:EE:00", Limit: "1Mbps", Burst: "100KB"},
+	rules := []cfg.RateLimitRule{
+		{MAC: "AA:BB:CC:DD:EE:FF", Limit: "50Mbps"},
+		{IP: "192.168.100.100", Limit: "5Mbps"},
+		{MAC: "AA:BB:CC:DD:EE:00", Limit: "1Mbps"},
 	}
 
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
+	limiter, err := bandwidth.NewBandwidthLimiter(&cfg.RateLimit{
 		Default: "10Mbps",
 		Rules:   rules,
 	})
+	if err != nil {
+		b.Fatalf("NewBandwidthLimiter() error: %v", err)
+	}
 
 	mac := "AA:BB:CC:DD:EE:FF"
 	ip := "192.168.100.100"
-	bytes := uint64(1500)
+
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = limiter.Allow(mac, ip, bytes)
+		limitedConn := limiter.LimitConn(client, mac, ip)
+		if limitedConn == nil {
+			b.Fatal("Expected limited connection")
+		}
 	}
 }
 
 // BenchmarkBandwidthLimiter_GetStats benchmarks statistics retrieval
 func BenchmarkBandwidthLimiter_GetStats(b *testing.B) {
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
+	limiter, err := bandwidth.NewBandwidthLimiter(&cfg.RateLimit{
 		Default: "100Mbps",
-		Rules:   []bandwidth.Rule{},
+		Rules:   []cfg.RateLimitRule{},
 	})
+	if err != nil {
+		b.Fatalf("NewBandwidthLimiter() error: %v", err)
+	}
 
 	mac := "AA:BB:CC:DD:EE:FF"
 	ip := "192.168.100.100"
 
-	// Pre-populate some data
-	for i := 0; i < 100; i++ {
-		limiter.RecordBytes(mac, ip, 1500)
-	}
+	// Pre-create limited connection to populate stats
+	server, client := net.Pipe()
+	limitedConn := limiter.LimitConn(client, mac, ip)
+
+	// Write some data
+	go func() {
+		_, _ = limitedConn.Write(make([]byte, 1500))
+		client.Close()
+	}()
+	_, _ = server.Read(make([]byte, 1500))
+	server.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = limiter.GetStats(mac, ip)
+		_ = limiter.GetClientStats()
 	}
 }
 
-// BenchmarkBandwidthLimiter_GetTotalStats benchmarks total statistics retrieval
-func BenchmarkBandwidthLimiter_GetTotalStats(b *testing.B) {
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
-		Default: "100Mbps",
-		Rules:   []bandwidth.Rule{},
-	})
-
-	// Pre-populate with multiple clients
-	for i := 0; i < 10; i++ {
-		mac := fmt.Sprintf("AA:BB:CC:DD:EE:%02X", i)
-		ip := fmt.Sprintf("192.168.100.%d", i+1)
-		for j := 0; j < 100; j++ {
-			limiter.RecordBytes(mac, ip, 1500)
-		}
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = limiter.GetTotalStats()
-	}
-}
-
-// BenchmarkBandwidthLimiter_ConcurrentAllow benchmarks concurrent allowance checks
-func BenchmarkBandwidthLimiter_ConcurrentAllow(b *testing.B) {
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
+// BenchmarkBandwidthLimiter_ConcurrentLimitConn benchmarks concurrent connection limiting
+func BenchmarkBandwidthLimiter_ConcurrentLimitConn(b *testing.B) {
+	limiter, err := bandwidth.NewBandwidthLimiter(&cfg.RateLimit{
 		Default: "1Gbps",
-		Rules:   []bandwidth.Rule{},
+		Rules:   []cfg.RateLimitRule{},
 	})
+	if err != nil {
+		b.Fatalf("NewBandwidthLimiter() error: %v", err)
+	}
 
 	mac := "AA:BB:CC:DD:EE:FF"
 	ip := "192.168.100.100"
-	bytes := uint64(1500)
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_ = limiter.Allow(mac, ip, bytes)
+			server, client := net.Pipe()
+			limitedConn := limiter.LimitConn(client, mac, ip)
+			if limitedConn == nil {
+				b.Fatal("Expected limited connection")
+			}
+			server.Close()
+			client.Close()
 		}
 	})
 }
 
-// BenchmarkBandwidthLimiter_ConcurrentRecord benchmarks concurrent recording
-func BenchmarkBandwidthLimiter_ConcurrentRecord(b *testing.B) {
-	limiter := bandwidth.NewBandwidthLimiter(&bandwidth.Config{
+// BenchmarkBandwidthLimiter_ConcurrentMultipleClients benchmarks concurrent multiple clients
+func BenchmarkBandwidthLimiter_ConcurrentMultipleClients(b *testing.B) {
+	limiter, err := bandwidth.NewBandwidthLimiter(&cfg.RateLimit{
 		Default: "1Gbps",
-		Rules:   []bandwidth.Rule{},
+		Rules:   []cfg.RateLimitRule{},
 	})
+	if err != nil {
+		b.Fatalf("NewBandwidthLimiter() error: %v", err)
+	}
 
-	mac := "AA:BB:CC:DD:EE:FF"
-	ip := "192.168.100.100"
-	bytes := uint64(1500)
+	clients := []struct {
+		mac string
+		ip  string
+	}{
+		{"AA:BB:CC:DD:EE:01", "192.168.100.1"},
+		{"AA:BB:CC:DD:EE:02", "192.168.100.2"},
+		{"AA:BB:CC:DD:EE:03", "192.168.100.3"},
+		{"AA:BB:CC:DD:EE:04", "192.168.100.4"},
+		{"AA:BB:CC:DD:EE:05", "192.168.100.5"},
+	}
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
+		i := 0
 		for pb.Next() {
-			limiter.RecordBytes(mac, ip, bytes)
+			client := clients[i%len(clients)]
+			server, clientConn := net.Pipe()
+			limitedConn := limiter.LimitConn(clientConn, client.mac, client.ip)
+			if limitedConn == nil {
+				b.Fatal("Expected limited connection")
+			}
+			server.Close()
+			clientConn.Close()
+			i++
 		}
 	})
+}
+
+// mockConn implements net.Conn for testing
+type mockConn struct {
+	readData  []byte
+	writeData []byte
+	closed    bool
+}
+
+func (m *mockConn) Read(b []byte) (n int, err error) {
+	if len(m.readData) > 0 {
+		n = copy(b, m.readData)
+		m.readData = m.readData[n:]
+		return n, nil
+	}
+	return 0, context.Canceled
+}
+
+func (m *mockConn) Write(b []byte) (n int, err error) {
+	m.writeData = append(m.writeData, b...)
+	return len(b), nil
+}
+
+func (m *mockConn) Close() error {
+	m.closed = true
+	return nil
+}
+
+func (m *mockConn) LocalAddr() net.Addr {
+	return nil
+}
+
+func (m *mockConn) RemoteAddr() net.Addr {
+	return nil
+}
+
+func (m *mockConn) SetDeadline(t time.Time) error {
+	return nil
+}
+
+func (m *mockConn) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (m *mockConn) SetWriteDeadline(t time.Time) error {
+	return nil
 }

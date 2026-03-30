@@ -40,23 +40,23 @@ func TestPool_DefaultValues(t *testing.T) {
 func TestPool_GetPut(t *testing.T) {
 	pool := NewPool("localhost:1080", 5, 1*time.Minute)
 	defer pool.Close()
-	
+
 	// Create mock connection
-	mockConn := &mockConn{}
-	
+	conn := &mockConn{}
+
 	// Put connection to pool
-	pool.Put(mockConn)
-	
+	pool.Put(conn)
+
 	// Get connection from pool
-	conn, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
+	gotConn, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
 		return &mockConn{}, nil
 	})
-	
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-	
-	if conn != mockConn {
+
+	if gotConn != conn {
 		t.Error("Expected to get the same connection from pool")
 	}
 }
