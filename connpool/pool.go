@@ -42,7 +42,7 @@ func NewPool(addr string, maxSize int, idleTimeout time.Duration) *Pool {
 	}
 
 	return &Pool{
-		connections: make(chan net.Conn, maxSize),
+		connections: make(chan connWithExpiry, maxSize),
 		addr:        addr,
 		maxSize:     maxSize,
 		idleTimeout: idleTimeout,
@@ -63,7 +63,7 @@ func NewPoolWithLifetime(addr string, maxSize int, idleTimeout time.Duration, ma
 	}
 
 	return &Pool{
-		connections: make(chan net.Conn, maxSize),
+		connections: make(chan connWithExpiry, maxSize),
 		addr:        addr,
 		maxSize:     maxSize,
 		idleTimeout: idleTimeout,
