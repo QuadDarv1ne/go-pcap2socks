@@ -3,13 +3,13 @@ package wireguard
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
+	"github.com/getlantern/errors"
 )
 
 // Config represents WireGuard configuration.
@@ -45,13 +45,13 @@ type Proxy struct {
 // New creates a new WireGuard proxy.
 func New(tag string, config Config) (*Proxy, error) {
 	if config.PrivateKey == "" {
-		return nil, fmt.Errorf("private key required")
+		return nil, errors.New("wireguard: private key required")
 	}
 	if config.PeerPublicKey == "" {
-		return nil, fmt.Errorf("peer public key required")
+		return nil, errors.New("wireguard: peer public key required")
 	}
 	if config.PeerEndpoint == "" {
-		return nil, fmt.Errorf("peer endpoint required")
+		return nil, errors.New("wireguard: peer endpoint required")
 	}
 	if config.MTU == 0 {
 		config.MTU = 1420
@@ -129,7 +129,7 @@ func (p *Proxy) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn
 	p.totalConnections.Add(1)
 	p.failedConns.Add(1)
 	p.lastConnectionError.Store("use proxy/wireguard.go for full WireGuard support")
-	return nil, fmt.Errorf("wireguard TCP dial: use proxy/wireguard.go package instead")
+	return nil, errors.New("wireguard TCP dial: use proxy/wireguard.go package instead")
 }
 
 // DialUDP establishes a UDP connection through WireGuard.
@@ -139,7 +139,7 @@ func (p *Proxy) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	p.totalConnections.Add(1)
 	p.failedConns.Add(1)
 	p.lastConnectionError.Store("use proxy/wireguard.go for full WireGuard support")
-	return nil, fmt.Errorf("wireguard UDP dial: use proxy/wireguard.go package instead")
+	return nil, errors.New("wireguard UDP dial: use proxy/wireguard.go package instead")
 }
 
 // Addr returns the endpoint address.
