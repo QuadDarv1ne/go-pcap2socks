@@ -123,43 +123,23 @@ func (p *Proxy) GetStats() WireGuardStats {
 }
 
 // DialContext establishes a TCP connection through WireGuard.
+// Note: This is a stub implementation. For production use, see proxy/wireguard.go
+// which provides full WireGuard tunnel support using netstack.
 func (p *Proxy) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
 	p.totalConnections.Add(1)
-
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	if !p.started {
-		p.failedConns.Add(1)
-		p.lastConnectionError.Store("wireguard not started")
-		return nil, fmt.Errorf("wireguard not started")
-	}
-
-	// TODO: Implement WireGuard TCP dial
-	// For now, return not implemented error
 	p.failedConns.Add(1)
-	p.lastConnectionError.Store("wireguard TCP dial not implemented")
-	return nil, fmt.Errorf("wireguard TCP dial not implemented")
+	p.lastConnectionError.Store("use proxy/wireguard.go for full WireGuard support")
+	return nil, fmt.Errorf("wireguard TCP dial: use proxy/wireguard.go package instead")
 }
 
 // DialUDP establishes a UDP connection through WireGuard.
+// Note: This is a stub implementation. For production use, see proxy/wireguard.go
+// which provides full WireGuard tunnel support using netstack.
 func (p *Proxy) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	p.totalConnections.Add(1)
-
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	if !p.started {
-		p.failedConns.Add(1)
-		p.lastConnectionError.Store("wireguard not started")
-		return nil, fmt.Errorf("wireguard not started")
-	}
-
-	// TODO: Implement WireGuard UDP dial
-	// For now, return not implemented error
 	p.failedConns.Add(1)
-	p.lastConnectionError.Store("wireguard UDP dial not implemented")
-	return nil, fmt.Errorf("wireguard UDP dial not implemented")
+	p.lastConnectionError.Store("use proxy/wireguard.go for full WireGuard support")
+	return nil, fmt.Errorf("wireguard UDP dial: use proxy/wireguard.go package instead")
 }
 
 // Addr returns the endpoint address.
