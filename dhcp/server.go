@@ -670,10 +670,8 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 	slog.Debug("DHCP: Falling back to legacy IP allocation",
 		"mac", macStr,
 		"pool_range", s.config.FirstIP.String()+"-"+s.config.LastIP.String())
-	
-	// Get nextIP atomically
-	nextIP := s.nextIP.Load().(net.IP)
-	startIP := nextIP
+
+	startIP := s.nextIP.Load().(net.IP)
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -
 		binary.BigEndian.Uint32(s.config.FirstIP.To4()) + 1)
 
@@ -682,7 +680,7 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		"max_attempts", maxAttempts)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		currentIP := nextIP
+		currentIP := s.nextIP.Load().(net.IP)
 		ipStr := currentIP.String()
 
 		// Check if IP is reserved or already leased (O(1) with ipIndex)
@@ -702,17 +700,6 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 					"ip", ipStr,
 					"mac", macStr)
 			}
-		}
-
-		// Move to next IP for next iteration
-		nextIP = s.incrementIP(nextIP)
-		s.nextIP.Store(nextIP)
-
-		// Reset to first IP if we've gone past the last IP in the pool
-		nextIPInt := binary.BigEndian.Uint32(nextIP.To4())
-		lastIPInt := binary.BigEndian.Uint32(s.config.LastIP.To4())
-		if !s.config.Network.Contains(nextIP) || nextIPInt > lastIPInt {
-			s.nextIP.Store(s.config.FirstIP)
 		}
 
 		if available {
@@ -736,11 +723,31 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 				s.leaseDB.SetLease(lease)
 			}
 
+			// Atomically advance nextIP for the next allocation
+			nextIP := s.incrementIP(currentIP)
+			// Reset to first IP if we've gone past the last IP in the pool
+			nextIPInt := binary.BigEndian.Uint32(nextIP.To4())
+			lastIPInt := binary.BigEndian.Uint32(s.config.LastIP.To4())
+			if !s.config.Network.Contains(nextIP) || nextIPInt > lastIPInt {
+				nextIP = s.config.FirstIP
+			}
+			s.nextIP.Store(nextIP)
+
 			return currentIP, nil
 		}
 
+		// IP is in use, try next IP
+		nextIP := s.incrementIP(currentIP)
+		// Reset to first IP if we've gone past the last IP in the pool
+		nextIPInt := binary.BigEndian.Uint32(nextIP.To4())
+		lastIPInt := binary.BigEndian.Uint32(s.config.LastIP.To4())
+		if !s.config.Network.Contains(nextIP) || nextIPInt > lastIPInt {
+			nextIP = s.config.FirstIP
+		}
+		s.nextIP.Store(nextIP)
+
 		// Prevent infinite loop
-		if nextIP.Equal(startIP) {
+		if s.nextIP.Load().(net.IP).Equal(startIP) {
 			slog.Warn("DHCP: Legacy allocation completed full circle, no IPs available",
 				"mac", macStr)
 			break

@@ -1,11 +1,11 @@
 ﻿# go-pcap2socks TODO
 
-**Последнее обновление**: 30 марта 2026 г. (Сессия 47)
-**Версия**: v3.47.0 (Health Check Retry Logic)
+**Последнее обновление**: 30 марта 2026 г. (Сессия 48)
+**Версия**: v3.48.0 (Unified Metrics API)
 **Статус**: ✅ стабилен, сборка успешна (18.3 MB), go vet clean
 **⚠️ Тесты отключены**: Kaspersky HackTool.Convagent (ложное срабатывание) + высокое потребление ОЗУ
 **🎮 PS4 готов**: DHCP + маршрутизация + auto-recovery + metrics + health checks + conn pool — ожидает подключения
-**📊 Мониторинг**: API /api/metrics/dhcp + /api/metrics/connpool + /api/metrics/circuitbreaker + /api/metrics/health + Web UI /dhcp-metrics
+**📊 Мониторинг**: API /api/metrics/all (unified) + /api/metrics/{dhcp,connpool,circuitbreaker,health} + Web UI /dhcp-metrics
 **🏥 Health**: API /api/health + авто-проверка прокси каждые 30 сек + retry logic + метрики health checker
 **🔌 Conn Pool**: SOCKS5 connection pooling (10 conn, 5min idle) + метрики + бенчмарки
 **⚡ Circuit Breaker**: Защита proxy операций + расширенное логирование
@@ -710,7 +710,28 @@ go test -fuzz ./... # ❌ Огромная нагрузка
   * [x] Изменения в dev ветке
   * [x] Готово к merge в main
 
-### ⏳ Сессия 48: PS4 Integration Testing (P1) — В ОЖИДАНИИ
+### ✅ Сессия 48: Unified Metrics API (P2) — ЗАВЕРШЕНА
+- [x] **Unified /api/metrics/all endpoint**
+  * [x] handleAllMetrics() handler объединяет все метрики
+  * [x] DNS метрики: hits, misses, hit_ratio
+  * [x] Proxy connections: success, errors, error_rate
+  * [x] DHCP метрики
+  * [x] Connection pools метрики
+  * [x] Circuit breaker статистика
+  * [x] Health checker статистика
+  * [x] Timestamp в ответе
+- [x] **wireguard stub improvement**
+  * [x] Упрощение DialContext/DialUDP
+  * [x] Улучшенные комментарии о proxy/wireguard.go
+  * [x] Более понятные сообщения об ошибках
+- [x] **Проверка качества**
+  * [x] go vet ./... — без ошибок ✅
+  * [x] go build -ldflags="-s -w" — успешно (18.3 MB) ✅
+- [x] **Синхронизация**
+  * [x] Изменения в dev ветке
+  * [x] Готово к merge в main
+
+### ⏳ Сессия 49: PS4 Integration Testing (P1) — В ОЖИДАНИИ
 - [ ] Физическое подключение PS4 (Ethernet кабель или Wi-Fi хотспот)
 - [ ] Тест DHCP: PS4 получает IP 192.168.100.100
 - [ ] Тест маршрутизации: трафик через direct

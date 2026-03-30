@@ -207,17 +207,11 @@ func (t *PCAP) Read() []byte {
 
 			// DHCP uses ports 67 (server) and 68 (client)
 			if (srcPort == 68 || dstPort == 67) && t.dhcpServer != nil {
-				// This is a DHCP request from a client
-				// Parse the packet and handle DHCP request
-				response, err := t.handleDHCP(data)
-				if err != nil {
-					slog.Error("DHCP handle error", "err", err)
-				} else if response != nil {
-					// Send DHCP response
-					if err := t.handle.WritePacketData(response); err != nil {
-						slog.Error("DHCP write error", "err", err)
-					}
-				}
+				// Handle DHCP in separate goroutine to avoid blocking main read loop
+				// Copy data for async processing
+				dataCopy := make([]byte, len(data))
+				copy(dataCopy, data)
+				go t.handleDHCPAsync(dataCopy)
 				return nil // Don't pass DHCP packets to the stack
 			}
 		}

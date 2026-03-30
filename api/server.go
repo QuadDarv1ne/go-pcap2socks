@@ -209,6 +209,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/metrics/connpool", s.rateLimitMiddleware(s.authMiddleware(s.handleConnPoolMetrics)))
 	s.mux.HandleFunc("/api/metrics/circuitbreaker", s.rateLimitMiddleware(s.authMiddleware(s.handleCircuitBreakerStats)))
 	s.mux.HandleFunc("/api/metrics/health", s.rateLimitMiddleware(s.authMiddleware(s.handleHealthStats)))
+	s.mux.HandleFunc("/api/metrics/all", s.rateLimitMiddleware(s.authMiddleware(s.handleAllMetrics)))
 	s.mux.HandleFunc("/api/health", s.rateLimitMiddleware(s.authMiddleware(s.handleHealth)))
 }
 
@@ -1630,6 +1631,70 @@ func (s *Server) handleHealthStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendSuccess(w, stats)
+}
+
+// handleAllMetrics returns all available metrics in a single response
+func (s *Server) handleAllMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	metrics := make(map[string]interface{})
+
+	// Get performance metrics (DNS + proxy connection stats)
+	if getDNSMetricsFn != nil {
+		if hits, misses, hitRatio, ok := getDNSMetricsFn(); ok {
+			metrics["dns"] = map[string]interface{}{
+				"hits":      hits,
+				"misses":    misses,
+				"hit_ratio": hitRatio,
+			}
+		}
+	}
+
+	if getProxyConnectionStatsFn != nil {
+		if success, errors, errorRate, ok := getProxyConnectionStatsFn(); ok {
+			metrics["proxy_connections"] = map[string]interface{}{
+				"success":   success,
+				"errors":    errors,
+				"error_rate": errorRate,
+			}
+		}
+	}
+
+	// Get DHCP metrics
+	if getDHCPMetricsFn != nil {
+		if dhcpMetrics, ok := getDHCPMetricsFn(); ok {
+			metrics["dhcp"] = dhcpMetrics
+		}
+	}
+
+	// Get connection pool metrics
+	if getConnPoolMetricsFn != nil {
+		if poolMetrics, ok := getConnPoolMetricsFn(); ok {
+			metrics["connection_pools"] = poolMetrics
+		}
+	}
+
+	// Get circuit breaker stats
+	if getCircuitBreakerStatsFn != nil {
+		if cbStats, ok := getCircuitBreakerStatsFn(); ok {
+			metrics["circuit_breaker"] = cbStats
+		}
+	}
+
+	// Get health checker stats
+	if getHealthCheckerStatsFn != nil {
+		if hcStats, ok := getHealthCheckerStatsFn(); ok {
+			metrics["health_checker"] = hcStats
+		}
+	}
+
+	metrics["available"] = true
+	metrics["timestamp"] = time.Now().Format(time.RFC3339)
+
+	s.sendSuccess(w, metrics)
 }
 
 // handleWebSocket handles WebSocket connections for real-time updates
