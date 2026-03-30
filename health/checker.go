@@ -98,6 +98,7 @@ type ProbeResult struct {
 	Latency   time.Duration
 	Error     error
 	Timestamp time.Time
+	Retries   int // Number of retries attempted
 }
 
 // Probe represents a health check probe
@@ -105,6 +106,24 @@ type Probe interface {
 	Run(ctx context.Context) ProbeResult
 	Name() string
 	Type() ProbeType
+}
+
+// RetryConfig holds configuration for probe retries
+type RetryConfig struct {
+	MaxRetries   int           // Maximum number of retries
+	InitialDelay time.Duration // Initial delay between retries
+	Multiplier   float64       // Multiplier for exponential backoff
+	MaxDelay     time.Duration // Maximum delay between retries
+}
+
+// DefaultRetryConfig returns default retry configuration
+func DefaultRetryConfig() *RetryConfig {
+	return &RetryConfig{
+		MaxRetries:   2,
+		InitialDelay: 100 * time.Millisecond,
+		Multiplier:   2.0,
+		MaxDelay:     1 * time.Second,
+	}
 }
 
 // HTTPProbe checks HTTP connectivity to a target URL
@@ -429,31 +448,31 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 	probes := make([]Probe, len(hc.probes))
 	copy(probes, hc.probes)
 	hc.mu.RUnlock()
-	
+
 	if len(probes) == 0 {
 		return
 	}
-	
+
 	hc.totalChecks.Add(1)
 	hc.lastCheckTime.Store(time.Now())
-	
+
 	failedProbes := make([]ProbeResult, 0)
-	
-	// Run all probes concurrently
+
+	// Run all probes concurrently with retry logic
 	var wg sync.WaitGroup
 	results := make(chan ProbeResult, len(probes))
-	
+
 	for _, probe := range probes {
 		wg.Add(1)
 		go func(p Probe) {
 			defer wg.Done()
-			results <- p.Run(ctx)
+			results <- hc.runProbeWithRetry(ctx, p)
 		}(probe)
 	}
-	
+
 	wg.Wait()
 	close(results)
-	
+
 	// Collect results
 	for result := range results {
 		hc.totalProbes.Add(1)
@@ -462,24 +481,26 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 			hc.lastSuccessTime.Store(result.Timestamp)
 			slog.Debug("Health probe passed",
 				"name", result.Type.String(),
-				"latency_ms", result.Latency.Milliseconds())
+				"latency_ms", result.Latency.Milliseconds(),
+				"retries", result.Retries)
 		} else {
 			hc.failedProbes.Add(1)
 			failedProbes = append(failedProbes, result)
 			slog.Warn("Health probe failed",
 				"name", result.Type.String(),
 				"error", result.Error,
-				"latency_ms", result.Latency.Milliseconds())
+				"latency_ms", result.Latency.Milliseconds(),
+				"retries", result.Retries)
 		}
 	}
-	
+
 	// Check if recovery is needed
 	if len(failedProbes) > 0 {
 		failures := hc.consecutiveFailures.Add(1)
-		
+
 		// Apply exponential backoff on failures
 		hc.applyBackoff()
-		
+
 		if failures >= int32(hc.recoveryThreshold) {
 			slog.Error("Health check failed consecutively, triggering recovery",
 				"failures", failures,
@@ -493,6 +514,66 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 		hc.consecutiveFailures.Store(0)
 		hc.resetBackoff()
 	}
+}
+
+// runProbeWithRetry runs a probe with retry logic and exponential backoff
+func (hc *HealthChecker) runProbeWithRetry(ctx context.Context, probe Probe) ProbeResult {
+	retryConfig := DefaultRetryConfig()
+	var lastResult ProbeResult
+
+	for attempt := 0; attempt <= retryConfig.MaxRetries; attempt++ {
+		// Run the probe
+		result := probe.Run(ctx)
+		result.Retries = attempt
+
+		// Success on first try or after retries
+		if result.Success {
+			if attempt > 0 {
+				slog.Debug("Health probe succeeded after retries",
+					"name", probe.Name(),
+					"retries", attempt)
+			}
+			return result
+		}
+
+		// Store last failed result
+		lastResult = result
+
+		// Don't sleep after the last attempt
+		if attempt < retryConfig.MaxRetries {
+			// Calculate delay with exponential backoff
+			delay := retryConfig.InitialDelay
+			for i := 0; i < attempt; i++ {
+				delay = time.Duration(float64(delay) * retryConfig.Multiplier)
+				if delay > retryConfig.MaxDelay {
+					delay = retryConfig.MaxDelay
+					break
+				}
+			}
+
+			// Add jitter (±10%)
+			jitter := time.Duration(float64(delay) * 0.1 * (rand.Float64()*2 - 1))
+			delay = delay + jitter
+
+			slog.Debug("Health probe failed, retrying",
+				"name", probe.Name(),
+				"attempt", attempt+1,
+				"max_retries", retryConfig.MaxRetries,
+				"delay_ms", delay.Milliseconds(),
+				"error", result.Error)
+
+			// Wait before retry
+			select {
+			case <-ctx.Done():
+				lastResult.Error = ctx.Err()
+				return lastResult
+			case <-time.After(delay):
+				// Continue to next retry
+			}
+		}
+	}
+
+	return lastResult
 }
 
 // applyBackoff increases the backoff interval exponentially with cap
