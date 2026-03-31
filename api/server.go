@@ -112,7 +112,13 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	cfgFile := path.Join(path.Dir(executable), "config.json")
 
 	// Initialize metrics collector
-	metricsCollector := metrics.NewCollector(statsStore)
+	metricsCollector := metrics.NewCollector(metrics.CollectorConfig{
+		StatsStore:  statsStore,
+		ConnTracker: nil,      // Will be set later via SetConnTracker
+		DNSHijacker: nil,      // Will be set later via SetDNSHijacker
+		ProxyList:   nil,      // Will be set later via SetProxyList
+		Logger:      nil,      // Use default logger
+	})
 
 	// Initialize rate limiter: 100 requests per minute per IP
 	rateLimiter := newRateLimiter(100, 1*time.Minute)

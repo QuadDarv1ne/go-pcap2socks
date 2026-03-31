@@ -33,6 +33,11 @@ type State struct {
 	LastModified time.Time         `json:"last_modified"`
 }
 
+// Stopper is a common interface for all components that support graceful shutdown
+type Stopper interface {
+	Stop(ctx context.Context) error
+}
+
 // Component represents a shutdownable component
 type Component interface {
 	Shutdown(ctx context.Context) error

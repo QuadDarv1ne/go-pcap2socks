@@ -126,6 +126,23 @@ func (e *Endpoint) outboundLoop(ctx context.Context) {
 	}
 }
 
+// Stop gracefully stops the endpoint with context-based timeout
+func (e *Endpoint) Stop(ctx context.Context) error {
+	// Wait for goroutines to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return nil
+	}
+}
+
 // writePacket writes outbound packets to the io.Writer.
 func (e *Endpoint) writePacket(pkt *stack.PacketBuffer) tcpip.Error {
 	defer pkt.DecRef()

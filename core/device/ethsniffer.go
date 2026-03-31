@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -174,6 +175,40 @@ func (e *Endpoint) Close() {
 
 	// Close child endpoint
 	e.Endpoint.Close()
+}
+
+// Stop gracefully stops the PCAP capture with context-based timeout
+func (e *Endpoint) Stop(ctx context.Context) error {
+	slog.Info("Stopping Ethernet PCAP capture...")
+
+	// Close channel to stop writer
+	close(e.packets)
+
+	// Wait for writer to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		slog.Warn("Ethernet PCAP capture stop timeout")
+		if e.file != nil {
+			_ = e.file.Close()
+		}
+		e.Endpoint.Close()
+		return ctx.Err()
+	case <-done:
+		// Writer finished, close file and endpoint
+		if e.file != nil {
+			_ = e.file.Close()
+			slog.Info("PCAP capture file closed")
+		}
+		e.Endpoint.Close()
+		slog.Info("Ethernet PCAP capture stopped")
+		return nil
+	}
 }
 
 // GetDroppedPacketCount returns the number of dropped packets due to backpressure
