@@ -1,6 +1,6 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (31.03.2026)
+## Статус проекта (31.03.2026 22:00)
 
 **Ветка:** `dev` (текущая разработка) → `main` (стабильная версия)
 
@@ -12,25 +12,26 @@
 | `proxy.Router` | ✅ ИНТЕГРИРОВАН | Используется как `_defaultProxy` для балансировки |
 | `health.HealthChecker` | ✅ ИНТЕГРИРОВАН | Строки 393, 646, с DNS и HTTP пробами |
 | `dns.Hijacker` | ✅ ИНТЕГРИРОВАН | Строка 627, инициализация после DNS resolver |
-| `buffer.Pool` | ✅ ИНТЕГРИРОВАН | Тесты созданы (buffer/pool_test.go), готов к использованию |
-| `core.RateLimiter` | ✅ ИНТЕГРИРОВАН | Строка 635, с поддержкой config.RateLimiter |
+| `buffer.Pool` | ✅ ТЕСТЫ ГОТОВЫ | buffer/pool_test.go (11 тестов) |
+| `core.RateLimiter` | ✅ ИНТЕГРИРОВАН | Строка 649, с поддержкой config.RateLimiter |
+| `dns.RateLimiter` | ✅ ИНТЕГРИРОВАН | Строка 635, с поддержкой config.DNS.RateLimiter |
 
 **Тесты:**
 | Модуль | Статус |
 |--------|--------|
 | shutdown | ✅ `shutdown/shutdown_test.go` |
 | health | ✅ `health/checker_test.go`, `health/probe_test.go` |
-| router | ✅ `router/filter_test.go` (изменён в dev) |
+| router | ✅ `router/filter_test.go` |
 | conntrack | ✅ `core/conntrack_test.go`, `core/conntrack_metrics_test.go` |
 | rate_limiter | ✅ `core/rate_limiter_test.go` |
 | dns hijacker | ✅ `dns/hijacker_test.go` |
-| buffer pool | ✅ `buffer/pool_test.go` (создан 31.03.2026) |
+| buffer pool | ✅ `buffer/pool_test.go` (11 тестов) |
 | proxy handler | ❌ ОТСУТСТВУЕТ (integration tests) |
 
 **Приоритеты:**
-1. **Высокий:** ✅ ВЫПОЛНЕНО (31.03.2026) — Все модули интегрированы
-2. **Средний:** ✅ ВЫПОЛНЕНО (31.03.2026) — Prometheus метрики для Health Checker, Rate Limiter, DNS Rate Limiter реализованы
-3. **Низкий:** Integration tests для ProxyHandler, buffer pool метрики, профилирование, оптимизация производительности
+1. **Высокий:** ✅ ВЫПОЛНЕНО — Все модули интегрированы
+2. **Средний:** ✅ ВЫПОЛНЕНО — Prometheus метрики для Health Checker, Rate Limiter, DNS Rate Limiter реализованы
+3. **Низкий:** ⏳ В ОЖИДАНИИ — Integration tests для ProxyHandler, buffer pool метрики, профилирование
 
 ---
 
