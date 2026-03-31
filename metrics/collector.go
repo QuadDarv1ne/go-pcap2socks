@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +44,8 @@ type Collector struct {
 	connTracker *core.ConnTracker
 	dnsHijacker *dns.Hijacker
 	proxyList   []proxy.Proxy
+	healthChecker interface{ ExportPrometheusMetrics() string }
+	rateLimiter   interface{ ExportPrometheus() string }
 	logger      *slog.Logger
 
 	// HTTP server for metrics endpoint
@@ -51,11 +54,13 @@ type Collector struct {
 
 // CollectorConfig holds configuration for Collector
 type CollectorConfig struct {
-	StatsStore  *stats.Store
-	ConnTracker *core.ConnTracker
-	DNSHijacker *dns.Hijacker
-	ProxyList   []proxy.Proxy
-	Logger      *slog.Logger
+	StatsStore    *stats.Store
+	ConnTracker   *core.ConnTracker
+	DNSHijacker   *dns.Hijacker
+	ProxyList     []proxy.Proxy
+	HealthChecker interface{ ExportPrometheusMetrics() string }
+	RateLimiter   interface{ ExportPrometheus() string }
+	Logger        *slog.Logger
 }
 
 // NewCollector creates a new metrics collector
@@ -66,12 +71,14 @@ func NewCollector(cfg CollectorConfig) *Collector {
 	}
 
 	return &Collector{
-		statsStore:  cfg.StatsStore,
-		startTime:   time.Now(),
-		connTracker: cfg.ConnTracker,
-		dnsHijacker: cfg.DNSHijacker,
-		proxyList:   cfg.ProxyList,
-		logger:      logger,
+		statsStore:    cfg.StatsStore,
+		startTime:     time.Now(),
+		connTracker:   cfg.ConnTracker,
+		dnsHijacker:   cfg.DNSHijacker,
+		proxyList:     cfg.ProxyList,
+		healthChecker: cfg.HealthChecker,
+		rateLimiter:   cfg.RateLimiter,
+		logger:        logger,
 	}
 }
 
@@ -221,6 +228,32 @@ func (c *Collector) WriteMetrics(w io.Writer) {
 		}
 		if activeMappings, ok := stats["active_mappings"].(int); ok {
 			writeMetric("go_pcap2socks_dns_active_mappings", "Current active DNS mappings", "gauge", activeMappings)
+		}
+	}
+
+	// Health Checker metrics
+	if c.healthChecker != nil {
+		// Write raw Prometheus metrics from health checker
+		healthMetrics := c.healthChecker.ExportPrometheusMetrics()
+		if healthMetrics != "" {
+			// Write each line of health checker metrics
+			for _, line := range strings.Split(healthMetrics, "\n") {
+				if line != "" {
+					w.Write([]byte(line + "\n"))
+				}
+			}
+		}
+	}
+
+	// Rate Limiter metrics
+	if c.rateLimiter != nil {
+		rateMetrics := c.rateLimiter.ExportPrometheus()
+		if rateMetrics != "" {
+			for _, line := range strings.Split(rateMetrics, "\n") {
+				if line != "" {
+					w.Write([]byte(line + "\n"))
+				}
+			}
 		}
 	}
 
