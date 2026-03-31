@@ -352,6 +352,13 @@ func SetHealthCheckerStatsFn(fn func() (map[string]interface{}, bool)) {
 	getHealthCheckerStatsFn = fn
 }
 
+// SetDNSRateLimiter sets the DNS rate limiter for metrics collection
+func (s *Server) SetDNSRateLimiter(rl interface{ ExportPrometheus() string }) {
+	if s.metrics != nil {
+		s.metrics.SetDNSRateLimiter(rl)
+	}
+}
+
 // handleStart handles the /api/start endpoint to start the service
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
