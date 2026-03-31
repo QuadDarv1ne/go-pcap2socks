@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -323,6 +324,9 @@ type HealthChecker struct {
 	backoffMultiplier float64
 	backoffJitter     float64 // Random jitter factor (0.0-1.0)
 
+	// Metrics
+	metrics *HealthMetrics
+
 	// Callbacks
 	onRecoveryNeeded   func()
 	onRecoveryComplete func(error)
@@ -369,6 +373,7 @@ func NewHealthChecker(cfg *HealthCheckerConfig) *HealthChecker {
 		maxBackoff:         cfg.MaxBackoff,
 		backoffMultiplier:  cfg.BackoffMultiplier,
 		backoffJitter:      cfg.BackoffJitter,
+		metrics:            NewHealthMetrics(),
 	}
 
 	hc.lastCheckTime.Store(time.Time{})
@@ -476,6 +481,12 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 	// Collect results
 	for result := range results {
 		hc.totalProbes.Add(1)
+		
+		// Record metrics
+		latencyMs := uint64(result.Latency.Milliseconds())
+		isTimeout := result.Error != nil && strings.Contains(result.Error.Error(), "timeout")
+		hc.metrics.RecordProbe(result.Success, isTimeout, latencyMs)
+		
 		if result.Success {
 			hc.successfulProbes.Add(1)
 			hc.lastSuccessTime.Store(result.Timestamp)
@@ -683,6 +694,38 @@ func (hc *HealthChecker) GetStats() HealthStats {
 		BackoffMultiplier:   hc.backoffMultiplier,
 		BackoffJitter:       hc.backoffJitter,
 	}
+}
+
+// GetMetrics returns the health metrics
+func (hc *HealthChecker) GetMetrics() *HealthMetrics {
+	return hc.metrics
+}
+
+// ExportPrometheusMetrics exports health metrics in Prometheus format
+func (hc *HealthChecker) ExportPrometheusMetrics() string {
+	if hc.metrics == nil {
+		return ""
+	}
+	
+	// Update current state
+	hc.mu.RLock()
+	probeCount := len(hc.probes)
+	hc.mu.RUnlock()
+	
+	hc.metrics.SetActiveProbes(int32(probeCount))
+	
+	// Calculate healthy/unhealthy components based on last check
+	stats := hc.GetStats()
+	if stats.ConsecutiveFailures == 0 {
+		hc.metrics.SetHealthyCount(int32(probeCount))
+		hc.metrics.SetUnhealthyCount(0)
+	} else {
+		// Simplified: assume all probes are unhealthy on failure
+		hc.metrics.SetHealthyCount(0)
+		hc.metrics.SetUnhealthyCount(int32(probeCount))
+	}
+	
+	return hc.metrics.ExportPrometheus()
 }
 
 // HealthStats holds health checker statistics

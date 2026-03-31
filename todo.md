@@ -29,8 +29,8 @@
 
 **Приоритеты:**
 1. **Высокий:** ✅ ВЫПОЛНЕНО (31.03.2026) — Все модули интегрированы
-2. **Средний:** Prometheus метрики для остальных компонентов, integration tests для ProxyHandler
-3. **Низкий:** Профилирование, оптимизация производительности
+2. **Средний:** ✅ ВЫПОЛНЕНО (31.03.2026) — Prometheus метрики для Health Checker и Rate Limiter реализованы
+3. **Низкий:** Integration tests для ProxyHandler, профилирование, оптимизация производительности
 
 ---
 
@@ -511,6 +511,7 @@ go test -bench=. -benchmem ./...
 | ConnTrack метрики | ✅ | `core/conntrack_metrics.go` | ✅ ИНТЕГРИРОВАН |
 | Proxy Handler (gVisor) | ✅ | `core/proxy_handler.go` | ⚠️ ЧАСТИЧНО (не используется в main.go) |
 | Rate Limiter (Core) | ✅ | `core/rate_limiter.go` | ✅ ИНТЕГРИРОВАН (31.03.2026) |
+| Rate Limiter Prometheus | ✅ | `core/rate_limiter.go` | ✅ ИНТЕГРИРОВАН (ExportPrometheus) |
 | DNS кэширование | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
 | DNS бенчмаркинг | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
 | DNS prefetch | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
@@ -519,6 +520,7 @@ go test -bench=. -benchmem ./...
 | DNS Rate Limiter | ✅ | `dns/rate_limiter.go` | ❌ НЕ ИНТЕГРИРОВАН |
 | Router (Whitelist/Blacklist) | ✅ | `router/filter.go` | ✅ ИНТЕГРИРОВАН (proxy.Router) |
 | Health Checker | ✅ | `health/checker.go` | ✅ ИНТЕГРИРОВАН |
+| Health Checker Prometheus | ✅ | `health/metrics.go` | ✅ ИНТЕГРИРОВАН (31.03.2026) |
 | Health Probes (HTTP/DNS/TCP/UDP) | ✅ | `health/checker.go` | ✅ ИНТЕГРИРОВАНЫ |
 | Buffer Pool | ✅ | `buffer/pool.go` | ✅ ТЕСТЫ (31.03.2026), готов к использованию |
 | SOCKS5 connection pool | ✅ | `proxy/socks5.go` | ✅ ИНТЕГРИРОВАН |
