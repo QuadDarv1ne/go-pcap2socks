@@ -451,12 +451,13 @@ shutdown.RegisterComponents(mgr, components)
 - `metrics/collector.go` — добавить новые метрики
 - `main.go` — экспортер метрик
 
-**Заметки (31.03.2026 21:45):**
+**Заметки (31.03.2026 22:00):**
 - ConnTrack метрики полностью реализованы с ExportPrometheus()
 - Health checker метрики: probes_total/success/failed, recoveries, healthy/unhealthy components, avg_latency
 - Rate limiter метрики: tokens, max_tokens, refill_rate, dropped_total
 - DNS Rate Limiter метрики: tokens, max_tokens, max_rps, max_retries
 - metrics/collector.go интегрирует все метрики в Prometheus формат
+- Остались задачи: Proxy метрики, Buffer pool метрики
 
 ---
 
@@ -477,7 +478,7 @@ shutdown.RegisterComponents(mgr, components)
 **Файлы для изменения:**
 - Создать недостающие тестовые файлы
 
-**Заметки (31.03.2026 21:45):**
+**Заметки (31.03.2026 22:00):**
 - Большинство тестов реализовано
 - buffer/pool_test.go создан (11 тестов: Get, Put, Clone, Copy, concurrent)
 - Integration тесты для ProxyHandler отсутствуют — требуются
@@ -502,8 +503,9 @@ go tool pprof cpu.prof
 go test -bench=. -benchmem ./...
 ```
 
-**Заметки (31.03.2026 21:45):**
+**Заметки (31.03.2026 22:00):**
 - Buffer pool реализован, тесты созданы
+- Buffer pool не интегрирован в main.go (опционально)
 - Профилирование не проводилось
 - Требуется benchmark для оценки производительности
 
