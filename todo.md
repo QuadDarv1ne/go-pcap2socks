@@ -1,5 +1,39 @@
 ﻿# Архитектурные заметки и план улучшений
 
+## Статус проекта (31.03.2026)
+
+**Ветка:** `dev` (текущая разработка) → `main` (стабильная версия)
+
+**Реализовано модулей:** 31+ (все отмечены как ✅ ЗАВЕРШЁН)
+
+**Интеграция в main.go:**
+| Модуль | Статус | Примечание |
+|--------|--------|------------|
+| `proxy.Router` | ✅ ИНТЕГРИРОВАН | Используется как `_defaultProxy` для балансировки |
+| `health.HealthChecker` | ✅ ИНТЕГРИРОВАН | Строки 393, 646, с DNS и HTTP пробами |
+| `dns.Hijacker` | ⚠️ НЕ ИНТЕГРИРОВАН | Модуль есть (`dns/hijacker.go`), но не используется |
+| `buffer.Pool` | ⚠️ НЕ ИНТЕГРИРОВАН | Модуль есть (`buffer/pool.go`), но не используется |
+| `core.RateLimiter` | ⚠️ НЕ ИНТЕГРИРОВАН | Модуль есть (`core/rate_limiter.go`), но не используется |
+
+**Тесты:**
+| Модуль | Статус |
+|--------|--------|
+| shutdown | ✅ `shutdown/shutdown_test.go` |
+| health | ✅ `health/checker_test.go`, `health/probe_test.go` |
+| router | ✅ `router/filter_test.go` (изменён в dev) |
+| conntrack | ✅ `core/conntrack_test.go`, `core/conntrack_metrics_test.go` |
+| rate_limiter | ✅ `core/rate_limiter_test.go` |
+| dns hijacker | ✅ `dns/hijacker_test.go` |
+| buffer pool | ❌ ОТСУТСТВУЕТ (`buffer/pool_test.go`) |
+| proxy handler | ❌ ОТСУТСТВУЕТ (integration tests) |
+
+**Приоритеты:**
+1. **Высокий:** Интеграция `dns.Hijacker`, `buffer.Pool`, `core.RateLimiter` в `main.go`
+2. **Средний:** Создание `buffer/pool_test.go`, Prometheus метрики для остальных компонентов
+3. **Низкий:** Профилирование, оптимизация производительности
+
+---
+
 ## Реализованные улучшения (31.03.2026)
 
 ### ✅ Этап 1: Graceful Shutdown с контекстом — ЗАВЕРШЁН
@@ -378,15 +412,22 @@ shutdown.RegisterComponents(mgr, components)
 **Задача:** Интегрировать новые модули в основную логику приложения
 
 **Список работ:**
-- [ ] Интегрировать `router.Router` для фильтрации трафика
-- [ ] Интегрировать `dns.Hijacker` для перехвата DNS запросов
-- [ ] Интегрировать `health.HealthChecker` для мониторинга
-- [ ] Интегрировать `buffer.Pool` вместо прямых аллокаций
-- [ ] Интегрировать `core.RateLimiter` для ограничения соединений
+- [x] Интегрировать `router.Router` для фильтрации трафика — ✅ ИНТЕГРИРОВАН (proxy.Router используется как _defaultProxy)
+- [ ] Интегрировать `dns.Hijacker` для перехвата DNS запросов — ⚠️ НЕ ИНТЕГРИРОВАН (модуль есть, но не используется в main.go)
+- [x] Интегрировать `health.HealthChecker` для мониторинга — ✅ ИНТЕГРИРОВАН (строка 393, 646)
+- [ ] Интегрировать `buffer.Pool` вместо прямых аллокаций — ⚠️ НЕ ИНТЕГРИРОВАН (модуль есть, но не используется в main.go)
+- [ ] Интегрировать `core.RateLimiter` для ограничения соединений — ⚠️ НЕ ИНТЕГРИРОВАН (модуль есть, но не используется в main.go)
 
 **Файлы для изменения:**
 - `main.go` — основная интеграция
 - `core/proxy_handler.go` — уже поддерживает router и hijacker
+
+**Заметки (31.03.2026):**
+- `proxy.Router` полностью интегрирован и используется для балансировки нагрузки между прокси
+- `health.HealthChecker` интегрирован с DNS и HTTP пробами
+- `dns.Hijacker` требует интеграции для перехвата DNS и выдачи fake IP
+- `buffer.Pool` требует интеграции для снижения аллокаций памяти
+- `core.RateLimiter` требует интеграции для rate limiting соединений
 
 ---
 
@@ -395,16 +436,21 @@ shutdown.RegisterComponents(mgr, components)
 **Задача:** Добавить экспорт метрик для всех компонентов
 
 **Список работ:**
-- [x] ConnTrack метрики (`core/conntrack_metrics.go`)
-- [ ] Health checker метрики
-- [ ] DNS resolver метрики (queries, cache hits, errors)
-- [ ] Proxy метрики (connections, latency, errors)
-- [ ] Buffer pool метрики (allocations, in-use)
-- [ ] Rate limiter метрики (dropped, tokens)
+- [x] ConnTrack метрики (`core/conntrack_metrics.go`) — ✅ РЕАЛИЗОВАНО
+- [ ] Health checker метрики — ⚠️ ТРЕБУЕТСЯ (модуль есть, метрик нет)
+- [ ] DNS resolver метрики (queries, cache hits, errors) — ⚠️ ТРЕБУЮТСЯ
+- [ ] Proxy метрики (connections, latency, errors) — ⚠️ ТРЕБУЮТСЯ
+- [ ] Buffer pool метрики (allocations, in-use) — ⚠️ ТРЕБУЮТСЯ
+- [ ] Rate limiter метрики (dropped, tokens) — ⚠️ ТРЕБУЮТСЯ
 
 **Файлы для изменения:**
 - `metrics/collector.go` — добавить новые метрики
 - `main.go` — экспортер метрик
+
+**Заметки (31.03.2026):**
+- ConnTrack метрики полностью реализованы с ExportPrometheus()
+- metrics/collector.go и metrics/metrics.go существуют — требуется проверка функциональности
+- Остальные метрики требуют реализации
 
 ---
 
@@ -413,27 +459,32 @@ shutdown.RegisterComponents(mgr, components)
 **Задача:** Покрыть новые модули тестами
 
 **Список работ:**
-- [x] `shutdown/shutdown_test.go` — тесты graceful shutdown
-- [x] `health/checker_test.go`, `health/probe_test.go` — тесты health checker
-- [x] `router/filter_test.go` — тесты router
-- [x] `core/conntrack_test.go`, `core/conntrack_metrics_test.go` — тесты conntrack
-- [x] `core/rate_limiter_test.go` — тесты rate limiter
-- [x] `dns/hijacker_test.go` — тесты DNS hijacker
-- [ ] `buffer/pool_test.go` — тесты buffer pool
-- [ ] Integration тесты для ProxyHandler
+- [x] `shutdown/shutdown_test.go` — тесты graceful shutdown — ✅ РЕАЛИЗОВАНО
+- [x] `health/checker_test.go`, `health/probe_test.go` — тесты health checker — ✅ РЕАЛИЗОВАНО
+- [x] `router/filter_test.go` — тесты router — ✅ РЕАЛИЗОВАНО (файл изменён в dev)
+- [x] `core/conntrack_test.go`, `core/conntrack_metrics_test.go` — тесты conntrack — ✅ РЕАЛИЗОВАНО
+- [x] `core/rate_limiter_test.go` — тесты rate limiter — ✅ РЕАЛИЗОВАНО
+- [x] `dns/hijacker_test.go` — тесты DNS hijacker — ✅ РЕАЛИЗОВАНО
+- [ ] `buffer/pool_test.go` — тесты buffer pool — ⚠️ ОТСУТСТВУЮТ
+- [ ] Integration тесты для ProxyHandler — ⚠️ ОТСУТСТВУЮТ
 
 **Файлы для изменения:**
 - Создать недостающие тестовые файлы
+
+**Заметки (31.03.2026):**
+- Большинство тестов реализовано
+- buffer/pool_test.go отсутствует — требует создания
+- Integration тесты для ProxyHandler отсутствуют
 
 ---
 
 ### Этап 4: Оптимизация производительности (Приоритет: Низкий)
 
 **Задачи:**
-- [x] Buffer pool для снижения аллокаций
-- [ ] Профилирование CPU/memory
-- [ ] Оптимизация channel buffer sizes
-- [ ] Lock-free структуры данных где возможно
+- [x] Buffer pool для снижения аллокаций — ✅ РЕАЛИЗОВАНО (buffer/pool.go)
+- [ ] Профилирование CPU/memory — ⚠️ ТРЕБУЕТСЯ
+- [ ] Оптимизация channel buffer sizes — ⚠️ ТРЕБУЕТСЯ
+- [ ] Lock-free структуры данных где возможно — ⚠️ ТРЕБУЕТСЯ
 
 **Инструменты:**
 ```bash
@@ -445,39 +496,44 @@ go tool pprof cpu.prof
 go test -bench=. -benchmem ./...
 ```
 
+**Заметки (31.03.2026):**
+- Buffer pool реализован, но не интегрирован в main.go
+- Профилирование не проводилось
+- Требуется benchmark для оценки производительности
+
 ---
 
 ## Реализованные фичи (✅)
 
-| Фича | Статус | Файл |
-|------|--------|------|
-| ConnTracker с каналами | ✅ | `core/conntrack.go` |
-| ConnTrack метрики | ✅ | `core/conntrack_metrics.go` |
-| Proxy Handler (gVisor) | ✅ | `core/proxy_handler.go` |
-| Rate Limiter (Core) | ✅ | `core/rate_limiter.go` |
-| DNS кэширование | ✅ | `dns/resolver.go` |
-| DNS бенчмаркинг | ✅ | `dns/resolver.go` |
-| DNS prefetch | ✅ | `dns/resolver.go` |
-| Persistent DNS cache | ✅ | `dns/resolver.go` |
-| DNS Hijacker (Fake IP) | ✅ | `dns/hijacker.go` |
-| DNS Rate Limiter | ✅ | `dns/rate_limiter.go` |
-| Router (Whitelist/Blacklist) | ✅ | `router/filter.go` |
-| Health Checker | ✅ | `health/checker.go` |
-| Health Probes (HTTP/DNS/TCP/UDP) | ✅ | `health/checker.go` |
-| Buffer Pool | ✅ | `buffer/pool.go` |
-| SOCKS5 connection pool | ✅ | `proxy/socks5.go` |
-| Health checks (proxy) | ✅ | `proxy/socks5.go`, `health/checker.go` |
-| Async logger | ✅ | `asynclogger/async_handler.go` |
-| Graceful shutdown | ✅ | `main.go`, `shutdown/manager.go` |
-| Shutdown Components | ✅ | `shutdown/components.go` |
-| Dependency Injection | ✅ | `core/conntrack.go`, `dns/resolver.go` |
-| DoH сервер | ✅ | `dns/doh.go` |
-| Hotkeys | ✅ | `hotkey/manager.go` |
-| Profile manager | ✅ | `profiles/manager.go` |
-| UPnP manager | ✅ | `upnp/manager.go` |
-| Auto-update | ✅ | `updater/updater.go` |
-| Web UI / API | ✅ | `api/server.go` |
-| Tray icon | ✅ | `tray/tray.go` |
+| Фича | Статус | Файл | Интеграция |
+|------|--------|------|------------|
+| ConnTracker с каналами | ✅ | `core/conntrack.go` | ✅ ИНТЕГРИРОВАН |
+| ConnTrack метрики | ✅ | `core/conntrack_metrics.go` | ✅ ИНТЕГРИРОВАН |
+| Proxy Handler (gVisor) | ✅ | `core/proxy_handler.go` | ⚠️ ЧАСТИЧНО (не используется в main.go) |
+| Rate Limiter (Core) | ✅ | `core/rate_limiter.go` | ❌ НЕ ИНТЕГРИРОВАН |
+| DNS кэширование | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
+| DNS бенчмаркинг | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
+| DNS prefetch | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
+| Persistent DNS cache | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
+| DNS Hijacker (Fake IP) | ✅ | `dns/hijacker.go` | ❌ НЕ ИНТЕГРИРОВАН |
+| DNS Rate Limiter | ✅ | `dns/rate_limiter.go` | ❌ НЕ ИНТЕГРИРОВАН |
+| Router (Whitelist/Blacklist) | ✅ | `router/filter.go` | ✅ ИНТЕГРИРОВАН (proxy.Router) |
+| Health Checker | ✅ | `health/checker.go` | ✅ ИНТЕГРИРОВАН |
+| Health Probes (HTTP/DNS/TCP/UDP) | ✅ | `health/checker.go` | ✅ ИНТЕГРИРОВАНЫ |
+| Buffer Pool | ✅ | `buffer/pool.go` | ❌ НЕ ИНТЕГРИРОВАН |
+| SOCKS5 connection pool | ✅ | `proxy/socks5.go` | ✅ ИНТЕГРИРОВАН |
+| Health checks (proxy) | ✅ | `proxy/socks5.go`, `health/checker.go` | ✅ ИНТЕГРИРОВАНЫ |
+| Async logger | ✅ | `asynclogger/async_handler.go` | ✅ ИНТЕГРИРОВАН |
+| Graceful shutdown | ✅ | `main.go`, `shutdown/manager.go` | ✅ ИНТЕГРИРОВАН |
+| Shutdown Components | ✅ | `shutdown/components.go` | ✅ ИНТЕГРИРОВАН |
+| Dependency Injection | ✅ | `core/conntrack.go`, `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
+| DoH сервер | ✅ | `dns/doh.go` | ✅ ИНТЕГРИРОВАН |
+| Hotkeys | ✅ | `hotkey/manager.go` | ✅ ИНТЕГРИРОВАН |
+| Profile manager | ✅ | `profiles/manager.go` | ✅ ИНТЕГРИРОВАН |
+| UPnP manager | ✅ | `upnp/manager.go` | ✅ ИНТЕГРИРОВАН |
+| Auto-update | ✅ | `updater/updater.go` | ✅ ИНТЕГРИРОВАН |
+| Web UI / API | ✅ | `api/server.go` | ✅ ИНТЕГРИРОВАН |
+| Tray icon | ✅ | `tray/tray.go` | ✅ ИНТЕГРИРОВАН |
 
 ---
 
