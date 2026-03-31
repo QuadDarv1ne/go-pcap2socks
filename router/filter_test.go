@@ -210,15 +210,16 @@ func TestRouter_SetFilterType(t *testing.T) {
 		t.Error("Private IP should not be proxied in blacklist mode")
 	}
 
-	// Change to whitelist mode
+	// Change to whitelist mode (networks are preserved)
 	r.SetFilterType(FilterTypeWhitelist)
 
-	// Now private IP should be proxied (not in whitelist)
+	// Private IP IS proxied because 192.168.0.0/16 is in the list
 	if !r.ShouldProxy(ip, "") {
-		t.Error("Private IP should be proxied in empty whitelist mode")
+		t.Error("Private IP should be proxied in whitelist mode (it's in the list)")
 	}
 
-	// Add network to whitelist
+	// Remove the private network and add public one
+	r.RemoveNetwork("192.168.0.0/16")
 	r.AddNetwork("8.0.0.0/8")
 
 	// Private IP should not be proxied (not in whitelist)
