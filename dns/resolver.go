@@ -484,13 +484,37 @@ func (r *Resolver) StopPrefetch() {
 
 // Stop performs complete graceful shutdown of DNS resolver
 func (r *Resolver) Stop() {
+	// Use context with timeout for graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	r.StopWithTimeout(ctx)
+}
+
+// StopWithTimeout performs complete graceful shutdown with context-based timeout
+func (r *Resolver) StopWithTimeout(ctx context.Context) {
 	slog.Info("Stopping DNS resolver...")
 
-	// Stop worker pool first
-	close(r.stopQueries)
-	close(r.queryQueue)
-	r.queryWg.Wait()
-	slog.Info("DNS worker pool stopped")
+	// Use sync.Once to ensure channels are closed only once
+	var stopOnce sync.Once
+	stopOnce.Do(func() {
+		// Stop worker pool first
+		close(r.stopQueries)
+		close(r.queryQueue)
+	})
+
+	// Wait for workers to finish with timeout
+	workersDone := make(chan struct{})
+	go func() {
+		r.queryWg.Wait()
+		close(workersDone)
+	}()
+
+	select {
+	case <-ctx.Done():
+		slog.Warn("DNS worker pool stop timeout")
+	case <-workersDone:
+		slog.Info("DNS worker pool stopped")
+	}
 
 	// Stop prefetch
 	r.StopPrefetch()

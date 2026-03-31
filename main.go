@@ -385,6 +385,10 @@ func main() {
 	_shutdownManager = shutdown.NewManager(stateFile)
 	slog.Info("Shutdown manager initialized", "state_file", stateFile)
 
+	// Initialize global context for graceful shutdown
+	_gracefulCtx, _gracefulCancel = context.WithCancel(context.Background())
+	slog.Debug("Graceful shutdown context initialized")
+
 	// Initialize health checker for network monitoring and recovery
 	_healthChecker = health.NewHealthChecker(&health.HealthCheckerConfig{
 		CheckInterval:     10 * time.Second,
@@ -1196,12 +1200,12 @@ func main() {
 		}
 	})
 
-	// Wait for shutdown signal
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	// Wait for shutdown signal using signal.NotifyContext for proper context cancellation
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	select {
-	case <-sigChan:
+	case <-ctx.Done():
 		slog.Info("Received shutdown signal")
 	case <-_shutdownChan:
 		slog.Info("Shutdown channel closed")
@@ -1453,6 +1457,12 @@ var (
 
 	// _wanBalancerDialer holds the WAN balancer dialer for Multi-WAN load balancing
 	_wanBalancerDialer *wanbalancer.WANBalancerDialer
+
+	// _gracefulCtx is the global context for graceful shutdown
+	_gracefulCtx context.Context
+
+	// _gracefulCancel is the cancel function for graceful shutdown
+	_gracefulCancel context.CancelFunc
 )
 
 // GetStatsStore returns the global statistics store
@@ -1483,68 +1493,94 @@ func IsRunning() bool {
 // performGracefulShutdown performs a complete graceful shutdown of all components
 // Called on panic recovery or signal handling
 func performGracefulShutdown() {
-	slog.Info("Performing graceful shutdown...")
+	startTime := time.Now()
+	slog.Info("Performing graceful shutdown...", "start_time", startTime.Format(time.RFC3339))
+
+	// Cancel global context to signal all goroutines to stop
+	if _gracefulCancel != nil {
+		_gracefulCancel()
+		slog.Debug("Graceful shutdown context cancelled")
+	}
+
+	// Create shutdown context with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Helper function to log component shutdown with timing
+	logComponentShutdown := func(name string, duration time.Duration, err error) {
+		if err != nil {
+			slog.Warn("Component shutdown failed", "name", name, "duration_ms", duration.Milliseconds(), "error", err)
+		} else {
+			slog.Info("Component stopped", "name", name, "duration_ms", duration.Milliseconds())
+		}
+	}
 
 	// 0. Stop config reloader
 	if _configReloader != nil {
+		start := time.Now()
 		_configReloader.Stop()
-		slog.Info("Config reloader stopped")
+		logComponentShutdown("config_reloader", time.Since(start), nil)
 	}
 
 	// 1. Stop accepting new connections - HTTP server
 	if _httpServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := _httpServer.Shutdown(ctx); err != nil {
-			slog.Error("HTTP server shutdown error", slog.Any("err", err))
-		} else {
-			slog.Info("HTTP server stopped")
-		}
+		start := time.Now()
+		err := _httpServer.Shutdown(shutdownCtx)
+		logComponentShutdown("http_server", time.Since(start), err)
 	}
 
 	// 2. Stop DNS components
 	if _dnsResolver != nil {
+		start := time.Now()
 		_dnsResolver.Stop()
+		logComponentShutdown("dns_resolver", time.Since(start), nil)
 	}
 	if _dohServer != nil {
+		start := time.Now()
 		_dohServer.Stop()
+		logComponentShutdown("doh_server", time.Since(start), nil)
 	}
 
 	// 3. Stop monitoring components
 	if _arpMonitor != nil {
+		start := time.Now()
 		_arpMonitor.Stop()
-		slog.Info("ARP monitor stopped")
+		logComponentShutdown("arp_monitor", time.Since(start), nil)
 	}
 	if _healthChecker != nil {
+		start := time.Now()
 		_healthChecker.Stop()
-		slog.Info("Health checker stopped")
+		logComponentShutdown("health_checker", time.Since(start), nil)
 	}
 
 	// 4. Stop hotkey manager
 	if _hotkeyManager != nil {
+		start := time.Now()
 		_hotkeyManager.Stop()
-		slog.Info("Hotkey manager stopped")
+		logComponentShutdown("hotkey_manager", time.Since(start), nil)
 	}
 
 	// 5. Stop UPnP manager
 	if _upnpManager != nil {
+		start := time.Now()
 		_upnpManager.Stop()
-		slog.Info("UPnP manager stopped")
+		logComponentShutdown("upnp_manager", time.Since(start), nil)
 	}
 
 	// 6. Stop API server
 	if _apiServer != nil {
+		start := time.Now()
 		_apiServer.StopRealTimeUpdates()
 		_apiServer.Stop()
-		slog.Info("API server stopped")
+		logComponentShutdown("api_server", time.Since(start), nil)
 	}
 
 	// 7. Stop router and proxy groups
 	if _defaultProxy != nil {
+		start := time.Now()
 		if router, ok := _defaultProxy.(*proxy.Router); ok {
 			router.StopHealthChecks()
 			router.Stop()
-			slog.Info("Router stopped")
 			// Stop proxy groups and close connection pools
 			for tag, p := range router.Proxies {
 				if group, ok := p.(*proxy.ProxyGroup); ok {
@@ -1557,67 +1593,79 @@ func performGracefulShutdown() {
 					slog.Debug("SOCKS5 connection pool closed", "proxy", tag)
 				}
 			}
+			logComponentShutdown("router", time.Since(start), nil)
 		}
 	}
 
 	// 7a. Stop tunnel processor
+	start := time.Now()
 	tunnel.Stop()
-	slog.Info("Tunnel stopped")
+	logComponentShutdown("tunnel", time.Since(start), nil)
 
 	// 7b. Stop WAN balancer (Multi-WAN load balancing)
 	if _wanBalancerDialer != nil {
+		start := time.Now()
 		_wanBalancerDialer.Stop()
-		slog.Info("WAN balancer stopped")
+		logComponentShutdown("wan_balancer", time.Since(start), nil)
 	}
 
 	// 8. Stop stats store
 	if _statsStore != nil {
+		start := time.Now()
 		_statsStore.Stop()
-		slog.Info("Stats store stopped")
+		logComponentShutdown("stats_store", time.Since(start), nil)
 	}
 
 	// 9. Close network stack and device
 	if _defaultStack != nil {
+		start := time.Now()
 		_defaultStack.Close()
-		slog.Info("Network stack closed")
+		logComponentShutdown("network_stack", time.Since(start), nil)
 	}
 	if _defaultDevice != nil {
+		start := time.Now()
 		_defaultDevice.Close()
-		slog.Info("Network device closed")
+		logComponentShutdown("network_device", time.Since(start), nil)
 	}
 
 	// 10. Stop DHCP server and save leases
 	if _dhcpServer != nil {
+		start := time.Now()
 		switch server := _dhcpServer.(type) {
 		case *dhcp.Server:
 			slog.Info("Saving DHCP leases before shutdown...")
 			server.Stop()
-			slog.Info("DHCP server stopped, leases saved")
+			logComponentShutdown("dhcp_server", time.Since(start), nil)
 		}
 	}
 
 	// 10a. Stop MTU discoverer and clear cache
 	if _mtuDiscoverer != nil {
+		start := time.Now()
 		_mtuDiscoverer.Stop()
-		slog.Info("MTU discoverer stopped")
+		logComponentShutdown("mtu_discoverer", time.Since(start), nil)
 	}
 
 	// 11. Flush async logs
 	if asyncHandler != nil {
+		start := time.Now()
 		asyncHandler.Flush()
-		slog.Info("Async logs flushed")
+		logComponentShutdown("async_logs", time.Since(start), nil)
 	}
 
 	// 12. Finally, shutdown manager for state persistence
 	if _shutdownManager != nil {
+		start := time.Now()
 		if err := _shutdownManager.ShutdownWithTimeout(30 * time.Second); err != nil {
-			slog.Warn("Shutdown manager reported errors", slog.Any("error", err))
+			slog.Warn("Shutdown manager reported errors", "duration_ms", time.Since(start).Milliseconds(), "error", err)
 		} else {
-			slog.Info("Shutdown manager completed")
+			slog.Info("Shutdown manager completed", "duration_ms", time.Since(start).Milliseconds())
 		}
 	}
 
-	slog.Info("Graceful shutdown completed")
+	// Log total shutdown duration
+	totalDuration := time.Since(startTime)
+	slog.Info("Graceful shutdown completed", "total_duration_ms", totalDuration.Milliseconds(), "total_duration_sec", totalDuration.Seconds())
 }
 
 // Stop stops the service gracefully

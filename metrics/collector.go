@@ -2,13 +2,20 @@
 package metrics
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/http"
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/core"
+	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
+	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
 )
 
 // Pre-defined errors for metrics operations
@@ -31,14 +38,40 @@ type Collector struct {
 	errorsTotal       atomic.Uint64
 	cacheHits         atomic.Uint64
 	cacheMisses       atomic.Uint64
-	// Note: No mutex needed - all fields are atomic and statsStore is thread-safe
+
+	// Component references for extended metrics
+	connTracker *core.ConnTracker
+	dnsHijacker *dns.Hijacker
+	proxyList   []proxy.Proxy
+	logger      *slog.Logger
+
+	// HTTP server for metrics endpoint
+	httpServer *http.Server
+}
+
+// CollectorConfig holds configuration for Collector
+type CollectorConfig struct {
+	StatsStore  *stats.Store
+	ConnTracker *core.ConnTracker
+	DNSHijacker *dns.Hijacker
+	ProxyList   []proxy.Proxy
+	Logger      *slog.Logger
 }
 
 // NewCollector creates a new metrics collector
-func NewCollector(statsStore *stats.Store) *Collector {
+func NewCollector(cfg CollectorConfig) *Collector {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Collector{
-		statsStore: statsStore,
-		startTime:  time.Now(),
+		statsStore:  cfg.StatsStore,
+		startTime:   time.Now(),
+		connTracker: cfg.ConnTracker,
+		dnsHijacker: cfg.DNSHijacker,
+		proxyList:   cfg.ProxyList,
+		logger:      logger,
 	}
 }
 
@@ -148,6 +181,110 @@ func (c *Collector) WriteMetrics(w io.Writer) {
 		hitRatio := float64(cacheHits) / float64(cacheHits+cacheMisses) * 100
 		writeMetric("go_pcap2socks_cache_hit_ratio_percent", "Cache hit ratio percentage", "gauge", hitRatio)
 	}
+
+	// ConnTracker metrics (TCP/UDP sessions)
+	if c.connTracker != nil {
+		tcpActive, tcpTotal, tcpDropped := c.connTracker.GetTCPStats()
+		udpActive, udpTotal, udpDropped := c.connTracker.GetUDPStats()
+
+		writeMetric("go_pcap2socks_tcp_active_sessions", "Current active TCP sessions", "gauge", tcpActive)
+		writeMetric("go_pcap2socks_tcp_total_sessions", "Total TCP sessions created", "counter", tcpTotal)
+		writeMetric("go_pcap2socks_tcp_dropped_packets", "TCP packets dropped", "counter", tcpDropped)
+
+		writeMetric("go_pcap2socks_udp_active_sessions", "Current active UDP sessions", "gauge", udpActive)
+		writeMetric("go_pcap2socks_udp_total_sessions", "Total UDP sessions created", "counter", udpTotal)
+		writeMetric("go_pcap2socks_udp_dropped_packets", "UDP packets dropped", "counter", udpDropped)
+	}
+
+	// Tunnel pool metrics
+	poolStats := tunnel.GetConnectionPoolStats()
+	writeMetric("go_pcap2socks_tunnel_pool_active", "Active connections in tunnel pool", "gauge", poolStats.ActiveConnections)
+	writeMetric("go_pcap2socks_tunnel_pool_size", "Tunnel pool size", "gauge", poolStats.PoolSize)
+	writeMetric("go_pcap2socks_tunnel_pool_created", "Total connections created in tunnel", "counter", poolStats.TotalCreated)
+	writeMetric("go_pcap2socks_tunnel_pool_reused", "Total connections reused in tunnel", "counter", poolStats.TotalReused)
+	writeMetric("go_pcap2socks_tunnel_pool_dropped", "Total connections dropped in tunnel", "counter", poolStats.DroppedConnections)
+
+	// DNS Hijacker metrics
+	if c.dnsHijacker != nil {
+		stats := c.dnsHijacker.GetStats()
+		if queries, ok := stats["queries_intercepted"].(uint64); ok {
+			writeMetric("go_pcap2socks_dns_queries_intercepted", "Total DNS queries intercepted", "counter", queries)
+		}
+		if fakeIPs, ok := stats["fake_ips_issued"].(uint64); ok {
+			writeMetric("go_pcap2socks_dns_fake_ips_issued", "Total fake IPs issued", "counter", fakeIPs)
+		}
+		if cacheHits, ok := stats["cache_hits"].(uint64); ok {
+			writeMetric("go_pcap2socks_dns_cache_hits", "DNS cache hits", "counter", cacheHits)
+		}
+		if cacheMisses, ok := stats["cache_misses"].(uint64); ok {
+			writeMetric("go_pcap2socks_dns_cache_misses", "DNS cache misses", "counter", cacheMisses)
+		}
+		if activeMappings, ok := stats["active_mappings"].(int); ok {
+			writeMetric("go_pcap2socks_dns_active_mappings", "Current active DNS mappings", "gauge", activeMappings)
+		}
+	}
+
+	// Proxy metrics
+	for i, p := range c.proxyList {
+		addr := p.Addr()
+		sanitizedAddr := sanitizeAddr(addr)
+
+		// Health status
+		health := 1
+		if hc, ok := p.(interface{ CheckHealth() bool }); ok {
+			if !hc.CheckHealth() {
+				health = 0
+			}
+		}
+		writeMetric(fmt.Sprintf("go_pcap2socks_proxy_%d_health", i), fmt.Sprintf("Health status of proxy %s", addr), "gauge", health)
+
+		// Connection pool stats for SOCKS5
+		if socks5, ok := p.(interface{ ConnPoolStats() map[string]interface{} }); ok {
+			stats := socks5.ConnPoolStats()
+			if stats != nil {
+				if available, ok := stats["available"].(int); ok {
+					writeMetric(fmt.Sprintf("go_pcap2socks_proxy_%s_pool_available", sanitizedAddr), fmt.Sprintf("Available connections in proxy %s pool", addr), "gauge", available)
+				}
+				if hits, ok := stats["hits"].(uint64); ok {
+					writeMetric(fmt.Sprintf("go_pcap2socks_proxy_%s_pool_hits", sanitizedAddr), fmt.Sprintf("Connection pool hits for proxy %s", addr), "counter", hits)
+				}
+				if misses, ok := stats["misses"].(uint64); ok {
+					writeMetric(fmt.Sprintf("go_pcap2socks_proxy_%s_pool_misses", sanitizedAddr), fmt.Sprintf("Connection pool misses for proxy %s", addr), "counter", misses)
+				}
+			}
+		}
+	}
+}
+
+// sanitizeAddr replaces special characters for metric names
+func sanitizeAddr(addr string) string {
+	result := addr
+	result = replaceAll(result, ".", "_")
+	result = replaceAll(result, ":", "_")
+	result = replaceAll(result, "[", "_")
+	result = replaceAll(result, "]", "_")
+	return result
+}
+
+// replaceAll replaces all occurrences of old with new in s
+func replaceAll(s, old, new string) string {
+	// Simple implementation without strings package
+	if old == "" {
+		return s
+	}
+	
+	var result []byte
+	i := 0
+	for i < len(s) {
+		if i+len(old) <= len(s) && s[i:i+len(old)] == old {
+			result = append(result, []byte(new)...)
+			i += len(old)
+		} else {
+			result = append(result, s[i])
+			i++
+		}
+	}
+	return string(result)
 }
 
 // GetMetrics returns metrics as string
@@ -156,6 +293,54 @@ func (c *Collector) GetMetrics() string {
 	w := &bufferWriter{buf: &buf}
 	c.WriteMetrics(w)
 	return string(buf)
+}
+
+// ServeHTTP implements http.Handler for Prometheus metrics endpoint
+func (c *Collector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	metrics := c.GetMetrics()
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, metrics)
+}
+
+// StartHTTPServer starts the HTTP server for metrics endpoint
+func (c *Collector) StartHTTPServer(addr string) error {
+	if c.httpServer != nil {
+		return fmt.Errorf("HTTP server already started")
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", c)
+
+	c.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	c.logger.Info("Starting Prometheus metrics server", "addr", addr)
+	go func() {
+		if err := c.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			c.logger.Error("Metrics server failed", "err", err)
+		}
+	}()
+
+	return nil
+}
+
+// StopHTTPServer gracefully stops the HTTP server
+func (c *Collector) StopHTTPServer() error {
+	if c.httpServer == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	c.logger.Info("Stopping Prometheus metrics server")
+	return c.httpServer.Shutdown(ctx)
 }
 
 type bufferWriter struct {

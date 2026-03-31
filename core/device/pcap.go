@@ -2,6 +2,7 @@ package device
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -382,6 +383,27 @@ func (t *PCAP) Name() string {
 func (t *PCAP) Close() {
 	t.handle.Close()
 	t.LinkEndpoint.Close() // Cascade close: sniffer → ethernet → iobased
+}
+
+// Stop gracefully stops the PCAP device with context-based timeout
+// This ensures all pending packet operations are completed before exit
+func (t *PCAP) Stop(ctx context.Context) error {
+	slog.Info("Stopping PCAP device...", "interface", t.Interface.Name)
+
+	// Close handle immediately - this will interrupt any blocking Read/Write
+	t.handle.Close()
+
+	// Wait for context cancellation or complete
+	select {
+	case <-ctx.Done():
+		slog.Warn("PCAP device stop timeout, forcing close")
+		t.LinkEndpoint.Close()
+		return ctx.Err()
+	default:
+		t.LinkEndpoint.Close() // Cascade close: sniffer → ethernet → iobased
+		slog.Info("PCAP device stopped", "interface", t.Interface.Name)
+		return nil
+	}
 }
 
 func (t *PCAP) Type() string {

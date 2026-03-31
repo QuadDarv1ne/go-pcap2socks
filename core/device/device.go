@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"net"
 
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -16,6 +17,9 @@ type Device interface {
 
 	// Type returns the driver type of the device.
 	Type() string
+
+	// Stop gracefully stops the device with context-based timeout
+	Stop(ctx context.Context) error
 }
 
 // NetworkConfig holds the parsed network configuration
