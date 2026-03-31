@@ -41,13 +41,14 @@ type Collector struct {
 	cacheMisses       atomic.Uint64
 
 	// Component references for extended metrics
-	connTracker *core.ConnTracker
-	dnsHijacker *dns.Hijacker
+	connTracker    *core.ConnTracker
+	dnsHijacker    *dns.Hijacker
 	dnsRateLimiter interface{ ExportPrometheus() string }
-	proxyList   []proxy.Proxy
-	healthChecker interface{ ExportPrometheusMetrics() string }
-	rateLimiter   interface{ ExportPrometheus() string }
-	logger      *slog.Logger
+	proxyList      []proxy.Proxy
+	healthChecker  interface{ ExportPrometheusMetrics() string }
+	rateLimiter    interface{ ExportPrometheus() string }
+	bufferPool     interface{ ExportPrometheus() string }
+	logger         *slog.Logger
 
 	// HTTP server for metrics endpoint
 	httpServer *http.Server
@@ -62,6 +63,7 @@ type CollectorConfig struct {
 	ProxyList      []proxy.Proxy
 	HealthChecker  interface{ ExportPrometheusMetrics() string }
 	RateLimiter    interface{ ExportPrometheus() string }
+	BufferPool     interface{ ExportPrometheus() string }
 	Logger         *slog.Logger
 }
 
@@ -81,6 +83,7 @@ func NewCollector(cfg CollectorConfig) *Collector {
 		proxyList:      cfg.ProxyList,
 		healthChecker:  cfg.HealthChecker,
 		rateLimiter:    cfg.RateLimiter,
+		bufferPool:     cfg.BufferPool,
 		logger:         logger,
 	}
 }
@@ -272,6 +275,18 @@ func (c *Collector) WriteMetrics(w io.Writer) {
 		}
 	}
 
+	// Buffer Pool metrics
+	if c.bufferPool != nil {
+		bufferMetrics := c.bufferPool.ExportPrometheus()
+		if bufferMetrics != "" {
+			for _, line := range strings.Split(bufferMetrics, "\n") {
+				if line != "" {
+					w.Write([]byte(line + "\n"))
+				}
+			}
+		}
+	}
+
 	// Proxy metrics
 	for i, p := range c.proxyList {
 		addr := p.Addr()
@@ -419,6 +434,11 @@ func (c *Collector) SetHealthChecker(hc interface{ ExportPrometheusMetrics() str
 // SetRateLimiter sets the rate limiter reference for metrics
 func (c *Collector) SetRateLimiter(rl interface{ ExportPrometheus() string }) {
 	c.rateLimiter = rl
+}
+
+// SetBufferPool sets the buffer pool reference for metrics
+func (c *Collector) SetBufferPool(bp interface{ ExportPrometheus() string }) {
+	c.bufferPool = bp
 }
 
 type bufferWriter struct {

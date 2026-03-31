@@ -26,12 +26,12 @@
 | rate_limiter | ✅ `core/rate_limiter_test.go` |
 | dns hijacker | ✅ `dns/hijacker_test.go` |
 | buffer pool | ✅ `buffer/pool_test.go` (11 тестов) |
-| proxy handler | ❌ ОТСУТСТВУЕТ (integration tests) |
+| proxy handler | ✅ `core/proxy_handler_test.go` (7 тестов + benchmark) |
 
 **Приоритеты:**
 1. **Высокий:** ✅ ВЫПОЛНЕНО — Все модули интегрированы
-2. **Средний:** ✅ ВЫПОЛНЕНО — Prometheus метрики для Health Checker, Rate Limiter, DNS Rate Limiter реализованы
-3. **Низкий:** ⏳ В ОЖИДАНИИ — Integration tests для ProxyHandler, buffer pool метрики, профилирование
+2. **Средний:** ✅ ВЫПОЛНЕНО — Prometheus метрики для Health Checker, Rate Limiter, DNS Rate Limiter, Buffer Pool реализованы
+3. **Низкий:** ⏳ В ОЖИДАНИИ — Профилирование, оптимизация производительности
 
 ---
 
@@ -444,20 +444,21 @@ shutdown.RegisterComponents(mgr, components)
 - [x] DNS resolver метрики — ✅ РЕАЛИЗОВАНО (через dns.Hijacker.GetStats())
 - [x] DNS Rate Limiter метрики — ✅ РЕАЛИЗОВАНО (dns/rate_limiter.go)
 - [x] Rate limiter метрики — ✅ РЕАЛИЗОВАНО (core/rate_limiter.go)
+- [x] Buffer pool метрики — ✅ РЕАЛИЗОВАНО (buffer/pool.go)
 - [ ] Proxy метрики (connections, latency, errors) — ⚠️ ТРЕБУЮТСЯ
-- [ ] Buffer pool метрики (allocations, in-use) — ⚠️ ТРЕБУЮТСЯ
 
 **Файлы для изменения:**
 - `metrics/collector.go` — добавить новые метрики
 - `main.go` — экспортер метрик
 
-**Заметки (31.03.2026 22:00):**
+**Заметки (31.03.2026 22:30):**
 - ConnTrack метрики полностью реализованы с ExportPrometheus()
 - Health checker метрики: probes_total/success/failed, recoveries, healthy/unhealthy components, avg_latency
 - Rate limiter метрики: tokens, max_tokens, refill_rate, dropped_total
 - DNS Rate Limiter метрики: tokens, max_tokens, max_rps, max_retries
+- Buffer pool метрики: gets_total, puts_total, in_use, reuse_ratio
 - metrics/collector.go интегрирует все метрики в Prometheus формат
-- Остались задачи: Proxy метрики, Buffer pool метрики
+- Осталось: Proxy метрики (опционально)
 
 ---
 
@@ -473,15 +474,15 @@ shutdown.RegisterComponents(mgr, components)
 - [x] `core/rate_limiter_test.go` — тесты rate limiter — ✅ РЕАЛИЗОВАНО
 - [x] `dns/hijacker_test.go` — тесты DNS hijacker — ✅ РЕАЛИЗОВАНО
 - [x] `buffer/pool_test.go` — тесты buffer pool — ✅ РЕАЛИЗОВАНО (31.03.2026)
-- [ ] Integration тесты для ProxyHandler — ⚠️ ОТСУТСТВУЮТ
+- [x] `core/proxy_handler_test.go` — integration тесты ProxyHandler — ✅ РЕАЛИЗОВАНО (31.03.2026 22:30)
 
 **Файлы для изменения:**
-- Создать недостающие тестовые файлы
+- ~~Создать недостающие тестовые файлы~~ — ВСЕ СОЗДАНЫ
 
-**Заметки (31.03.2026 22:00):**
-- Большинство тестов реализовано
-- buffer/pool_test.go создан (11 тестов: Get, Put, Clone, Copy, concurrent)
-- Integration тесты для ProxyHandler отсутствуют — требуются
+**Заметки (31.03.2026 22:30):**
+- Все тесты реализованы
+- buffer/pool_test.go: 11 тестов (Get, Put, Clone, Copy, concurrent)
+- proxy_handler_test.go: 7 тестов + benchmark (HandleTCP, HandleUDP, constructors)
 
 ---
 
