@@ -85,7 +85,15 @@ type Config struct {
 	MACFilter    *MACFilter    `json:"macFilter,omitempty"`
 	WinDivert    *WinDivert    `json:"windivert,omitempty"`
 	RateLimit    *RateLimit    `json:"rateLimit,omitempty"`
+	RateLimiter  *RateLimiter  `json:"rateLimiter,omitempty"`
 	NAT          *NAT          `json:"nat,omitempty"`
+}
+
+// RateLimiter holds token bucket rate limiting configuration
+type RateLimiter struct {
+	Enabled    bool  `json:"enabled,omitempty"`
+	MaxTokens  int64 `json:"maxTokens,omitempty"`  // Maximum burst size
+	RefillRate int64 `json:"refillRate,omitempty"` // Tokens refilled per second
 }
 
 // NAT holds NAT routing configuration

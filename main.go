@@ -618,6 +618,38 @@ func main() {
 	
 	slog.Info("Component initialization completed", "duration_ms", time.Since(startInit).Milliseconds())
 
+	// Initialize DNS hijacker for fake IP routing
+	plainServers := make([]string, 0, len(config.DNS.Servers))
+	for _, s := range config.DNS.Servers {
+		plainServers = append(plainServers, s.Address)
+	}
+	_dnsHijacker = dns.NewHijacker(dns.HijackerConfig{
+		UpstreamServers: plainServers,
+		Timeout:         5 * time.Minute,
+		Logger:          slog.Default(),
+	})
+	slog.Info("DNS hijacker initialized", "timeout", 5*time.Minute)
+
+	// Initialize rate limiter for proxy connections
+	if config.RateLimiter != nil && config.RateLimiter.Enabled {
+		_rateLimiter = core.NewRateLimiter(core.RateLimiterConfig{
+			MaxTokens:  config.RateLimiter.MaxTokens,
+			RefillRate: config.RateLimiter.RefillRate,
+		})
+		slog.Info("Rate limiter initialized",
+			"max_tokens", config.RateLimiter.MaxTokens,
+			"refill_rate", config.RateLimiter.RefillRate)
+	} else {
+		// Default rate limiter: 1000 RPS, burst 2000
+		_rateLimiter = core.NewRateLimiter(core.RateLimiterConfig{
+			MaxTokens:  2000,
+			RefillRate: 1000,
+		})
+		slog.Debug("Rate limiter initialized with defaults",
+			"max_tokens", 2000,
+			"refill_rate", 1000)
+	}
+
 	// Initialize MTU discoverer
 	if config.MTU != nil && config.MTU.Enabled {
 		_mtuDiscoverer = mtu.NewMTUDiscoverer()
@@ -1443,6 +1475,9 @@ var (
 	// _dnsResolver holds the DNS resolver with benchmarking and caching
 	_dnsResolver *dns.Resolver
 
+	// _dnsHijacker holds the DNS hijacker for fake IP routing
+	_dnsHijacker *dns.Hijacker
+
 	// _dohServer holds the DNS-over-HTTPS server
 	_dohServer *dns.DoHServer
 
@@ -1451,6 +1486,9 @@ var (
 
 	// _healthChecker holds the health checker for network monitoring and recovery
 	_healthChecker *health.HealthChecker
+
+	// _rateLimiter holds the global rate limiter for proxy connections
+	_rateLimiter *core.RateLimiter
 
 	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
 	_dhcpServer interface{}
@@ -1535,6 +1573,11 @@ func performGracefulShutdown() {
 		_dnsResolver.Stop()
 		logComponentShutdown("dns_resolver", time.Since(start), nil)
 	}
+	if _dnsHijacker != nil {
+		start := time.Now()
+		// DNS hijacker doesn't have Stop method, just log
+		logComponentShutdown("dns_hijacker", time.Since(start), nil)
+	}
 	if _dohServer != nil {
 		start := time.Now()
 		_dohServer.Stop()
@@ -1551,6 +1594,13 @@ func performGracefulShutdown() {
 		start := time.Now()
 		_healthChecker.Stop()
 		logComponentShutdown("health_checker", time.Since(start), nil)
+	}
+
+	// Stop rate limiter
+	if _rateLimiter != nil {
+		start := time.Now()
+		// Rate limiter doesn't have Stop method, just log
+		logComponentShutdown("rate_limiter", time.Since(start), nil)
 	}
 
 	// 4. Stop hotkey manager
