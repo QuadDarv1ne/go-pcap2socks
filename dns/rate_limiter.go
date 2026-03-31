@@ -2,7 +2,9 @@
 package dns
 
 import (
+	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -164,6 +166,30 @@ func (r *RateLimitedResolver) GetStats() map[string]interface{} {
 		"max_retries":      r.maxRetries,
 		"retry_delay":      r.retryDelay.String(),
 	}
+}
+
+// ExportPrometheus exports DNS rate limiter metrics in Prometheus format
+func (r *RateLimitedResolver) ExportPrometheus() string {
+	var sb strings.Builder
+	
+	sb.WriteString("# HELP go_pcap2socks_dns_rate_limiter_tokens Current number of available DNS query tokens\n")
+	sb.WriteString("# TYPE go_pcap2socks_dns_rate_limiter_tokens gauge\n")
+	sb.WriteString(fmt.Sprintf("go_pcap2socks_dns_rate_limiter_tokens %d\n", r.rateLimiter.Tokens()))
+	
+	sb.WriteString("# HELP go_pcap2socks_dns_rate_limiter_max_tokens Maximum DNS query tokens (burst size)\n")
+	sb.WriteString("# TYPE go_pcap2socks_dns_rate_limiter_max_tokens gauge\n")
+	sb.WriteString(fmt.Sprintf("go_pcap2socks_dns_rate_limiter_max_tokens %d\n", r.rateLimiter.maxTokens))
+	
+	sb.WriteString("# HELP go_pcap2socks_dns_rate_limiter_max_rps Maximum DNS queries per second\n")
+	sb.WriteString("# TYPE go_pcap2socks_dns_rate_limiter_max_rps gauge\n")
+	refillRate := float64(time.Second) / float64(r.rateLimiter.refillRate)
+	sb.WriteString(fmt.Sprintf("go_pcap2socks_dns_rate_limiter_max_rps %.0f\n", refillRate))
+	
+	sb.WriteString("# HELP go_pcap2socks_dns_rate_limiter_max_retries Maximum retries on rate limit\n")
+	sb.WriteString("# TYPE go_pcap2socks_dns_rate_limiter_max_retries gauge\n")
+	sb.WriteString(fmt.Sprintf("go_pcap2socks_dns_rate_limiter_max_retries %d\n", r.maxRetries))
+	
+	return sb.String()
 }
 
 func min(a, b int) int {

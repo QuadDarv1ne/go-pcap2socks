@@ -630,6 +630,20 @@ func main() {
 	})
 	slog.Info("DNS hijacker initialized", "timeout", 5*time.Minute)
 
+	// Wrap DNS resolver with rate limiter if enabled
+	if config.DNS.RateLimiter != nil && config.DNS.RateLimiter.Enabled {
+		_dnsRateLimiter = dns.NewRateLimitedResolver(dns.RateLimitedResolverConfig{
+			Resolver:   _dnsResolver,
+			MaxRPS:     config.DNS.RateLimiter.MaxRPS,
+			BurstSize:  config.DNS.RateLimiter.BurstSize,
+			MaxRetries: config.DNS.RateLimiter.MaxRetries,
+		})
+		slog.Info("DNS rate limiter enabled",
+			"max_rps", config.DNS.RateLimiter.MaxRPS,
+			"burst_size", config.DNS.RateLimiter.BurstSize,
+			"max_retries", config.DNS.RateLimiter.MaxRetries)
+	}
+
 	// Initialize rate limiter for proxy connections
 	if config.RateLimiter != nil && config.RateLimiter.Enabled {
 		_rateLimiter = core.NewRateLimiter(core.RateLimiterConfig{
@@ -1108,6 +1122,12 @@ func main() {
 	// Create API server with global stats store and profile manager
 	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager, _wanBalancerDialer)
 
+	// Set DNS rate limiter for metrics collection
+	if _dnsRateLimiter != nil {
+		_apiServer.SetDNSRateLimiter(_dnsRateLimiter)
+		slog.Debug("DNS rate limiter registered with API metrics")
+	}
+
 	// Set auth token from config if provided, otherwise use auto-generated token
 	if config.API != nil && config.API.Token != "" {
 		_apiServer.SetAuthToken(config.API.Token)
@@ -1474,6 +1494,9 @@ var (
 
 	// _dnsResolver holds the DNS resolver with benchmarking and caching
 	_dnsResolver *dns.Resolver
+
+	// _dnsRateLimiter holds the rate-limited DNS resolver wrapper (optional)
+	_dnsRateLimiter *dns.RateLimitedResolver
 
 	// _dnsHijacker holds the DNS hijacker for fake IP routing
 	_dnsHijacker *dns.Hijacker

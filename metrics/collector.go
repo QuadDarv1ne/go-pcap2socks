@@ -43,6 +43,7 @@ type Collector struct {
 	// Component references for extended metrics
 	connTracker *core.ConnTracker
 	dnsHijacker *dns.Hijacker
+	dnsRateLimiter interface{ ExportPrometheus() string }
 	proxyList   []proxy.Proxy
 	healthChecker interface{ ExportPrometheusMetrics() string }
 	rateLimiter   interface{ ExportPrometheus() string }
@@ -54,13 +55,14 @@ type Collector struct {
 
 // CollectorConfig holds configuration for Collector
 type CollectorConfig struct {
-	StatsStore    *stats.Store
-	ConnTracker   *core.ConnTracker
-	DNSHijacker   *dns.Hijacker
-	ProxyList     []proxy.Proxy
-	HealthChecker interface{ ExportPrometheusMetrics() string }
-	RateLimiter   interface{ ExportPrometheus() string }
-	Logger        *slog.Logger
+	StatsStore     *stats.Store
+	ConnTracker    *core.ConnTracker
+	DNSHijacker    *dns.Hijacker
+	DNSRateLimiter interface{ ExportPrometheus() string }
+	ProxyList      []proxy.Proxy
+	HealthChecker  interface{ ExportPrometheusMetrics() string }
+	RateLimiter    interface{ ExportPrometheus() string }
+	Logger         *slog.Logger
 }
 
 // NewCollector creates a new metrics collector
@@ -71,14 +73,15 @@ func NewCollector(cfg CollectorConfig) *Collector {
 	}
 
 	return &Collector{
-		statsStore:    cfg.StatsStore,
-		startTime:     time.Now(),
-		connTracker:   cfg.ConnTracker,
-		dnsHijacker:   cfg.DNSHijacker,
-		proxyList:     cfg.ProxyList,
-		healthChecker: cfg.HealthChecker,
-		rateLimiter:   cfg.RateLimiter,
-		logger:        logger,
+		statsStore:     cfg.StatsStore,
+		startTime:      time.Now(),
+		connTracker:    cfg.ConnTracker,
+		dnsHijacker:    cfg.DNSHijacker,
+		dnsRateLimiter: cfg.DNSRateLimiter,
+		proxyList:      cfg.ProxyList,
+		healthChecker:  cfg.HealthChecker,
+		rateLimiter:    cfg.RateLimiter,
+		logger:         logger,
 	}
 }
 
@@ -257,6 +260,18 @@ func (c *Collector) WriteMetrics(w io.Writer) {
 		}
 	}
 
+	// DNS Rate Limiter metrics
+	if c.dnsRateLimiter != nil {
+		dnsRateMetrics := c.dnsRateLimiter.ExportPrometheus()
+		if dnsRateMetrics != "" {
+			for _, line := range strings.Split(dnsRateMetrics, "\n") {
+				if line != "" {
+					w.Write([]byte(line + "\n"))
+				}
+			}
+		}
+	}
+
 	// Proxy metrics
 	for i, p := range c.proxyList {
 		addr := p.Addr()
@@ -374,6 +389,36 @@ func (c *Collector) StopHTTPServer() error {
 
 	c.logger.Info("Stopping Prometheus metrics server")
 	return c.httpServer.Shutdown(ctx)
+}
+
+// SetDNSRateLimiter sets the DNS rate limiter reference for metrics
+func (c *Collector) SetDNSRateLimiter(rl interface{ ExportPrometheus() string }) {
+	c.dnsRateLimiter = rl
+}
+
+// SetConnTracker sets the ConnTracker reference for metrics
+func (c *Collector) SetConnTracker(ct *core.ConnTracker) {
+	c.connTracker = ct
+}
+
+// SetDNSHijacker sets the DNS hijacker reference for metrics
+func (c *Collector) SetDNSHijacker(h *dns.Hijacker) {
+	c.dnsHijacker = h
+}
+
+// SetProxyList sets the proxy list reference for metrics
+func (c *Collector) SetProxyList(proxies []proxy.Proxy) {
+	c.proxyList = proxies
+}
+
+// SetHealthChecker sets the health checker reference for metrics
+func (c *Collector) SetHealthChecker(hc interface{ ExportPrometheusMetrics() string }) {
+	c.healthChecker = hc
+}
+
+// SetRateLimiter sets the rate limiter reference for metrics
+func (c *Collector) SetRateLimiter(rl interface{ ExportPrometheus() string }) {
+	c.rateLimiter = rl
 }
 
 type bufferWriter struct {

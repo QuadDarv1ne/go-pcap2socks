@@ -517,7 +517,8 @@ go test -bench=. -benchmem ./...
 | DNS prefetch | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
 | Persistent DNS cache | ✅ | `dns/resolver.go` | ✅ ИНТЕГРИРОВАН |
 | DNS Hijacker (Fake IP) | ✅ | `dns/hijacker.go` | ✅ ИНТЕГРИРОВАН (31.03.2026) |
-| DNS Rate Limiter | ✅ | `dns/rate_limiter.go` | ❌ НЕ ИНТЕГРИРОВАН |
+| DNS Rate Limiter | ✅ | `dns/rate_limiter.go` | ✅ ИНТЕГРИРОВАН (31.03.2026) |
+| DNS Rate Limiter Prometheus | ✅ | `dns/rate_limiter.go` | ✅ ИНТЕГРИРОВАН (ExportPrometheus) |
 | Router (Whitelist/Blacklist) | ✅ | `router/filter.go` | ✅ ИНТЕГРИРОВАН (proxy.Router) |
 | Health Checker | ✅ | `health/checker.go` | ✅ ИНТЕГРИРОВАН |
 | Health Checker Prometheus | ✅ | `health/metrics.go` | ✅ ИНТЕГРИРОВАН (31.03.2026) |

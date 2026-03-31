@@ -432,6 +432,16 @@ type DNS struct {
 	// Persistent cache on disk for faster cold start
 	PersistentCache bool   `json:"persistentCache"`
 	CacheFile       string `json:"cacheFile,omitempty"`
+	// Rate limiting for DNS queries
+	RateLimiter *DNSRateLimiter `json:"rateLimiter,omitempty"`
+}
+
+// DNSRateLimiter holds DNS query rate limiting configuration
+type DNSRateLimiter struct {
+	Enabled   bool `json:"enabled,omitempty"`
+	MaxRPS    int  `json:"maxRPS,omitempty"`    // Maximum requests per second
+	BurstSize int  `json:"burstSize,omitempty"` // Burst size (max tokens)
+	MaxRetries int `json:"maxRetries,omitempty"` // Maximum retries on rate limit
 }
 
 // DoHServer holds DNS-over-HTTPS server configuration
