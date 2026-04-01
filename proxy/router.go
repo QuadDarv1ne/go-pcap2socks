@@ -344,7 +344,7 @@ func (r *Router) StartHealthChecks(interval time.Duration) {
 	r.healthCheckTicker = time.NewTicker(interval)
 
 	r.healthCheckWg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer r.healthCheckWg.Done()
 
 		slog.Info("Proxy health checker started", "interval", interval)
@@ -358,7 +358,7 @@ func (r *Router) StartHealthChecks(interval time.Duration) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // performHealthChecks performs health checks on all proxies

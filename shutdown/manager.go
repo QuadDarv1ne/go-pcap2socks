@@ -12,6 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Shutdown constants
@@ -156,7 +158,7 @@ func (m *Manager) StartStateSaver(interval time.Duration) {
 
 	m.stateSaveTicker = time.NewTicker(interval)
 
-	go func() {
+	goroutine.SafeGo(func() {
 		defer m.stateSaveTicker.Stop() // Ensure ticker resources are released
 
 		for {
@@ -169,7 +171,7 @@ func (m *Manager) StartStateSaver(interval time.Duration) {
 				return
 			}
 		}
-	}()
+	})
 
 	slog.Info("State saver started", "interval", interval)
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	localdns "github.com/QuadDarv1ne/go-pcap2socks/dns"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/miekg/dns"
@@ -194,7 +195,7 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 		return 0, err
 	}
 
-	go func() {
+	goroutine.SafeGo(func() {
 		// Check cache first
 		cacheKey := getCacheKey(msg)
 		if cacheKey != "" {
@@ -237,7 +238,7 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 			slog.Debug("Async DNS exchange timeout")
 			d.answerCh <- &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeServerFailure}}
 		}
-	}()
+	})
 
 	return len(b), nil
 }

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
@@ -69,12 +70,12 @@ func Run() {
 	// Initialize hotkey manager
 	hotkeyMgr := hotkey.NewManager()
 
-	// Run systray in a goroutine
-	go func() {
+	// Run systray in a goroutine with panic protection
+	goroutine.SafeGo(func() {
 		systray.Run(func() {
 			onReady(hotkeyMgr)
 		}, onExit)
-	}()
+	})
 
 	// Wait for exit signal
 	sigChan := make(chan os.Signal, 1)

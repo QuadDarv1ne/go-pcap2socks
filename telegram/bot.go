@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/discord"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // CommandHandler is a callback function for bot commands
@@ -132,7 +133,7 @@ func (b *Bot) StartPeriodicReports(interval time.Duration) {
 
 	slog.Info("Starting periodic Telegram reports", "interval", interval)
 
-	go func() {
+	goroutine.SafeGo(func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -145,7 +146,7 @@ func (b *Bot) StartPeriodicReports(interval time.Duration) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // StopPeriodicReports stops periodic reports
