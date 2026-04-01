@@ -11,10 +11,10 @@ import (
 
 // MAC constants
 const (
-	MacFormatColon   = "colon"   // AA:BB:CC:DD:EE:FF
-	MacFormatDash    = "dash"     // AA-BB-CC-DD-EE-FF
-	MacFormatDot     = "dot"      // AABB.CCDD.EEFF
-	MacFormatNoSep   = "nosep"    // AABBCCDDEEFF
+	MacFormatColon = "colon" // AA:BB:CC:DD:EE:FF
+	MacFormatDash  = "dash"  // AA-BB-CC-DD-EE-FF
+	MacFormatDot   = "dot"   // AABB.CCDD.EEFF
+	MacFormatNoSep = "nosep" // AABBCCDDEEFF
 )
 
 // IPRange represents a range of IP addresses
@@ -25,20 +25,20 @@ type IPRange struct {
 
 // IPInfo holds detailed IP information
 type IPInfo struct {
-	IP           net.IP
-	IsPrivate    bool
-	IsLoopback   bool
-	IsLinkLocal  bool
-	IsMulticast  bool
+	IP            net.IP
+	IsPrivate     bool
+	IsLoopback    bool
+	IsLinkLocal   bool
+	IsMulticast   bool
 	IsUnspecified bool
-	Version      int // 4 or 6
+	Version       int // 4 or 6
 }
 
 // ParseMAC parses a MAC address in various formats
 func ParseMAC(mac string) (net.HardwareAddr, error) {
 	// Remove common separators and normalize
 	mac = strings.TrimSpace(mac)
-	
+
 	// Try standard ParseMAC first
 	hw, err := net.ParseMAC(mac)
 	if err == nil {
@@ -49,7 +49,7 @@ func ParseMAC(mac string) (net.HardwareAddr, error) {
 	clean := strings.ReplaceAll(mac, ":", "")
 	clean = strings.ReplaceAll(clean, "-", "")
 	clean = strings.ReplaceAll(clean, ".", "")
-	
+
 	if len(clean) != 12 {
 		return nil, fmt.Errorf("invalid MAC address length: %d", len(clean))
 	}
@@ -275,11 +275,11 @@ func CountIPsInCIDR(cidr *net.IPNet) uint64 {
 // GetIPInfo returns detailed information about an IP
 func GetIPInfo(ip net.IP) IPInfo {
 	info := IPInfo{
-		IP:           ip,
-		IsPrivate:    ip.IsPrivate(),
-		IsLoopback:   ip.IsLoopback(),
-		IsLinkLocal:  ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast(),
-		IsMulticast:  ip.IsMulticast(),
+		IP:            ip,
+		IsPrivate:     ip.IsPrivate(),
+		IsLoopback:    ip.IsLoopback(),
+		IsLinkLocal:   ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast(),
+		IsMulticast:   ip.IsMulticast(),
 		IsUnspecified: ip.IsUnspecified(),
 	}
 
@@ -396,7 +396,7 @@ func CommonMACPatterns() []string {
 		`^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`, // AA:BB:CC:DD:EE:FF
 		`^([0-9A-Fa-f]{2}-){5}([0-9A-Fa-f]{2})$`,    // AA-BB-CC-DD-EE-FF
 		`^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$`,   // AABB.CCDD.EEFF
-		`^([0-9A-Fa-f]{12})$`,                        // AABBCCDDEEFF
+		`^([0-9A-Fa-f]{12})$`,                       // AABBCCDDEEFF
 	}
 }
 

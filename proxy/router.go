@@ -13,8 +13,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/bandwidth"
+	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/circuitbreaker"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/armon/go-radix"
@@ -139,7 +139,7 @@ type routeCache struct {
 	hits    atomic.Uint64 // atomic counter for hits
 	misses  atomic.Uint64 // atomic counter for misses
 	size    atomic.Int32  // approximate size for eviction
-	keyPool sync.Pool   // pool of byte slices for key building
+	keyPool sync.Pool     // pool of byte slices for key building
 }
 
 func newRouteCache(maxSize int, ttl time.Duration) *routeCache {
@@ -285,7 +285,7 @@ func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dst
 //   - Atomic rule updates without stopping traffic processing
 type Router struct {
 	*Base
-	routingTable *RoutingTable  // Lock-free routing table
+	routingTable *RoutingTable // Lock-free routing table
 	Proxies      map[string]Proxy
 	macFilter    *cfg.MACFilter
 	routeCache   *routeCache
@@ -312,10 +312,10 @@ type Router struct {
 // HealthStatus returns health status for all proxies
 func (r *Router) HealthStatus() map[string]map[string]interface{} {
 	status := make(map[string]map[string]interface{})
-	
+
 	for tag, proxy := range r.Proxies {
 		proxyStatus := make(map[string]interface{})
-		
+
 		// Check if proxy supports health checks
 		if healthChecker, ok := proxy.(interface{ HealthStatus() (bool, time.Time) }); ok {
 			healthy, lastCheck := healthChecker.HealthStatus()
@@ -325,10 +325,10 @@ func (r *Router) HealthStatus() map[string]map[string]interface{} {
 			proxyStatus["healthy"] = true
 			proxyStatus["last_check"] = "N/A"
 		}
-		
+
 		status[tag] = proxyStatus
 	}
-	
+
 	return status
 }
 
@@ -337,17 +337,17 @@ func (r *Router) StartHealthChecks(interval time.Duration) {
 	if interval <= 0 {
 		interval = 30 * time.Second // Default interval
 	}
-	
+
 	r.healthCheckInterval = interval
 	r.healthCheckStop = make(chan struct{})
 	r.healthCheckTicker = time.NewTicker(interval)
-	
+
 	r.healthCheckWg.Add(1)
 	go func() {
 		defer r.healthCheckWg.Done()
-		
+
 		slog.Info("Proxy health checker started", "interval", interval)
-		
+
 		for {
 			select {
 			case <-r.healthCheckTicker.C:
@@ -397,7 +397,7 @@ func (r *Router) StopHealthChecks() {
 func NewRouter(rules []cfg.Rule, proxies map[string]Proxy) *Router {
 	r := &Router{
 		routingTable: NewRoutingTable(rules),
-		Proxies: proxies,
+		Proxies:      proxies,
 		Base: &Base{
 			mode: ModeRouter,
 		},

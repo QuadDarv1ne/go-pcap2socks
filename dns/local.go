@@ -61,7 +61,7 @@ func (lc *localClient) ExchangeWithContext(ctx context.Context, msg *dns.Msg) (*
 			return response, nil
 		}
 		lastErr = err
-		
+
 		// Check if context was cancelled
 		select {
 		case <-ctx.Done():

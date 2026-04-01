@@ -305,7 +305,7 @@ func (m *SmartDHCPManager) RecordConnection(mac string) int {
 func (m *SmartDHCPManager) GetStats() map[string]interface{} {
 	stats := make(map[string]interface{})
 	stats["total_devices"] = int(m.size.Load())
-	
+
 	// Count allocated IPs
 	allocatedCount := 0
 	m.dynamicPool.Allocated.Range(func(k, v any) bool {

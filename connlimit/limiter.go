@@ -36,14 +36,14 @@ func DefaultConfig() LimiterConfig {
 
 // ConnectionLimiter limits incoming connections
 type ConnectionLimiter struct {
-	config       LimiterConfig
-	connections  sync.Map // map[string]*ipStats
-	totalConns   atomic.Int32
-	bannedIPs    sync.Map // map[string]time.Time
-	rateLimiter  *tokenBucket
-	cleanupChan  chan struct{}
-	cleanupWg    sync.WaitGroup
-	
+	config      LimiterConfig
+	connections sync.Map // map[string]*ipStats
+	totalConns  atomic.Int32
+	bannedIPs   sync.Map // map[string]time.Time
+	rateLimiter *tokenBucket
+	cleanupChan chan struct{}
+	cleanupWg   sync.WaitGroup
+
 	// Statistics
 	totalAllowed atomic.Uint64
 	totalBlocked atomic.Uint64
@@ -51,10 +51,10 @@ type ConnectionLimiter struct {
 }
 
 type ipStats struct {
-	count     atomic.Int32
-	lastSeen  atomic.Int64
-	blocked   atomic.Bool
-	bannedAt  time.Time
+	count    atomic.Int32
+	lastSeen atomic.Int64
+	blocked  atomic.Bool
+	bannedAt time.Time
 }
 
 type tokenBucket struct {
@@ -90,7 +90,7 @@ func NewLimiter(cfg LimiterConfig) *ConnectionLimiter {
 			refillRate: int64(cfg.RatePerSecond),
 		},
 	}
-	
+
 	// Initialize tokens
 	l.rateLimiter.tokens.Store(l.rateLimiter.maxTokens)
 	l.rateLimiter.lastRefill.Store(time.Now().UnixNano())
@@ -188,7 +188,7 @@ func (l *ConnectionLimiter) getIPStats(ip string) *ipStats {
 // allow checks if a token is available
 func (tb *tokenBucket) allow() bool {
 	tb.refill()
-	
+
 	for {
 		tokens := tb.tokens.Load()
 		if tokens <= 0 {
@@ -205,12 +205,12 @@ func (tb *tokenBucket) refill() {
 	now := time.Now().UnixNano()
 	last := tb.lastRefill.Load()
 	elapsed := time.Duration(now - last)
-	
+
 	tokensToAdd := int64(elapsed.Seconds()) * tb.refillRate
 	if tokensToAdd <= 0 {
 		return
 	}
-	
+
 	for {
 		current := tb.tokens.Load()
 		newTokens := current + tokensToAdd
@@ -317,7 +317,7 @@ type Listener struct {
 // NewListener creates a rate-limited listener
 func NewListener(listener net.Listener, cfg LimiterConfig) (*Listener, *ConnectionLimiter) {
 	limiter := NewLimiter(cfg)
-	
+
 	return &Listener{
 		Listener: listener,
 		limiter:  limiter,
@@ -333,7 +333,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 		}
 
 		ip := conn.RemoteAddr().(*net.TCPAddr).IP.String()
-		
+
 		if l.limiter.Allow(context.Background(), ip) {
 			return &rateLimitedConn{
 				Conn:    conn,
@@ -356,8 +356,8 @@ func (l *Listener) Stop() error {
 // rateLimitedConn wraps a connection with automatic release
 type rateLimitedConn struct {
 	net.Conn
-	limiter *ConnectionLimiter
-	ip      string
+	limiter  *ConnectionLimiter
+	ip       string
 	released bool
 }
 

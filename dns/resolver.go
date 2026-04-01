@@ -112,15 +112,15 @@ type Resolver struct {
 	bestServers   []string
 
 	// Prefetch support
-	prefetchChan  chan string
-	stopPrefetch  chan struct{}
-	prefetchWG    sync.WaitGroup
+	prefetchChan chan string
+	stopPrefetch chan struct{}
+	prefetchWG   sync.WaitGroup
 
 	// Multi-threaded DNS query processing
-	queryQueue    chan *dnsQuery
-	queryWorkers  int
-	queryWg       sync.WaitGroup
-	stopQueries   chan struct{}
+	queryQueue   chan *dnsQuery
+	queryWorkers int
+	queryWg      sync.WaitGroup
+	stopQueries  chan struct{}
 
 	// Statistics
 	queriesProcessed atomic.Int64
@@ -149,8 +149,8 @@ type dnsQuery struct {
 
 // DNSResult holds DNS query result
 type DNSResult struct {
-	IPs  []net.IP
-	Err  error
+	IPs []net.IP
+	Err error
 }
 
 // ResolverConfig holds resolver configuration
@@ -164,7 +164,7 @@ type ResolverConfig struct {
 	CacheSize     int      `json:"cacheSize"`
 	CacheTTL      int      `json:"cacheTTL"` // seconds
 	// Pre-warming cache on startup
-	PreWarmCache  bool     `json:"preWarmCache"`
+	PreWarmCache   bool     `json:"preWarmCache"`
 	PreWarmDomains []string `json:"preWarmDomains,omitempty"`
 	// Persistent cache on disk
 	PersistentCache bool   `json:"persistentCache"`
@@ -194,9 +194,9 @@ func NewResolver(config *ResolverConfig) *Resolver {
 		prefetchChan:  make(chan string, 16), // Reduced from 100 to save memory
 		stopPrefetch:  make(chan struct{}),
 		// Multi-threaded query processing
-		queryWorkers:  queryWorkers,
-		queryQueue:    make(chan *dnsQuery, 64), // Reduced from 256 to save memory
-		stopQueries:   make(chan struct{}),
+		queryWorkers: queryWorkers,
+		queryQueue:   make(chan *dnsQuery, 64), // Reduced from 256 to save memory
+		stopQueries:  make(chan struct{}),
 	}
 
 	if config != nil {
@@ -766,7 +766,7 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	// Try each server in order of preference
 	for _, server := range servers {
 		// Query both A and AAAA records
-		ipsA, errA := r.queryDNS(ctx, hostname, server, 1) // A record
+		ipsA, errA := r.queryDNS(ctx, hostname, server, 1)        // A record
 		ipsAAAA, errAAAA := r.queryDNS(ctx, hostname, server, 28) // AAAA record
 
 		if errA == nil && len(ipsA) > 0 {
@@ -817,7 +817,7 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 // Implements retry logic with exponential backoff for reliability
 func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string, qtype uint16) ([]net.IP, error) {
 	var lastErr error
-	
+
 	// Retry up to 3 times with exponential backoff
 	for attempt := 0; attempt < 3; attempt++ {
 		conn, err := net.DialTimeout("udp", server, DefaultDNSTimeout)
@@ -833,7 +833,7 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string,
 			}
 			return nil, err
 		}
-		
+
 		// Build DNS query for specific type
 		query, err := buildDNSQuery(hostname, qtype)
 		if err != nil {
@@ -878,7 +878,7 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string,
 		// Parse response
 		return parseDNSResponse(buf[:n], qtype)
 	}
-	
+
 	return nil, lastErr
 }
 
@@ -938,7 +938,7 @@ func buildDNSQuery(hostname string, qtype uint16) ([]byte, error) {
 
 	// Get buffer from pool
 	buf := dnsQueryPool.Get().(*bytes.Buffer)
-	defer dnsQueryPool.Put(buf)  // Ensure buffer is returned even on error
+	defer dnsQueryPool.Put(buf) // Ensure buffer is returned even on error
 	buf.Reset()
 
 	// Transaction ID (random)
@@ -1262,11 +1262,11 @@ func (r *Resolver) GetCacheStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"size":    len(r.cache),
-		"valid":   valid,
-		"expired": expired,
+		"size":     len(r.cache),
+		"valid":    valid,
+		"expired":  expired,
 		"max_size": r.cacheSize,
-		"ttl":     r.cacheTTL.String(),
+		"ttl":      r.cacheTTL.String(),
 	}
 }
 

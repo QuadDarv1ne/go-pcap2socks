@@ -18,7 +18,7 @@ import (
 // Uses WinDivert if available, otherwise returns nil (DHCP disabled)
 func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig *device.NetworkConfig) (interface{}, error) {
 	slog.Info("Creating DHCP server...", "enabled", cfg.DHCP != nil && cfg.DHCP.Enabled, "pool", dhcpConfig.FirstIP, "-", dhcpConfig.LastIP)
-	
+
 	// Enable Smart DHCP for device-based IP allocation
 	enableSmartDHCP := true
 	poolStart := dhcpConfig.FirstIP.String()

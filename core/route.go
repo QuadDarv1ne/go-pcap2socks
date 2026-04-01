@@ -13,7 +13,7 @@ func withRouteTable(nicID tcpip.NICID) option.Option {
 		// This allows gvisor to forward packets between endpoints
 		s.SetForwardingDefaultAndAllNICs(header.IPv4ProtocolNumber, true)
 		s.SetForwardingDefaultAndAllNICs(header.IPv6ProtocolNumber, true)
-		
+
 		s.SetRouteTable([]tcpip.Route{
 			{
 				Destination: header.IPv4EmptySubnet,

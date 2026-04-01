@@ -13,21 +13,21 @@ import (
 
 // Pre-defined errors for proxy operations
 var (
-	ErrDialTimeout    = errors.New("dial timeout")
-	ErrDefaultDialer  = errors.New("default dialer not set")
-	ErrProxyNotSet    = errors.New("proxy not set")
-	
+	ErrDialTimeout   = errors.New("dial timeout")
+	ErrDefaultDialer = errors.New("default dialer not set")
+	ErrProxyNotSet   = errors.New("proxy not set")
+
 	// Proxy dial errors with context
-	ErrProxyDialFailed   = errors.New("proxy dial failed")
-	ErrProxyHandshake    = errors.New("proxy handshake failed")
-	ErrProxyAuthFailed   = errors.New("proxy authentication failed")
-	ErrProxyConnRefused  = errors.New("proxy connection refused")
-	ErrProxyUnreachable  = errors.New("proxy unreachable")
-	
+	ErrProxyDialFailed  = errors.New("proxy dial failed")
+	ErrProxyHandshake   = errors.New("proxy handshake failed")
+	ErrProxyAuthFailed  = errors.New("proxy authentication failed")
+	ErrProxyConnRefused = errors.New("proxy connection refused")
+	ErrProxyUnreachable = errors.New("proxy unreachable")
+
 	// Proxy UDP errors
 	ErrProxyUDPFailed    = errors.New("proxy UDP operation failed")
 	ErrProxyUDPAssociate = errors.New("proxy UDP associate failed")
-	
+
 	// Proxy configuration errors
 	ErrProxyInvalidAddr  = errors.New("proxy invalid address")
 	ErrProxyNotSupported = errors.New("proxy operation not supported")

@@ -8,7 +8,7 @@ import (
 
 func TestCollector_RecordConnection(t *testing.T) {
 	c := NewCollector(nil)
-	
+
 	c.RecordConnection()
 	c.RecordConnection()
 
@@ -84,17 +84,17 @@ func TestCollector_RecordCache(t *testing.T) {
 
 func TestCollector_WriteMetrics(t *testing.T) {
 	c := NewCollector(nil)
-	
+
 	c.RecordConnection()
 	c.RecordTraffic(1000, 2000)
 	c.RecordPacket()
 	c.RecordCacheHit()
-	
+
 	var buf bytes.Buffer
 	c.WriteMetrics(&buf)
-	
+
 	output := buf.String()
-	
+
 	// Check for expected metrics
 	expectedMetrics := []string{
 		"go_pcap2socks_uptime_seconds",
@@ -105,13 +105,13 @@ func TestCollector_WriteMetrics(t *testing.T) {
 		"go_pcap2socks_cache_hits_total",
 		"go_pcap2socks_cache_hit_ratio_percent",
 	}
-	
+
 	for _, metric := range expectedMetrics {
 		if !strings.Contains(output, metric) {
 			t.Errorf("expected metric %s not found in output", metric)
 		}
 	}
-	
+
 	// Check Prometheus format
 	if !strings.Contains(output, "# TYPE") {
 		t.Error("expected # TYPE in Prometheus format")
@@ -123,16 +123,16 @@ func TestCollector_WriteMetrics(t *testing.T) {
 
 func TestCollector_GetMetrics(t *testing.T) {
 	c := NewCollector(nil)
-	
+
 	c.RecordConnection()
 	c.RecordTraffic(500, 500)
-	
+
 	metrics := c.GetMetrics()
-	
+
 	if len(metrics) == 0 {
 		t.Error("expected non-empty metrics output")
 	}
-	
+
 	if !strings.Contains(metrics, "go_pcap2socks_") {
 		t.Error("expected go_pcap2socks_ prefix in metrics")
 	}
@@ -140,7 +140,7 @@ func TestCollector_GetMetrics(t *testing.T) {
 
 func BenchmarkCollector_RecordTraffic(b *testing.B) {
 	c := NewCollector(nil)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		c.RecordTraffic(100, 100)
@@ -149,14 +149,14 @@ func BenchmarkCollector_RecordTraffic(b *testing.B) {
 
 func BenchmarkCollector_WriteMetrics(b *testing.B) {
 	c := NewCollector(nil)
-	
+
 	// Pre-populate some data
 	for i := 0; i < 100; i++ {
 		c.RecordConnection()
 		c.RecordTraffic(1000, 1000)
 		c.RecordPacket()
 	}
-	
+
 	var buf bytes.Buffer
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

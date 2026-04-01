@@ -60,20 +60,20 @@ const (
 // mtuCacheEntry holds cached MTU with eviction metadata
 type mtuCacheEntry struct {
 	result      *DiscoveryResult
-	accessCount uint32     // Access frequency for LRU
-	lastAccess  time.Time  // Last access time
-	createdAt   time.Time  // Creation time for TTL
+	accessCount uint32    // Access frequency for LRU
+	lastAccess  time.Time // Last access time
+	createdAt   time.Time // Creation time for TTL
 }
 
 // DiscoveryResult holds the result of MTU discovery
 type DiscoveryResult struct {
-	MTU           uint32
-	EffectiveMTU  uint32 // MTU minus protocol overhead
-	Protocol      string
-	Destination   string
-	LastChecked   time.Time
-	IsValid       bool
-	Error         error
+	MTU          uint32
+	EffectiveMTU uint32 // MTU minus protocol overhead
+	Protocol     string
+	Destination  string
+	LastChecked  time.Time
+	IsValid      bool
+	Error        error
 }
 
 // MTUDiscoverer performs Path MTU Discovery
@@ -82,7 +82,7 @@ type MTUDiscoverer struct {
 	cache         map[string]*mtuCacheEntry
 	cacheExpiry   time.Duration // TTL for cache entries
 	probeTimeout  time.Duration
-	maxCacheSize  int           // Maximum cache entries
+	maxCacheSize  int // Maximum cache entries
 	evictionMutex sync.Mutex
 	stopEviction  chan struct{}
 	evictionDone  chan struct{}
@@ -146,14 +146,14 @@ func (d *MTUDiscoverer) evictStaleEntries() {
 	if len(d.cache) > d.maxCacheSize {
 		// Sort by access count and last access time
 		type cacheEntry struct {
-			key        string
+			key         string
 			accessCount uint32
 			lastAccess  time.Time
 		}
 		entries := make([]cacheEntry, 0, len(d.cache))
 		for key, entry := range d.cache {
 			entries = append(entries, cacheEntry{
-				key:        key,
+				key:         key,
 				accessCount: entry.accessCount,
 				lastAccess:  entry.lastAccess,
 			})
@@ -220,12 +220,12 @@ func (d *MTUDiscoverer) DiscoverMTU(ctx context.Context, destination string, pro
 // performDiscovery performs the actual MTU discovery
 func (d *MTUDiscoverer) performDiscovery(ctx context.Context, destination string, protocol string) *DiscoveryResult {
 	result := &DiscoveryResult{
-		MTU:         DefaultMTU,
+		MTU:          DefaultMTU,
 		EffectiveMTU: DefaultMTU,
-		Protocol:    protocol,
-		Destination: destination,
-		LastChecked: time.Now(),
-		IsValid:     false,
+		Protocol:     protocol,
+		Destination:  destination,
+		LastChecked:  time.Now(),
+		IsValid:      false,
 	}
 
 	// Parse destination

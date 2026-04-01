@@ -14,7 +14,7 @@ func TestNewManager(t *testing.T) {
 		wantNil    bool
 	}{
 		{
-			name: "nil config",
+			name:       "nil config",
 			config:     nil,
 			internalIP: "192.168.1.1",
 			wantNil:    true,

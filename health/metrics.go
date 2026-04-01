@@ -10,19 +10,19 @@ import (
 // HealthMetrics holds Prometheus metrics for health checker
 type HealthMetrics struct {
 	// Probe counters
-	probesTotal    atomic.Uint64
-	probesSuccess  atomic.Uint64
-	probesFailed   atomic.Uint64
-	probesTimeout  atomic.Uint64
+	probesTotal   atomic.Uint64
+	probesSuccess atomic.Uint64
+	probesFailed  atomic.Uint64
+	probesTimeout atomic.Uint64
 
 	// Recovery counters
-	recoveriesTotal    atomic.Uint64
-	recoveriesSuccess  atomic.Uint64
-	recoveriesFailed   atomic.Uint64
+	recoveriesTotal   atomic.Uint64
+	recoveriesSuccess atomic.Uint64
+	recoveriesFailed  atomic.Uint64
 
 	// Current state
-	activeProbes atomic.Int32
-	healthyCount atomic.Int32
+	activeProbes   atomic.Int32
+	healthyCount   atomic.Int32
 	unhealthyCount atomic.Int32
 
 	// Latency tracking (in milliseconds)

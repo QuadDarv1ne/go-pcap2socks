@@ -146,7 +146,7 @@ func TestUDPProbe_Run_ContextCancel(t *testing.T) {
 	defer cancel()
 
 	result := probe.Run(ctx)
-	
+
 	// Just verify it completes
 	t.Logf("UDP probe completed: success=%v", result.Success)
 }

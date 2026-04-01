@@ -19,18 +19,18 @@ import (
 
 // SimpleServer represents a simple DHCP server using Npcap
 type SimpleServer struct {
-	mu          sync.RWMutex
-	config      *dhcp.ServerConfig
-	dhcpServer  *dhcp.Server
-	handle      *pcap.Handle
-	stopChan    chan struct{}
-	localMAC    net.HardwareAddr
-	localIP     net.IP
-	lastRequest map[string]time.Time
-	requestMu   sync.Mutex
-	leases      map[string]*Lease
-	leaseMu     sync.RWMutex
-	smartDHCP   *dhcpSmartManager
+	mu             sync.RWMutex
+	config         *dhcp.ServerConfig
+	dhcpServer     *dhcp.Server
+	handle         *pcap.Handle
+	stopChan       chan struct{}
+	localMAC       net.HardwareAddr
+	localIP        net.IP
+	lastRequest    map[string]time.Time
+	requestMu      sync.Mutex
+	leases         map[string]*Lease
+	leaseMu        sync.RWMutex
+	smartDHCP      *dhcpSmartManager
 	deviceProfiles map[string]deviceProfile
 }
 
@@ -201,7 +201,7 @@ func (s *SimpleServer) processPacket(packet gopacket.Packet) {
 		return
 	}
 	eth := ethLayer.(*layers.Ethernet)
-	
+
 	slog.Debug("Ethernet packet",
 		"src_mac", eth.SrcMAC.String(),
 		"dst_mac", eth.DstMAC.String(),
@@ -267,7 +267,7 @@ func (s *SimpleServer) processPacket(packet gopacket.Packet) {
 	var parameterList []uint8
 	var messageType uint8
 	offset := 240 // Start after magic cookie (4 bytes)
-	
+
 	for offset < len(dhcpData)-1 {
 		opt := dhcpData[offset]
 		if opt == 0 {
@@ -445,7 +445,7 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	if msgType == 5 {
 		msgTypeName = "ACK"
 	}
-	
+
 	slog.Info("Sending DHCP "+msgTypeName,
 		"client_mac", clientMAC.String(),
 		"client_ip", clientIP.String(),
@@ -477,14 +477,14 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	// Build DHCP payload (simplified)
 	// DHCP OFFER: OP=2, HTYPE=1, HLEN=6, HOPS=0, XID, SECS, FLAGS, CIADDR, YIADDR, SIADDR, GIADDR, CHADDR
 	dhcpPayload := make([]byte, 340)
-	dhcpPayload[0] = 2                          // BOOTREPLY
-	dhcpPayload[1] = 1                          // Ethernet
-	dhcpPayload[2] = 6                          // Hardware length
-	copy(dhcpPayload[4:8], xid)                // XID (Transaction ID)
-	copy(dhcpPayload[10:12], flags)            // FLAGS
-	copy(dhcpPayload[16:20], clientIP.To4())   // YIADDR (your IP)
-	copy(dhcpPayload[20:24], s.localIP.To4())  // SIADDR (server IP)
-	copy(dhcpPayload[28:34], clientMAC[:6])    // CHADDR (client MAC)
+	dhcpPayload[0] = 2                        // BOOTREPLY
+	dhcpPayload[1] = 1                        // Ethernet
+	dhcpPayload[2] = 6                        // Hardware length
+	copy(dhcpPayload[4:8], xid)               // XID (Transaction ID)
+	copy(dhcpPayload[10:12], flags)           // FLAGS
+	copy(dhcpPayload[16:20], clientIP.To4())  // YIADDR (your IP)
+	copy(dhcpPayload[20:24], s.localIP.To4()) // SIADDR (server IP)
+	copy(dhcpPayload[28:34], clientMAC[:6])   // CHADDR (client MAC)
 
 	// DHCP Options
 	offset := 236
@@ -510,7 +510,7 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	// Option 3: Router (Gateway)
 	dhcpPayload[offset] = 3
 	offset++
-	dhcpPayload[offset] = 4  // Length
+	dhcpPayload[offset] = 4 // Length
 	offset++
 	copy(dhcpPayload[offset:offset+4], s.localIP.To4())
 	offset += 4
@@ -518,7 +518,7 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	// Option 6: DNS Servers
 	dhcpPayload[offset] = 6
 	offset++
-	dhcpPayload[offset] = 8  // Length (2 DNS servers * 4 bytes)
+	dhcpPayload[offset] = 8 // Length (2 DNS servers * 4 bytes)
 	offset++
 	copy(dhcpPayload[offset:offset+4], net.IPv4(8, 8, 8, 8).To4())
 	offset += 4
@@ -529,11 +529,11 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	// Sub-option 1: Vendor Encapsulation
 	dhcpPayload[offset] = 43
 	offset++
-	dhcpPayload[offset] = 8  // Length
+	dhcpPayload[offset] = 8 // Length
 	offset++
-	dhcpPayload[offset] = 1  // Sub-option 1: Vendor ID
+	dhcpPayload[offset] = 1 // Sub-option 1: Vendor ID
 	offset++
-	dhcpPayload[offset] = 6  // Length of vendor ID
+	dhcpPayload[offset] = 6 // Length of vendor ID
 	offset++
 	// Vendor ID "MSFT 5.0" for compatibility
 	vendorID := []byte("MSFT 5.0")
@@ -545,9 +545,9 @@ func (s *SimpleServer) sendDHCPOffer(clientMAC net.HardwareAddr, clientIP net.IP
 	// Example: Default route via gateway
 	dhcpPayload[offset] = 121
 	offset++
-	dhcpPayload[offset] = 8  // Length (4 bytes for default route)
+	dhcpPayload[offset] = 8 // Length (4 bytes for default route)
 	offset++
-	dhcpPayload[offset] = 0  // Destination prefix length 0 (default route 0.0.0.0/0)
+	dhcpPayload[offset] = 0 // Destination prefix length 0 (default route 0.0.0.0/0)
 	offset++
 	// Router IP (gateway)
 	copy(dhcpPayload[offset:offset+4], s.localIP.To4())
@@ -610,18 +610,18 @@ func (s *SimpleServer) sendDHCPNak(clientMAC net.HardwareAddr, xid []byte, flags
 	}
 
 	dhcpPayload := make([]byte, 340)
-	dhcpPayload[0] = 2                          // BOOTREPLY
-	dhcpPayload[1] = 1                          // Ethernet
-	dhcpPayload[2] = 6                          // Hardware length
-	copy(dhcpPayload[4:8], xid)                // XID
-	copy(dhcpPayload[10:12], flags)            // FLAGS
-	copy(dhcpPayload[28:34], clientMAC[:6])    // CHADDR
+	dhcpPayload[0] = 2                      // BOOTREPLY
+	dhcpPayload[1] = 1                      // Ethernet
+	dhcpPayload[2] = 6                      // Hardware length
+	copy(dhcpPayload[4:8], xid)             // XID
+	copy(dhcpPayload[10:12], flags)         // FLAGS
+	copy(dhcpPayload[28:34], clientMAC[:6]) // CHADDR
 
 	// DHCP Options
 	offset := 236
 	dhcpPayload[offset] = 53 // Option 53: DHCP Message Type
 	offset++
-	dhcpPayload[offset] = 6  // DHCPNAK
+	dhcpPayload[offset] = 6 // DHCPNAK
 	offset++
 	dhcpPayload[offset] = 54 // Option 54: Server ID
 	offset++
@@ -953,9 +953,8 @@ func getString(data map[string]interface{}, key string) string {
 func (s *SimpleServer) SaveLeasesForTest(leases map[string]*Lease) {
 	s.leaseMu.Lock()
 	defer s.leaseMu.Unlock()
-	
+
 	for mac, lease := range leases {
 		s.leases[mac] = lease
 	}
 }
-

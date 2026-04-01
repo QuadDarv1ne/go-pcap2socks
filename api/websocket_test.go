@@ -13,13 +13,15 @@ type mockConn struct {
 	closed bool
 }
 
-func (m *mockConn) Close() error                                       { m.closed = true; return nil }
-func (m *mockConn) WriteMessage(mt int, data []byte) error             { return nil }
+func (m *mockConn) Close() error                                        { m.closed = true; return nil }
+func (m *mockConn) WriteMessage(mt int, data []byte) error              { return nil }
 func (m *mockConn) WriteControl(mt int, data []byte, d time.Time) error { return nil }
-func (m *mockConn) ReadMessage() (int, []byte, error)                  { return websocket.TextMessage, []byte("{}"), nil }
-func (m *mockConn) SetReadDeadline(t time.Time) error                  { return nil }
-func (m *mockConn) SetWriteDeadline(t time.Time) error                 { return nil }
-func (m *mockConn) SetDeadline(t time.Time) error                      { return nil }
+func (m *mockConn) ReadMessage() (int, []byte, error) {
+	return websocket.TextMessage, []byte("{}"), nil
+}
+func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
+func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
+func (m *mockConn) SetDeadline(t time.Time) error      { return nil }
 
 func TestNewWebSocketHub(t *testing.T) {
 	hub := NewWebSocketHub()

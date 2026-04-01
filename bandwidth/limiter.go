@@ -18,10 +18,10 @@ import (
 // TokenBucket implements token bucket algorithm for rate limiting
 // Uses atomic operations for lock-free token management in hot path
 type TokenBucket struct {
-	tokens     atomic.Uint64   // Current tokens (fixed-point: tokens * 1000)
-	maxTokens  uint64          // Maximum tokens (burst capacity, fixed-point)
-	refillRate uint64          // Tokens per second (fixed-point)
-	lastRefill atomic.Int64    // Last refill time (nanoseconds since epoch)
+	tokens     atomic.Uint64 // Current tokens (fixed-point: tokens * 1000)
+	maxTokens  uint64        // Maximum tokens (burst capacity, fixed-point)
+	refillRate uint64        // Tokens per second (fixed-point)
+	lastRefill atomic.Int64  // Last refill time (nanoseconds since epoch)
 }
 
 // fixedPointMultiplier is used for sub-token precision in atomic operations
@@ -133,11 +133,11 @@ func (tb *TokenBucket) Wait(ctx context.Context, n int) error {
 // RateLimitedConn wraps a net.Conn with bandwidth limiting
 type RateLimitedConn struct {
 	net.Conn
-	limiter    *BandwidthLimiter
-	readBucket *TokenBucket
-	writeBucket *TokenBucket
-	readBytes  atomic.Uint64
-	writeBytes atomic.Uint64
+	limiter      *BandwidthLimiter
+	readBucket   *TokenBucket
+	writeBucket  *TokenBucket
+	readBytes    atomic.Uint64
+	writeBytes   atomic.Uint64
 	droppedRead  atomic.Uint64
 	droppedWrite atomic.Uint64
 }
@@ -199,7 +199,7 @@ func (bl *BandwidthLimiter) getLimitForClient(mac, ip string) uint64 {
 			}
 		}
 	}
-	
+
 	// Return default limit
 	return bl.defaultLimit
 }
@@ -235,9 +235,9 @@ func (bl *BandwidthLimiter) LimitConn(conn net.Conn, mac, ip string) net.Conn {
 		// No limits configured, return original connection
 		return conn
 	}
-	
+
 	buckets := bl.getOrCreateBuckets(mac, ip)
-	
+
 	return &RateLimitedConn{
 		Conn:        conn,
 		limiter:     bl,
@@ -252,7 +252,7 @@ func (rlc *RateLimitedConn) Read(b []byte) (int, error) {
 	n, err := rlc.Conn.Read(b)
 	if n > 0 {
 		rlc.readBytes.Add(uint64(n))
-		
+
 		// Apply rate limiting
 		taken := rlc.readBucket.Take(n)
 		if taken < n {
@@ -273,7 +273,7 @@ func (rlc *RateLimitedConn) Write(b []byte) (int, error) {
 	// Wait for tokens to be available with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := rlc.writeBucket.Wait(ctx, len(b)); err != nil {
 		return 0, err
 	}
@@ -405,12 +405,12 @@ func (lw *LimitWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	
+
 	// Wait for tokens
 	if err := lw.bucket.Wait(context.Background(), len(p)); err != nil {
 		return 0, err
 	}
-	
+
 	n, err := lw.w.Write(p)
 	if n > 0 {
 		lw.total.Add(uint64(n))

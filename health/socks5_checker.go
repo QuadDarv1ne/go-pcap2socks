@@ -41,10 +41,10 @@ type Checker struct {
 	lastCheck map[string]time.Time
 
 	// Configuration
-	checkInterval     time.Duration
-	timeout           time.Duration
-	maxFailures       int
-	recoveryInterval  time.Duration
+	checkInterval    time.Duration
+	timeout          time.Duration
+	maxFailures      int
+	recoveryInterval time.Duration
 
 	// Control
 	ctx    context.Context

@@ -13,9 +13,9 @@ import (
 
 // Pre-defined errors for async logger operations
 var (
-	ErrHandlerStopped     = errors.New("async handler already stopped")
-	ErrQueueFull          = errors.New("log queue is full")
-	ErrShutdownTimeout    = errors.New("shutdown timeout exceeded")
+	ErrHandlerStopped  = errors.New("async handler already stopped")
+	ErrQueueFull       = errors.New("log queue is full")
+	ErrShutdownTimeout = errors.New("shutdown timeout exceeded")
 )
 
 // Async logger constants
@@ -30,14 +30,14 @@ const (
 
 // AsyncHandler wraps slog.Handler and processes records asynchronously
 type AsyncHandler struct {
-	queue     chan slog.Record
-	wg        *sync.WaitGroup
-	ctx       context.Context
-	cancel    context.CancelFunc
-	handler   slog.Handler
-	dropped   *atomic.Int64
-	stopped   *atomic.Bool
-	flushCh   chan chan struct{}
+	queue   chan slog.Record
+	wg      *sync.WaitGroup
+	ctx     context.Context
+	cancel  context.CancelFunc
+	handler slog.Handler
+	dropped *atomic.Int64
+	stopped *atomic.Bool
+	flushCh chan chan struct{}
 }
 
 // NewAsyncHandler creates a new async handler with default settings
@@ -50,14 +50,14 @@ func NewAsyncHandlerWithSize(handler slog.Handler, queueSize int, flushInterval 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	h := &AsyncHandler{
-		queue:     make(chan slog.Record, queueSize),
-		wg:        &sync.WaitGroup{},
-		ctx:       ctx,
-		cancel:    cancel,
-		handler:   handler,
-		dropped:   &atomic.Int64{},
-		stopped:   &atomic.Bool{},
-		flushCh:   make(chan chan struct{}, 1),
+		queue:   make(chan slog.Record, queueSize),
+		wg:      &sync.WaitGroup{},
+		ctx:     ctx,
+		cancel:  cancel,
+		handler: handler,
+		dropped: &atomic.Int64{},
+		stopped: &atomic.Bool{},
+		flushCh: make(chan chan struct{}, 1),
 	}
 
 	h.wg.Add(1)
@@ -93,13 +93,13 @@ func (h *AsyncHandler) Handle(ctx context.Context, rec slog.Record) error {
 // WithAttrs implements slog.Handler
 func (h *AsyncHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	newHandler := &AsyncHandler{
-		queue:     h.queue,
-		handler:   h.handler.WithAttrs(attrs),
-		ctx:       h.ctx,
-		cancel:    h.cancel,
-		dropped:   h.dropped,
-		stopped:   h.stopped,
-		flushCh:   h.flushCh,
+		queue:   h.queue,
+		handler: h.handler.WithAttrs(attrs),
+		ctx:     h.ctx,
+		cancel:  h.cancel,
+		dropped: h.dropped,
+		stopped: h.stopped,
+		flushCh: h.flushCh,
 	}
 	newHandler.wg = h.wg
 	return newHandler
@@ -108,13 +108,13 @@ func (h *AsyncHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 // WithGroup implements slog.Handler
 func (h *AsyncHandler) WithGroup(name string) slog.Handler {
 	newHandler := &AsyncHandler{
-		queue:     h.queue,
-		handler:   h.handler.WithGroup(name),
-		ctx:       h.ctx,
-		cancel:    h.cancel,
-		dropped:   h.dropped,
-		stopped:   h.stopped,
-		flushCh:   h.flushCh,
+		queue:   h.queue,
+		handler: h.handler.WithGroup(name),
+		ctx:     h.ctx,
+		cancel:  h.cancel,
+		dropped: h.dropped,
+		stopped: h.stopped,
+		flushCh: h.flushCh,
 	}
 	newHandler.wg = h.wg
 	return newHandler
@@ -179,7 +179,7 @@ func (h *AsyncHandler) processLoop(flushInterval time.Duration) {
 func (h *AsyncHandler) flush(records []slog.Record) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultShutdownTimeout)
 	defer cancel()
-	
+
 	for i := range records {
 		_ = h.handler.Handle(ctx, records[i])
 	}
@@ -219,7 +219,7 @@ func (h *AsyncHandler) Flush() {
 	if h.stopped.Load() {
 		return
 	}
-	
+
 	flushDone := make(chan struct{})
 	select {
 	case h.flushCh <- flushDone:

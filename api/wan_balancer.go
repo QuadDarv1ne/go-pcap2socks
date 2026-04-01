@@ -281,8 +281,8 @@ func (h *WANBalancerAPI) HandleWANHealth(w http.ResponseWriter, r *http.Request)
 	results := make([]map[string]interface{}, len(stats.Uplinks))
 	for i, u := range stats.Uplinks {
 		results[i] = map[string]interface{}{
-			"tag":    h.getUplinkTag(stats, i),
-			"status": u.Status.String(),
+			"tag":     h.getUplinkTag(stats, i),
+			"status":  u.Status.String(),
 			"latency": u.LastLatency.String(),
 		}
 	}

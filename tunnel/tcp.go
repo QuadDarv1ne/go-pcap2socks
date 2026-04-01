@@ -37,6 +37,7 @@ type copyResult struct {
 
 // copyBuffer copies data from src to dst using a buffer
 // Optimized with inline hint for hot path
+//
 //go:inline
 func copyBuffer(dst, src net.Conn, dir string, buf []byte) copyResult {
 	n, err := io.CopyBuffer(dst, src, buf)
@@ -85,10 +86,10 @@ func handleTCPConn(originConn adapter.TCPConn) {
 func applyMSSClamping(conn net.Conn, isIPv6 bool) {
 	// Get optimal MTU for protocol
 	optimalMTU := mtu.GetOptimalMTU("direct", mtu.DefaultMTU)
-	
+
 	// Calculate MSS
 	mss := mtu.CalculateMSS(optimalMTU, isIPv6)
-	
+
 	// Apply clamping
 	if err := mtu.ApplyMSSClamping(conn, mss); err != nil {
 		slog.Debug("MSS clamping failed", "mss", mss, "err", err)

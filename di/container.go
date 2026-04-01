@@ -17,14 +17,14 @@ type Container struct {
 	Config *cfg.Config
 
 	// Core services
-	DNSResolver   *dns.Resolver
+	DNSResolver    *dns.Resolver
 	ProfileManager *profiles.Manager
-	UPnPManager   *upnpmanager.Manager
+	UPnPManager    *upnpmanager.Manager
 
 	// Initialized flags
-	dnsInitialized   bool
+	dnsInitialized     bool
 	profileInitialized bool
-	upnpInitialized  bool
+	upnpInitialized    bool
 }
 
 // NewContainer creates a new dependency injection container
@@ -57,15 +57,15 @@ func (c *Container) InitDNS() (*dns.Resolver, error) {
 	}
 
 	dnsConfig := &dns.ResolverConfig{
-		Servers:      plainServers,
-		UseSystemDNS: c.Config.DNS.UseSystemDNS,
-		AutoBench:    c.Config.DNS.AutoBench,
-		CacheSize:    c.Config.DNS.CacheSize,
-		CacheTTL:     c.Config.DNS.CacheTTL,
-		PreWarmCache: c.Config.DNS.PreWarmCache,
-		PreWarmDomains: c.Config.DNS.PreWarmDomains,
+		Servers:         plainServers,
+		UseSystemDNS:    c.Config.DNS.UseSystemDNS,
+		AutoBench:       c.Config.DNS.AutoBench,
+		CacheSize:       c.Config.DNS.CacheSize,
+		CacheTTL:        c.Config.DNS.CacheTTL,
+		PreWarmCache:    c.Config.DNS.PreWarmCache,
+		PreWarmDomains:  c.Config.DNS.PreWarmDomains,
 		PersistentCache: c.Config.DNS.PersistentCache,
-		CacheFile:    c.Config.DNS.CacheFile,
+		CacheFile:       c.Config.DNS.CacheFile,
 	}
 
 	c.DNSResolver = dns.NewResolver(dnsConfig)

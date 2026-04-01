@@ -266,7 +266,7 @@ func (d *dnsConn) asyncExchange(ctx context.Context, msg *dns.Msg, responseCh ch
 			}
 
 			exchangeCtx, cancel := context.WithTimeout(ctx, timeout)
-			
+
 			// Handle local DNS
 			if server.Address == "local" {
 				localClient := localdns.NewLocalClient(d.interfaceName)

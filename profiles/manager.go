@@ -2,8 +2,8 @@
 package profiles
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -156,7 +156,7 @@ func (m *Manager) ExportProfile(name string, outputPath string) error {
 	defer m.mu.RUnlock()
 
 	sourcePath := path.Join(m.profilesDir, name+".json")
-	
+
 	// Read source
 	data, err := os.ReadFile(sourcePath)
 	if err != nil {
@@ -224,7 +224,7 @@ var DefaultProfiles = map[string]interface{}{
 func (m *Manager) CreateDefaultProfiles() error {
 	for name, profile := range DefaultProfiles {
 		filePath := path.Join(m.profilesDir, name+".json")
-		
+
 		// Skip if already exists
 		if _, err := os.Stat(filePath); err == nil {
 			continue

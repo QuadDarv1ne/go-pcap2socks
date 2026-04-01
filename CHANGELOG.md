@@ -5,6 +5,92 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [3.30.0+] - 2026-04-01
+
+### Refactoring
+
+- ✅ **globals.go** — вынесены глобальные переменные из main.go
+- ✅ **main.go** — удалены дублирующиеся объявления переменных
+- ✅ **Импорты** — удалены неиспользуемые импорты
+- ✅ **Структура проекта** — улучшена организация кода
+
+### Performance
+
+- ✅ **Адаптивный memory limit** — автоматический расчёт на основе доступной RAM
+- ✅ **setAdaptiveMemoryLimit()** — 50% RAM для <8GB, 4GB для 8-16GB, 8GB максимум
+- ✅ **GC оптимизация** — логирование установленного лимита памяти
+
+### Security
+
+- ✅ **validateTokenStrength()** — проверка сложности API токена (1-5 баллов)
+- ✅ **Security warnings** — предупреждения при слабом токене
+- ✅ **Рекомендации** — советы по созданию надёжных токенов в логах
+
+### Documentation
+
+- ✅ **docs/dashboards/grafana-dashboard.json** — готовый Grafana дашборд (12 панелей)
+- ✅ **docs/dashboards/README.md** — документация по установке дашборда
+- ✅ **docs/PROMETHEUS.md** — полное описание Prometheus exporter
+- ✅ **docs/TESTING.md** — руководство по запуску тестов
+- ✅ **docs/BACKUP.md** — документация по бэкапу конфигурации
+- ✅ **docs/DEPLOYMENT.md** — руководство по развёртыванию
+- ✅ **backup-config.ps1** — скрипт автоматического бэкапа
+- ✅ **diagnose-network.ps1** — утилита диагностики сети
+- ✅ **analyse-logs.ps1** — утилита анализа логов
+
+### Observability
+
+- ✅ **Grafana dashboard** — 12 панелей для мониторинга:
+  - Service Uptime, TCP/UDP Sessions, Memory
+  - Connection Rate, Network Throughput
+  - DNS Cache Performance, Hit Ratio
+  - Goroutines, Go Memory Stats
+  - Error Rate, Connection Pool Stats
+- ✅ **Prometheus endpoints** — документация по всем метрикам
+- ✅ **Alerting rules** — примеры правил для Prometheus Alertmanager
+
+### Reliability
+
+- ✅ **backup-config.ps1** — автоматический бэкап конфигурации
+- ✅ **SHA256 checksum** — проверка целостности бэкапов
+- ✅ **Ротация бэкапов** — удаление старых, ограничение количества
+- ✅ **Планировщик заданий** — интеграция с Windows Task Scheduler
+- ✅ **analyse-logs.ps1** — анализ логов с группировкой ошибок
+
+### Tooling
+
+- ✅ **diagnose-network.ps1** — комплексная диагностика:
+  - Проверка Npcap/WinDivert
+  - Проверка прав администратора
+  - Проверка портов и сервисов
+  - Проверка конфигурации
+  - Тестирование сети
+- ✅ **analyse-logs.ps1** — анализ логов:
+  - Подсчёт ошибок/предупреждений
+  - Группировка по типам
+  - Поиск паттернов
+  - Рекомендации
+  - Интерактивный режим
+
+### Configuration
+
+- ✅ **config.json** — удалена пустая секция `capture`
+- ✅ **NAT секция** — упрощена (удалено пустое `internalInterface`)
+- ✅ **Форматирование** — улучшено чтение JSON
+
+### GitHub
+
+- ✅ **.github/ISSUE_TEMPLATE/bug_report.md** — шаблон для bug reports
+- ✅ **.github/ISSUE_TEMPLATE/feature_request.md** — шаблон для feature requests
+
+### README
+
+- ✅ **Версия** — обновлена 3.19.12 → 3.29.0+
+- ✅ **Производительность** — добавлена DNS cache zero-copy метрика
+- ✅ **Дата** — актуализирована
+
+---
+
 ## [3.29.0+] - 2026-03-29
 
 ### Observability

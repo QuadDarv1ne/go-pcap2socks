@@ -235,10 +235,10 @@ func TestIsDNSQuery(t *testing.T) {
 		protocol uint8
 		expected bool
 	}{
-		{53, 17, true},   // UDP port 53
-		{53, 6, false},   // TCP port 53
-		{80, 17, false},  // UDP port 80
-		{443, 6, false},  // TCP port 443
+		{53, 17, true},  // UDP port 53
+		{53, 6, false},  // TCP port 53
+		{80, 17, false}, // UDP port 80
+		{443, 6, false}, // TCP port 443
 	}
 
 	for _, test := range tests {

@@ -33,12 +33,12 @@ type WireGuard struct {
 
 // WireGuardConfig holds WireGuard tunnel configuration
 type WireGuardConfig struct {
-	PrivateKey string `json:"private_key"` // Local private key (base64)
-	PublicKey  string `json:"public_key"`  // Remote peer public key (base64)
+	PrivateKey string `json:"private_key"`           // Local private key (base64)
+	PublicKey  string `json:"public_key"`            // Remote peer public key (base64)
 	PreauthKey string `json:"preauth_key,omitempty"` // Pre-shared key (base64, optional)
-	Endpoint   string `json:"endpoint"`    // Remote endpoint (host:port)
-	LocalIP    string `json:"local_ip"`    // Local tunnel IP (e.g., "10.0.0.2")
-	RemoteIP   string `json:"remote_ip"`   // Remote tunnel IP (e.g., "10.0.0.1")
+	Endpoint   string `json:"endpoint"`              // Remote endpoint (host:port)
+	LocalIP    string `json:"local_ip"`              // Local tunnel IP (e.g., "10.0.0.2")
+	RemoteIP   string `json:"remote_ip"`             // Remote tunnel IP (e.g., "10.0.0.1")
 }
 
 // NewWireGuard creates a new WireGuard proxy

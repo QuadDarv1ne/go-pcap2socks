@@ -127,14 +127,14 @@ func Wrap(cause error, category ErrorCategory, code, message string) *Error {
 
 // Predefined errors
 var (
-	ErrProxyNotSet      = New(CategoryProxy, "NOT_SET", "proxy not set")
-	ErrProxyTimeout     = New(CategoryProxy, "TIMEOUT", "proxy connection timeout")
-	ErrProxyAuth        = New(CategoryProxy, "AUTH_FAILED", "proxy authentication failed")
-	ErrNetworkTimeout   = New(CategoryNetwork, "TIMEOUT", "network operation timeout")
-	ErrDNSNotFound      = New(CategoryDNS, "NOT_FOUND", "domain not found")
-	ErrDHCPNoIPs        = New(CategoryDHCP, "NO_IPS", "no available IP addresses")
-	ErrRouteNotFound    = New(CategoryRouting, "NOT_FOUND", "no matching route")
-	ErrRouteMACFilter   = New(CategoryRouting, "MAC_FILTER", "blocked by MAC filter")
+	ErrProxyNotSet    = New(CategoryProxy, "NOT_SET", "proxy not set")
+	ErrProxyTimeout   = New(CategoryProxy, "TIMEOUT", "proxy connection timeout")
+	ErrProxyAuth      = New(CategoryProxy, "AUTH_FAILED", "proxy authentication failed")
+	ErrNetworkTimeout = New(CategoryNetwork, "TIMEOUT", "network operation timeout")
+	ErrDNSNotFound    = New(CategoryDNS, "NOT_FOUND", "domain not found")
+	ErrDHCPNoIPs      = New(CategoryDHCP, "NO_IPS", "no available IP addresses")
+	ErrRouteNotFound  = New(CategoryRouting, "NOT_FOUND", "no matching route")
+	ErrRouteMACFilter = New(CategoryRouting, "MAC_FILTER", "blocked by MAC filter")
 )
 
 func IsRetryable(err error) bool {

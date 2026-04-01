@@ -31,7 +31,7 @@ const (
 
 // UPnP device cache to avoid repeated discovery
 var (
-	upnpCacheMu      sync.RWMutex
+	upnpCacheMu       sync.RWMutex
 	upnpCachedDevices []upnp.Device
 	upnpCacheExpiry   time.Time
 
@@ -190,7 +190,7 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 		if r := recover(); r != nil {
 			slog.Debug("UDP pipe panic recovered", "recover", r)
 		}
-		udpBufferPool.Put(buf)  // Ensure buffer is returned even on panic
+		udpBufferPool.Put(buf) // Ensure buffer is returned even on panic
 	}()
 
 	// Set deadlines ONCE at session start to avoid syscall overhead

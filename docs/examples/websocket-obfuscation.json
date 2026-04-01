@@ -1,0 +1,86 @@
+{
+  "$schema": "https://raw.githubusercontent.com/QuadDarv1ne/go-pcap2socks/main/docs/config-schema.json",
+  "description": "WebSocket Obfuscation Example - маскировка трафика под WebSocket",
+  "pcap": {
+    "interfaceGateway": "192.168.137.1",
+    "mtu": 1486,
+    "network": "192.168.137.0/24",
+    "localIP": "192.168.137.1",
+    "networkIPv6": "fd00::/64",
+    "localIPv6": "fd00::1",
+    "interfaceGatewayIPv6": "fd00::1"
+  },
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.137.100",
+    "poolEnd": "192.168.137.200",
+    "leaseDuration": 86400,
+    "ipv6Enabled": true,
+    "ipv6PoolStart": "fd00::64:64:64:64",
+    "ipv6PoolEnd": "fd00::64:64:64:ce",
+    "ipv6Prefix": "fd00::/64",
+    "dnsServers": ["8.8.8.8", "1.1.1.1"],
+    "ntpServers": ["time.google.com"]
+  },
+  "dns": {
+    "servers": [
+      {"address": "8.8.8.8:53"},
+      {"address": "1.1.1.1:53"}
+    ],
+    "useSystemDNS": false,
+    "autoBench": true,
+    "cacheSize": 1024,
+    "cacheTTL": 300
+  },
+  "routing": {
+    "rules": [
+      {"dstPort": "53", "outboundTag": "dns-out"},
+      {"dstPort": "80,443", "outboundTag": "ws-obfuscated"},
+      {"outboundTag": "direct"}
+    ]
+  },
+  "outbounds": [
+    {
+      "tag": "direct",
+      "direct": {}
+    },
+    {
+      "tag": "dns-out",
+      "dns": {}
+    },
+    {
+      "tag": "ws-obfuscated",
+      "websocket": {
+        "url": "wss://proxy.example.com/ws",
+        "host": "cdn.example.com",
+        "origin": "https://cdn.example.com",
+        "headers": {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "X-Forwarded-For": "203.0.113.1"
+        },
+        "skip_verify": false,
+        "handshake_timeout": 30,
+        "compression": false,
+        "ping_interval": 60,
+        "obfuscation": true,
+        "obfuscation_key": "my-secret-obfuscation-key-12345",
+        "padding": true,
+        "padding_block_size": 64
+      }
+    }
+  ],
+  "language": "ru",
+  "hotkey": {
+    "enabled": true,
+    "toggle": "Ctrl+Alt+P"
+  },
+  "api": {
+    "enabled": true,
+    "port": 8080,
+    "token": "${API_TOKEN}",
+    "https": {
+      "enabled": true,
+      "autotls": true
+    }
+  }
+}

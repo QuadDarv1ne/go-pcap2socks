@@ -73,6 +73,17 @@ go-pcap2socks — это прозрачный сетевой прокси для
 | [docs/HTTP3.md](docs/HTTP3.md) | Руководство по HTTP/3 (QUIC) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Архитектура проекта |
 | [docs/MULTITHREADING.md](docs/MULTITHREADING.md) | Многопоточность и производительность |
+| [docs/PROMETHEUS.md](docs/PROMETHEUS.md) | Prometheus метрики и мониторинг |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Руководство по развёртыванию |
+
+### Утилиты
+
+| Документ | Описание |
+|----------|----------|
+| [POWERSHELL.md](POWERSHELL.md) | PowerShell утилиты (бэкап, диагностика, логи) |
+| [docs/TESTING.md](docs/TESTING.md) | Руководство по тестированию |
+| [docs/BACKUP.md](docs/BACKUP.md) | Автоматический бэкап конфигурации |
+| [docs/dashboards/README.md](docs/dashboards/README.md) | Grafana дашборд для мониторинга |
 
 ### Примеры и решение проблем
 
@@ -289,14 +300,40 @@ CI/CD workflow также отключены в `.github/workflows/`.
 └─────────────────────────────────────────────────────────┘
 ```
 
-## 📈 Производительность (v3.19.12)
+## 📈 Производительность (v3.29.0+)
 
 ```
 Router Match:         ~8 ns/op     0 B/op    0 allocs/op
 Router DialContext:   ~170 ns/op  40 B/op    2 allocs/op
 Router Cache Hit:     ~245 ns/op  40 B/op    2 allocs/op
 Buffer GetPut:        ~50 ns/op   24 B/op    1 allocs/op
+DNS Cache Zero-Copy:  ~28 ns/op   0 B/op    0 allocs/op  (-90%)
 ```
+
+## 🛠️ Утилиты обслуживания
+
+### PowerShell скрипты
+
+Проект включает набор утилит для обслуживания:
+
+```powershell
+# Бэкап конфигурации
+.\backup-config.ps1
+
+# Диагностика сети
+.\diagnose-network.ps1
+
+# Анализ логов
+.\analyse-logs.ps1
+```
+
+Подробности в [POWERSHELL.md](POWERSHELL.md).
+
+### Grafana дашборд
+
+Готовый дашборд для мониторинга доступен в `docs/dashboards/grafana-dashboard.json`.
+
+Импорт через Grafana UI → Import → Upload JSON file.
 
 ## 🤝 Вклад в проект
 
@@ -331,5 +368,5 @@ MIT License — см. файл [LICENSE](LICENSE)
 
 ---
 
-**Версия:** 3.19.12  
-**Последнее обновление:** 26 марта 2026 г.
+**Версия:** 3.30.0+
+**Последнее обновление:** 1 апреля 2026 г.

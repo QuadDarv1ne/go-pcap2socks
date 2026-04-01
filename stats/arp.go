@@ -40,7 +40,7 @@ func NewARPMonitor(network *net.IPNet, localIP net.IP) *ARPMonitor {
 		localIP:  localIP,
 		devices:  make(map[string]*DeviceStats),
 		stopChan: make(chan struct{}),
-		interval: 30 * time.Second, // Increased from 10s to 30s for better performance
+		interval: 30 * time.Second,        // Increased from 10s to 30s for better performance
 		cbLimit:  make(chan struct{}, 10), // Limit to 10 concurrent callbacks
 	}
 }

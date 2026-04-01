@@ -88,6 +88,77 @@ go-pcap2socks.exe
 
 ---
 
+### 4. [websocket-obfuscation.json](websocket-obfuscation.json) — WebSocket обфускация
+
+**Описание:** Маскировка трафика под WebSocket с обфускацией для обхода DPI
+
+**Особенности:**
+- ✅ WebSocket transport (WSS)
+- ✅ XOR обфускация трафика
+- ✅ Packet padding для скрытия паттернов
+- ✅ Маскировка под легитимный HTTPS трафик
+- ✅ Custom headers (User-Agent, Host, Origin)
+- ✅ Ping/pong keepalive
+
+**Сценарии использования:**
+- Обход блокировок провайдера
+- Скрытие факта использования прокси
+- Работа в сетях с DPI
+- Защита от анализа трафика
+
+**Методы обфускации:**
+
+| Метод | Описание | Эффективность |
+|-------|----------|---------------|
+| **WebSocket** | Трафик как WS соединение | ⭐⭐⭐ |
+| **XOR Obfuscation** | XOR шифрование пакетов | ⭐⭐⭐ |
+| **Packet Padding** | Выравнивание размеров | ⭐⭐ |
+| **WSS (TLS)** | Шифрование TLS | ⭐⭐⭐⭐ |
+
+**Конфигурация:**
+```json
+{
+  "websocket": {
+    "url": "wss://proxy.example.com/ws",
+    "host": "cdn.example.com",
+    "origin": "https://cdn.example.com",
+    "headers": {
+      "User-Agent": "Mozilla/5.0..."
+    },
+    "obfuscation": true,
+    "obfuscation_key": "my-secret-key",
+    "padding": true,
+    "padding_block_size": 64
+  }
+}
+```
+
+**Быстрый старт:**
+```bash
+# Отредактировать URL и ключ
+notepad docs\examples\websocket-obfuscation.json
+
+# Скопировать конфиг
+copy docs\examples\websocket-obfuscation.json config.json
+
+# Запустить
+go-pcap2socks.exe
+```
+
+**Проверка работы:**
+```bash
+# Проверить внешний IP
+curl https://ifconfig.me
+
+# Должен показать IP прокси, а не ваш реальный
+```
+
+**Документация:**
+- [OBFUSCATION.md](../OBFUSCATION.md) — Полное руководство по обфускации
+- [WebSocket Transport](../../transport/ws/websocket.go) — Исходный код
+
+---
+
 ## 🔧 Общие настройки
 
 ### DNS серверы

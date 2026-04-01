@@ -14,12 +14,12 @@ import (
 
 // Pre-defined errors for WinDivert operations
 var (
-	ErrWinDivertOpen    = fmt.Errorf("failed to open WinDivert handle")
-	ErrWinDivertRecv    = fmt.Errorf("WinDivert receive error")
-	ErrWinDivertSend    = fmt.Errorf("WinDivert send error")
-	ErrInvalidPacket    = fmt.Errorf("invalid packet data")
-	ErrPacketTooShort   = fmt.Errorf("packet too short")
-	ErrQueueOverflow    = fmt.Errorf("WinDivert queue overflow detected")
+	ErrWinDivertOpen  = fmt.Errorf("failed to open WinDivert handle")
+	ErrWinDivertRecv  = fmt.Errorf("WinDivert receive error")
+	ErrWinDivertSend  = fmt.Errorf("WinDivert send error")
+	ErrInvalidPacket  = fmt.Errorf("invalid packet data")
+	ErrPacketTooShort = fmt.Errorf("packet too short")
+	ErrQueueOverflow  = fmt.Errorf("WinDivert queue overflow detected")
 )
 
 // WinDivert monitoring constants
@@ -27,16 +27,16 @@ var (
 // 512 packets is sufficient for most networks, 1024 max prevents OOM.
 const (
 	// DefaultQueueLength is the default WinDivert queue length
-	DefaultQueueLength = 512  // Reduced from 4096
+	DefaultQueueLength = 512 // Reduced from 4096
 
 	// MaxQueueLength is the maximum queue length before overflow
-	MaxQueueLength = 1024  // Reduced from 8192
+	MaxQueueLength = 1024 // Reduced from 8192
 
 	// QueueCheckInterval is how often to check queue length
 	QueueCheckInterval = 100 * time.Millisecond
 
 	// QueueOverflowThreshold is the queue length threshold for overflow warning
-	QueueOverflowThreshold = 400  // Reduced from 3000
+	QueueOverflowThreshold = 400 // Reduced from 3000
 )
 
 // Batch processing constants
@@ -87,8 +87,8 @@ type Handle struct {
 	packetChan chan *godivert.Packet
 
 	// Batch processing support
-	batchPool    sync.Pool      // pools [][]byte for batch recv
-	packetPool   *packetBufferPool // zero-copy packet buffers
+	batchPool  sync.Pool         // pools [][]byte for batch recv
+	packetPool *packetBufferPool // zero-copy packet buffers
 
 	// Queue monitoring
 	queueLength     atomic.Int32
@@ -104,7 +104,7 @@ type packetBufferPool struct {
 
 // packetBuffer is a pre-allocated packet buffer for zero-copy operations
 type packetBuffer struct {
-	data []byte      // packet data (backed by pool)
+	data []byte // packet data (backed by pool)
 	addr *godivert.WinDivertAddress
 }
 
@@ -194,9 +194,9 @@ func (h *Handle) RecvBatch(maxCount int) ([]*Packet, error) {
 	if maxCount <= 0 {
 		maxCount = 64 // Default batch size
 	}
-	
+
 	packets := make([]*Packet, 0, maxCount)
-	
+
 	// Non-blocking receive up to maxCount packets
 	for i := 0; i < maxCount; i++ {
 		packet, err := h.handle.Recv()
@@ -204,15 +204,15 @@ func (h *Handle) RecvBatch(maxCount int) ([]*Packet, error) {
 			// No more packets available immediately
 			break
 		}
-		
+
 		// Use zero-copy buffer from pool
 		pktBuf := h.packetPool.buffers.Get().(*packetBuffer)
 		h.packetPool.inUse.Add(1)
-		
+
 		// Copy data to pooled buffer (zero-copy from application perspective)
 		pktBuf.data = append(pktBuf.data[:0], packet.Raw...)
 		pktBuf.addr = packet.Addr
-		
+
 		pkt := &Packet{
 			Raw:       pktBuf.data,
 			Addr:      pktBuf.addr,
@@ -222,7 +222,7 @@ func (h *Handle) RecvBatch(maxCount int) ([]*Packet, error) {
 		parsed := h.parsePacketRaw(pktBuf.data, pkt)
 		packets = append(packets, parsed)
 	}
-	
+
 	return packets, nil
 }
 
@@ -327,7 +327,7 @@ func (h *Handle) parsePacketRaw(data []byte, pkt *Packet) *Packet {
 
 	// Check IP version
 	ipVersion := (data[0] >> 4) & 0x0F
-	
+
 	if ipVersion == 4 {
 		// IPv4 header parsing
 		ipHeaderLen := int((data[0] & 0x0F) * 4)
@@ -358,7 +358,7 @@ func (h *Handle) parsePacketRaw(data []byte, pkt *Packet) *Packet {
 
 			// Next header field (like protocol in IPv4)
 			nextHeader := data[6]
-			
+
 			// Parse UDP/TCP ports if present
 			// IPv6 header is fixed 40 bytes, extension headers may exist but we skip them for simplicity
 			if len(data) >= 44 {
@@ -634,23 +634,23 @@ func (bp *BatchProcessor) GetStats() BatchStats {
 
 // QueueStats holds WinDivert queue statistics
 type QueueStats struct {
-	QueueLength     int32 `json:"queue_length"`
-	Overflowed      bool  `json:"overflowed"`
-	OverflowCount   int32 `json:"overflow_count"`
-	MaxQueueLength  int32 `json:"max_queue_length"`
-	AvgQueueLength  int32 `json:"avg_queue_length"`
-	Samples         int   `json:"samples"`
+	QueueLength    int32 `json:"queue_length"`
+	Overflowed     bool  `json:"overflowed"`
+	OverflowCount  int32 `json:"overflow_count"`
+	MaxQueueLength int32 `json:"max_queue_length"`
+	AvgQueueLength int32 `json:"avg_queue_length"`
+	Samples        int   `json:"samples"`
 	// Extended stats for better monitoring
-	PacketPoolInUse   int32 `json:"packet_pool_in_use"`
-	BatchChannelSize  int   `json:"batch_channel_size"`
+	PacketPoolInUse  int32 `json:"packet_pool_in_use"`
+	BatchChannelSize int   `json:"batch_channel_size"`
 }
 
 // GetQueueStats returns queue statistics
 func (h *Handle) GetQueueStats() QueueStats {
 	return QueueStats{
-		QueueLength:   h.queueLength.Load(),
-		Overflowed:    h.queueOverflowed.Load(),
-		OverflowCount: h.overflowCount.Load(),
+		QueueLength:    h.queueLength.Load(),
+		Overflowed:     h.queueOverflowed.Load(),
+		OverflowCount:  h.overflowCount.Load(),
 		MaxQueueLength: MaxQueueLength,
 	}
 }
@@ -658,10 +658,10 @@ func (h *Handle) GetQueueStats() QueueStats {
 // GetExtendedQueueStats returns extended queue statistics including batch processor info
 func (h *Handle) GetExtendedQueueStats(bp *BatchProcessor) QueueStats {
 	stats := QueueStats{
-		QueueLength:   h.queueLength.Load(),
-		Overflowed:    h.queueOverflowed.Load(),
-		OverflowCount: h.overflowCount.Load(),
-		MaxQueueLength: MaxQueueLength,
+		QueueLength:     h.queueLength.Load(),
+		Overflowed:      h.queueOverflowed.Load(),
+		OverflowCount:   h.overflowCount.Load(),
+		MaxQueueLength:  MaxQueueLength,
 		PacketPoolInUse: h.packetPool.inUse.Load(),
 	}
 	if bp != nil {
@@ -700,18 +700,18 @@ const (
 
 // FallbackConfig holds configuration for WinDivert fallback
 type FallbackConfig struct {
-	Enabled        bool         `json:"enabled"`
-	FallbackType   FallbackType `json:"type"`
-	AutoSwitch     bool         `json:"autoSwitch"`
-	OverflowThreshold int       `json:"overflowThreshold"`
+	Enabled           bool         `json:"enabled"`
+	FallbackType      FallbackType `json:"type"`
+	AutoSwitch        bool         `json:"autoSwitch"`
+	OverflowThreshold int          `json:"overflowThreshold"`
 }
 
 // DefaultFallbackConfig returns default fallback configuration
 func DefaultFallbackConfig() *FallbackConfig {
 	return &FallbackConfig{
-		Enabled:         true,
-		FallbackType:    FallbackNpcap,
-		AutoSwitch:      true,
+		Enabled:           true,
+		FallbackType:      FallbackNpcap,
+		AutoSwitch:        true,
 		OverflowThreshold: QueueOverflowThreshold,
 	}
 }

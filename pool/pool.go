@@ -8,9 +8,9 @@ import (
 
 // Buffer sizes
 const (
-	SmallBufferSize  = 512   // For DNS queries, small packets
-	MediumBufferSize = 1500  // For Ethernet MTU
-	LargeBufferSize  = 9000  // For jumbo frames
+	SmallBufferSize  = 512  // For DNS queries, small packets
+	MediumBufferSize = 1500 // For Ethernet MTU
+	LargeBufferSize  = 9000 // For jumbo frames
 )
 
 // DNSQueryPool provides zero-copy DNS query buffer allocation

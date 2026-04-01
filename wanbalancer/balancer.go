@@ -90,12 +90,12 @@ type Uplink struct {
 
 // HealthCheckConfig holds health check configuration
 type HealthCheckConfig struct {
-	Enabled      bool          `json:"enabled"`
-	Interval     time.Duration `json:"interval"`     // How often to check
-	Timeout      time.Duration `json:"timeout"`      // Timeout for each check
-	Target       string        `json:"target"`       // URL/IP to check against
-	FailThreshold int          `json:"failThreshold"` // Failures before marking down
-	PassThreshold int          `json:"passThreshold"` // Successes before marking up
+	Enabled       bool          `json:"enabled"`
+	Interval      time.Duration `json:"interval"`      // How often to check
+	Timeout       time.Duration `json:"timeout"`       // Timeout for each check
+	Target        string        `json:"target"`        // URL/IP to check against
+	FailThreshold int           `json:"failThreshold"` // Failures before marking down
+	PassThreshold int           `json:"passThreshold"` // Successes before marking up
 }
 
 // DefaultHealthCheckConfig returns sensible defaults for health checks
@@ -117,7 +117,7 @@ func (u *Uplink) GetStatus() UplinkStatus {
 
 // SetStatus atomically sets the uplink status
 func (u *Uplink) SetStatus(status UplinkStatus) {
-	u.status.Store(int32(status))  //nolint:gosec // UplinkStatus values are small constants
+	u.status.Store(int32(status)) //nolint:gosec // UplinkStatus values are small constants
 }
 
 // IsActive returns true if uplink is available for traffic
@@ -207,8 +207,8 @@ type Balancer struct {
 
 // BalancerConfig holds configuration for creating a new balancer
 type BalancerConfig struct {
-	Uplinks     []*Uplink        `json:"uplinks"`
-	Policy      BalancerPolicy   `json:"policy"`
+	Uplinks     []*Uplink          `json:"uplinks"`
+	Policy      BalancerPolicy     `json:"policy"`
 	HealthCheck *HealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
@@ -234,9 +234,9 @@ func NewBalancer(cfg BalancerConfig) (*Balancer, error) {
 	uplinks := make([]*Uplink, len(cfg.Uplinks))
 	for i, uplink := range cfg.Uplinks {
 		uplinks[i] = &Uplink{
-			Tag:        uplink.Tag,
-			Weight:     uplink.Weight,
-			Priority:   uplink.Priority,
+			Tag:         uplink.Tag,
+			Weight:      uplink.Weight,
+			Priority:    uplink.Priority,
 			HealthCheck: uplink.HealthCheck,
 		}
 		// Set initial status to Up
@@ -435,9 +435,9 @@ func (b *Balancer) GetStats() BalancerStats {
 	defer b.mu.RUnlock()
 
 	stats := BalancerStats{
-		Policy:    b.policy,
-		Uplinks:   make([]UplinkStats, len(b.uplinks)),
-		TotalUplinks: len(b.uplinks),
+		Policy:        b.policy,
+		Uplinks:       make([]UplinkStats, len(b.uplinks)),
+		TotalUplinks:  len(b.uplinks),
 		ActiveUplinks: 0,
 	}
 

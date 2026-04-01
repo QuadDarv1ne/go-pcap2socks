@@ -8,7 +8,7 @@ import (
 
 func TestNewServer(t *testing.T) {
 	_, network, _ := net.ParseCIDR("192.168.137.0/24")
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("192.168.137.1"),
 		ServerMAC:     net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
@@ -35,7 +35,7 @@ func TestNewServer(t *testing.T) {
 
 func TestServerAllocateIP(t *testing.T) {
 	_, network, _ := net.ParseCIDR("192.168.137.0/24")
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("192.168.137.1"),
 		ServerMAC:     net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
@@ -47,7 +47,7 @@ func TestServerAllocateIP(t *testing.T) {
 	}
 
 	server := NewServer(config)
-	
+
 	mac1 := net.HardwareAddr{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01}
 	mac2 := net.HardwareAddr{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02}
 
@@ -86,7 +86,7 @@ func TestServerAllocateIP(t *testing.T) {
 
 func TestServerReleaseIP(t *testing.T) {
 	_, network, _ := net.ParseCIDR("192.168.137.0/24")
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("192.168.137.1"),
 		ServerMAC:     net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
@@ -98,7 +98,7 @@ func TestServerReleaseIP(t *testing.T) {
 	}
 
 	server := NewServer(config)
-	
+
 	mac := net.HardwareAddr{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01}
 
 	// Allocate IP
@@ -124,7 +124,7 @@ func TestServerReleaseIP(t *testing.T) {
 
 func TestServerBuildResponse(t *testing.T) {
 	_, network, _ := net.ParseCIDR("192.168.137.0/24")
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("192.168.137.1"),
 		ServerMAC:     net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
@@ -136,7 +136,7 @@ func TestServerBuildResponse(t *testing.T) {
 	}
 
 	server := NewServer(config)
-	
+
 	clientMAC := net.HardwareAddr{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01}
 	clientIP := net.ParseIP("192.168.137.10")
 
@@ -161,7 +161,7 @@ func TestServerBuildResponse(t *testing.T) {
 
 func TestServerCleanupLoop(t *testing.T) {
 	_, network, _ := net.ParseCIDR("192.168.137.0/24")
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("192.168.137.1"),
 		ServerMAC:     net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
@@ -173,7 +173,7 @@ func TestServerCleanupLoop(t *testing.T) {
 	}
 
 	server := NewServer(config)
-	
+
 	mac := net.HardwareAddr{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01}
 
 	// Allocate IP

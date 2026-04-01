@@ -58,7 +58,7 @@ func SafeGoWithRetry(name string, maxRetries int, baseDelay time.Duration, fn Go
 		retries := 0
 		for {
 			done := make(chan bool, 1)
-			
+
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -74,11 +74,11 @@ func SafeGoWithRetry(name string, maxRetries int, baseDelay time.Duration, fn Go
 				}()
 				fn()
 			}()
-			
+
 			if <-done {
 				return // Success
 			}
-			
+
 			retries++
 			if retries > maxRetries {
 				slog.Error("Goroutine exceeded max retries, stopping",
@@ -86,18 +86,18 @@ func SafeGoWithRetry(name string, maxRetries int, baseDelay time.Duration, fn Go
 					"retries", retries)
 				return
 			}
-			
+
 			// Exponential backoff
 			delay := baseDelay * time.Duration(1<<uint(retries-1))
 			if delay > 30*time.Second {
 				delay = 30 * time.Second
 			}
-			
+
 			slog.Info("Restarting goroutine",
 				"name", name,
 				"retry", retries,
 				"delay", delay)
-			
+
 			time.Sleep(delay)
 		}
 	}()
@@ -126,13 +126,13 @@ func (w *WaitGroup) Wait() {
 // Panics are recovered and logged, but the channel will be closed without a value.
 func GoWithResult[T any](fn func() (T, error)) <-chan Result[T] {
 	ch := make(chan Result[T], 1)
-	
+
 	SafeGo(func() {
 		defer close(ch)
 		val, err := fn()
 		ch <- Result[T]{Value: val, Error: err}
 	})
-	
+
 	return ch
 }
 
@@ -160,7 +160,7 @@ func SetMaxProcs() int {
 // For systems with > 8 CPUs, it uses 75% of available CPUs to leave room for system processes.
 func OptimizeProcs() int {
 	cpus := runtime.NumCPU()
-	
+
 	// For systems with many CPUs, leave some headroom
 	if cpus > 8 {
 		target := cpus * 3 / 4
@@ -174,7 +174,7 @@ func OptimizeProcs() int {
 			"old_value", old)
 		return old
 	}
-	
+
 	// For smaller systems, use all available CPUs
 	old := runtime.GOMAXPROCS(cpus)
 	slog.Info("GOMAXPROCS set to CPU count",

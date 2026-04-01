@@ -16,16 +16,16 @@ type AdaptiveLimiter struct {
 	baseLimiter *Limiter
 
 	// Adaptive settings
-	minRate      float64 // Minimum rate (tokens/sec)
-	maxRate      float64 // Maximum rate (tokens/sec)
-	currentRate  uint64  // Current adaptive rate (fixed-point)
-	targetCPU    float64 // Target CPU usage (0.0-1.0)
-	targetMem    float64 // Target memory usage (0.0-1.0)
+	minRate     float64 // Minimum rate (tokens/sec)
+	maxRate     float64 // Maximum rate (tokens/sec)
+	currentRate uint64  // Current adaptive rate (fixed-point)
+	targetCPU   float64 // Target CPU usage (0.0-1.0)
+	targetMem   float64 // Target memory usage (0.0-1.0)
 
 	// Monitoring
-	cpuUsage     uint64 // Current CPU usage (fixed-point)
-	memUsage     uint64 // Current memory usage (fixed-point)
-	lastAdjust   int64  // Last adjustment time (nanoseconds)
+	cpuUsage   uint64 // Current CPU usage (fixed-point)
+	memUsage   uint64 // Current memory usage (fixed-point)
+	lastAdjust int64  // Last adjustment time (nanoseconds)
 
 	// Tuning parameters
 	adjustInterval time.Duration // How often to adjust rates

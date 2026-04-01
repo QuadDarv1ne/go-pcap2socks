@@ -112,15 +112,15 @@ func TestDHCPProbe_Failure(t *testing.T) {
 
 func TestHealthChecker_AddRemoveProbe(t *testing.T) {
 	hc := NewHealthChecker(DefaultHealthCheckerConfig())
-	
+
 	probe := NewHTTPProbe("Test", "http://example.com", 5*time.Second)
 	hc.AddProbe(probe)
-	
+
 	stats := hc.GetStats()
 	if stats.ProbeCount != 1 {
 		t.Errorf("Expected 1 probe, got: %d", stats.ProbeCount)
 	}
-	
+
 	hc.RemoveProbe("Test")
 	stats = hc.GetStats()
 	if stats.ProbeCount != 0 {
@@ -139,14 +139,14 @@ func TestHealthChecker_RunChecks(t *testing.T) {
 		CheckInterval:     1 * time.Second,
 		RecoveryThreshold: 3,
 	})
-	
+
 	probe := NewHTTPProbe("Test HTTP", server.URL, 5*time.Second)
 	hc.AddProbe(probe)
-	
+
 	// Запускаем проверку
 	ctx := context.Background()
 	hc.runChecks(ctx)
-	
+
 	stats := hc.GetStats()
 	if stats.TotalChecks != 1 {
 		t.Errorf("Expected 1 check, got: %d", stats.TotalChecks)
@@ -154,13 +154,13 @@ func TestHealthChecker_RunChecks(t *testing.T) {
 	if stats.ConsecutiveFailures != 0 {
 		t.Errorf("Expected 0 failures, got: %d", stats.ConsecutiveFailures)
 	}
-	
+
 	hc.Stop()
 }
 
 func TestHealthChecker_RecoveryTrigger(t *testing.T) {
 	recoveryCalled := atomic.Int32{}
-	
+
 	hc := NewHealthChecker(&HealthCheckerConfig{
 		CheckInterval:     100 * time.Millisecond,
 		RecoveryThreshold: 2,
@@ -171,19 +171,19 @@ func TestHealthChecker_RecoveryTrigger(t *testing.T) {
 			// Игнорируем
 		},
 	})
-	
+
 	// Добавляем failing probe
 	failProbe := NewDHCPProbe("Fail", "Always fail", func() bool { return false })
 	hc.AddProbe(failProbe)
-	
+
 	ctx := context.Background()
 	hc.Start(ctx)
-	
+
 	// Ждём срабатывания recovery (но не слишком долго)
 	time.Sleep(400 * time.Millisecond)
-	
+
 	hc.Stop()
-	
+
 	// Recovery должен быть вызван хотя бы один раз
 	if recoveryCalled.Load() < 1 {
 		t.Error("Expected recovery to be triggered at least once")
@@ -194,17 +194,17 @@ func TestHealthChecker_IsHealthy(t *testing.T) {
 	hc := NewHealthChecker(&HealthCheckerConfig{
 		RecoveryThreshold: 3,
 	})
-	
+
 	if !hc.IsHealthy() {
 		t.Error("Expected healthy state initially")
 	}
-	
+
 	// Имитируем failures
 	hc.consecutiveFailures.Store(2)
 	if !hc.IsHealthy() {
 		t.Error("Expected healthy state with 2 failures (threshold is 3)")
 	}
-	
+
 	hc.consecutiveFailures.Store(3)
 	if hc.IsHealthy() {
 		t.Error("Expected unhealthy state with 3 failures")
@@ -219,30 +219,30 @@ func TestHealthChecker_ConcurrentProbes(t *testing.T) {
 	defer server.Close()
 
 	hc := NewHealthChecker(DefaultHealthCheckerConfig())
-	
+
 	// Добавляем несколько probes
 	for i := 0; i < 5; i++ {
 		probe := NewHTTPProbe("Test HTTP", server.URL, 5*time.Second)
 		hc.AddProbe(probe)
 	}
-	
+
 	ctx := context.Background()
 	hc.runChecks(ctx)
-	
+
 	stats := hc.GetStats()
 	if stats.TotalChecks != 1 {
 		t.Errorf("Expected 1 check, got: %d", stats.TotalChecks)
 	}
-	
+
 	hc.Stop()
 }
 
 func TestHealthChecker_NoProbes(t *testing.T) {
 	hc := NewHealthChecker(DefaultHealthCheckerConfig())
-	
+
 	ctx := context.Background()
 	hc.runChecks(ctx) // Не должно паниковать
-	
+
 	stats := hc.GetStats()
 	// При отсутствии пробов проверка не засчитывается
 	if stats.ProbeCount != 0 {
@@ -261,7 +261,7 @@ func TestProbeType_String(t *testing.T) {
 		{ProbeInterface, "Interface"},
 		{ProbeType(999), "Unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			if tt.probeType.String() != tt.expected {
@@ -278,7 +278,7 @@ func BenchmarkHTTPProbe(b *testing.B) {
 	defer server.Close()
 
 	probe := NewHTTPProbe("Benchmark HTTP", server.URL, 5*time.Second)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		probe.Run(context.Background())
@@ -287,7 +287,7 @@ func BenchmarkHTTPProbe(b *testing.B) {
 
 func BenchmarkDNSProbe(b *testing.B) {
 	probe := NewDNSProbe("Benchmark DNS", "8.8.8.8:53", "google.com", 5*time.Second)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		probe.Run(context.Background())
@@ -301,18 +301,18 @@ func BenchmarkHealthChecker_MultipleProbes(b *testing.B) {
 	defer server.Close()
 
 	hc := NewHealthChecker(DefaultHealthCheckerConfig())
-	
+
 	for i := 0; i < 10; i++ {
 		probe := NewHTTPProbe("Benchmark HTTP", server.URL, 5*time.Second)
 		hc.AddProbe(probe)
 	}
-	
+
 	ctx := context.Background()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		hc.runChecks(ctx)
 	}
-	
+
 	hc.Stop()
 }

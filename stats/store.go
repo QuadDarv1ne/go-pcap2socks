@@ -21,7 +21,7 @@ type Store struct {
 	stopCleanup       chan struct{}
 	cleanupWg         sync.WaitGroup
 	deviceCount       atomic.Int32
-	
+
 	// ARP cache for fast IP->MAC resolution (reduces ARP scan overhead)
 	// Cache entry: IP -> *arpCacheEntry
 	arpCache     sync.Map
@@ -37,18 +37,18 @@ type arpCacheEntry struct {
 }
 
 const (
-	defaultMaxArpCache = 500           // Max entries in ARP cache
+	defaultMaxArpCache = 500             // Max entries in ARP cache
 	defaultArpCacheTTL = 5 * time.Minute // Cache entry TTL
 )
 
 // DeviceStats holds statistics for a single device
 type DeviceStats struct {
-	IP        string    `json:"ip"`
-	MAC       string    `json:"mac"`
-	Hostname  string    `json:"hostname"`
-	CustomName string   `json:"custom_name,omitempty"` // User-defined name
-	Connected bool      `json:"connected"`
-	LastSeen  time.Time `json:"last_seen"`
+	IP         string    `json:"ip"`
+	MAC        string    `json:"mac"`
+	Hostname   string    `json:"hostname"`
+	CustomName string    `json:"custom_name,omitempty"` // User-defined name
+	Connected  bool      `json:"connected"`
+	LastSeen   time.Time `json:"last_seen"`
 
 	// Traffic counters - using atomic for lock-free updates
 	totalBytes    uint64 // accessed via atomic operations
@@ -60,7 +60,7 @@ type DeviceStats struct {
 	SessionStart time.Time `json:"session_start"`
 
 	// Rate limiting
-	RateLimitUpload   uint64 `json:"rate_limit_upload,omitempty"` // bytes/sec
+	RateLimitUpload   uint64 `json:"rate_limit_upload,omitempty"`   // bytes/sec
 	RateLimitDownload uint64 `json:"rate_limit_download,omitempty"` // bytes/sec
 }
 
@@ -243,7 +243,7 @@ func (s *Store) UpdateArpCache(ip net.IP, mac net.HardwareAddr, hostname string)
 
 	// Update cache size counter
 	size := s.arpCacheSize.Add(1)
-	
+
 	// Evict old entries if cache is full
 	if size > s.maxArpCache {
 		s.cleanupArpCache()
@@ -264,7 +264,7 @@ func (s *Store) GetFromArpCache(ip net.IP) (mac string, hostname string, found b
 	}
 
 	entry := val.(*arpCacheEntry)
-	
+
 	// Check if entry is expired
 	if time.Since(entry.timestamp) > s.arpCacheTTL {
 		s.arpCache.Delete(ipStr)
@@ -303,7 +303,7 @@ func (s *Store) GetArpCacheStats() (size int32, max int32, ttl time.Duration) {
 // Optimized for high-frequency calls with atomic operations and reduced lock contention
 func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
 	var device *DeviceStats
-	
+
 	// Fast path: try to load existing device
 	if val, ok := s.devices.Load(ip); ok {
 		device = val.(*DeviceStats)
@@ -317,7 +317,7 @@ func (s *Store) RecordTraffic(ip, mac string, bytes uint64, isUpload bool) {
 			LastSeen:     now,
 			SessionStart: now,
 		}
-		
+
 		// Store and check if we won (in case of concurrent access)
 		if actual, loaded := s.devices.LoadOrStore(ip, device); loaded {
 			device = actual.(*DeviceStats)
@@ -353,7 +353,7 @@ func (s *Store) RecordTrafficWithHostname(ip, mac, hostname string, bytes uint64
 // Optimized with sync.Map Load for lock-free reads
 func (s *Store) UpdateHeartbeat(ip, mac string) {
 	var device *DeviceStats
-	
+
 	if val, ok := s.devices.Load(ip); ok {
 		device = val.(*DeviceStats)
 		device.LastSeen = time.Now()
@@ -437,7 +437,7 @@ func (s *Store) GetAllDevices() []*DeviceStats {
 	// Pre-allocate capacity to avoid reallocations during append
 	count := s.deviceCount.Load()
 	devices := make([]*DeviceStats, 0, count)
-	
+
 	s.devices.Range(func(k, v any) bool {
 		devices = append(devices, v.(*DeviceStats))
 		return true
@@ -538,9 +538,9 @@ func (s *Store) GetActiveDeviceCount() int {
 
 // Atomic counters for real-time tracking
 type TrafficCounter struct {
-	BytesSent      uint64
-	BytesReceived  uint64
-	PacketsSent    uint64
+	BytesSent       uint64
+	BytesReceived   uint64
+	PacketsSent     uint64
 	PacketsReceived uint64
 }
 

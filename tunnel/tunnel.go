@@ -39,10 +39,10 @@ const (
 
 	// tcpQueueBufferSize reduced to prevent memory bloat.
 	// 1024 is sufficient for most networks. Large buffers cause OOM issues.
-	tcpQueueBufferSize = 1024  // Reduced from 20000
+	tcpQueueBufferSize = 1024 // Reduced from 20000
 
 	// connectionPoolSize is the size of the connection pool
-	connectionPoolSize = 64  // Reduced from 128 to save memory
+	connectionPoolSize = 64 // Reduced from 128 to save memory
 
 	// connectionIdleTimeout is the timeout for idle connections in the pool
 	connectionIdleTimeout = 90 * time.Second
@@ -59,8 +59,8 @@ var (
 	_droppedConnCount atomic.Uint64
 
 	// Adaptive worker pool management
-	_workerCount    atomic.Int32 // Current number of active workers
-	_scaleChan      = make(chan int, 1) // Channel for scale commands (positive=up, negative=down)
+	_workerCount atomic.Int32        // Current number of active workers
+	_scaleChan   = make(chan int, 1) // Channel for scale commands (positive=up, negative=down)
 
 	// Connection pool with semaphore for better resource management
 	_connPool         = make(chan *pooledConn, connectionPoolSize)
@@ -74,14 +74,14 @@ var (
 
 	// ErrPoolExhausted is returned when pool is at capacity
 	ErrPoolExhausted = errors.New("connection pool exhausted")
-	
+
 	// Tunnel operation errors with context
-	ErrTunnelDialFailed   = errors.New("tunnel dial failed")
-	ErrTunnelCopyFailed   = errors.New("tunnel copy failed")
-	ErrTunnelClosed       = errors.New("tunnel closed")
-	ErrTunnelTimeout      = errors.New("tunnel timeout")
-	ErrTunnelConnRefused  = errors.New("tunnel connection refused")
-	
+	ErrTunnelDialFailed  = errors.New("tunnel dial failed")
+	ErrTunnelCopyFailed  = errors.New("tunnel copy failed")
+	ErrTunnelClosed      = errors.New("tunnel closed")
+	ErrTunnelTimeout     = errors.New("tunnel timeout")
+	ErrTunnelConnRefused = errors.New("tunnel connection refused")
+
 	// UDP tunnel errors
 	ErrUDPSessionTimeout = errors.New("udp session timeout")
 	ErrUPnPMappingFailed = errors.New("upnp mapping failed")
@@ -90,10 +90,10 @@ var (
 
 // TunnelError wraps tunnel errors with context
 type TunnelError struct {
-	Operation string   // Operation: "dial", "copy", "close"
-	SrcAddr   string   // Source address
-	DstAddr   string   // Destination address
-	Err       error    // Underlying error
+	Operation string // Operation: "dial", "copy", "close"
+	SrcAddr   string // Source address
+	DstAddr   string // Destination address
+	Err       error  // Underlying error
 }
 
 func (e *TunnelError) Error() string {
@@ -130,25 +130,25 @@ type pooledConn struct {
 
 // ConnectionPoolStats holds connection pool statistics
 type ConnectionPoolStats struct {
-	ActiveConnections   int32 `json:"active_connections"`
-	PooledConnections   int   `json:"pooled_connections"`
-	PoolSize            int   `json:"pool_size"`
-	TotalCreated        int32 `json:"total_created"`
-	TotalReused         int32 `json:"total_reused"`
-	DroppedConnections  uint64 `json:"dropped_connections"`
-	PoolUtilization     float64 `json:"pool_utilization"`
+	ActiveConnections  int32   `json:"active_connections"`
+	PooledConnections  int     `json:"pooled_connections"`
+	PoolSize           int     `json:"pool_size"`
+	TotalCreated       int32   `json:"total_created"`
+	TotalReused        int32   `json:"total_reused"`
+	DroppedConnections uint64  `json:"dropped_connections"`
+	PoolUtilization    float64 `json:"pool_utilization"`
 }
 
 // GetConnectionPoolStats returns connection pool statistics
 func GetConnectionPoolStats() ConnectionPoolStats {
 	active := _activeConnCount.Load()
 	poolSize := len(_connPool)
-	
+
 	var utilization float64
 	if connectionPoolSize > 0 {
 		utilization = float64(active) / float64(connectionPoolSize) * 100
 	}
-	
+
 	return ConnectionPoolStats{
 		ActiveConnections:  active,
 		PooledConnections:  poolSize,
@@ -187,10 +187,10 @@ func releaseConn(pooled *pooledConn) {
 	if pooled == nil {
 		return
 	}
-	
+
 	pooled.inUse = false
 	now := time.Now()
-	
+
 	// Check if connection is too old
 	if now.Sub(pooled.createdAt) > connectionMaxLifetime {
 		if pooled.conn != nil {
@@ -198,7 +198,7 @@ func releaseConn(pooled *pooledConn) {
 		}
 		return
 	}
-	
+
 	// Try to return to pool
 	select {
 	case _connPool <- pooled:
@@ -215,7 +215,7 @@ func releaseConn(pooled *pooledConn) {
 func cleanupPool() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-_stopChan:
@@ -230,7 +230,7 @@ func cleanupPool() {
 func drainAndClean() {
 	var valid []*pooledConn
 	now := time.Now()
-	
+
 	// Drain pool
 	for {
 		select {
@@ -238,7 +238,7 @@ func drainAndClean() {
 			if pooled == nil {
 				continue
 			}
-			
+
 			// Check if connection is still valid
 			if now.Sub(pooled.lastUsed) > connectionIdleTimeout ||
 				now.Sub(pooled.createdAt) > connectionMaxLifetime {
@@ -253,7 +253,7 @@ func drainAndClean() {
 			goto done
 		}
 	}
-	
+
 done:
 	// Return valid connections
 	for _, pooled := range valid {
@@ -265,7 +265,7 @@ done:
 			}
 		}
 	}
-	
+
 	slog.Debug("Connection pool cleaned",
 		"valid", len(valid),
 		"pool_size", len(_connPool))
@@ -423,14 +423,14 @@ func scaleWorkers(ctx context.Context) {
 // closePool closes all pooled connections
 func closePool() {
 	close(_connPool)
-	
+
 	// Close remaining pooled connections
 	for pooled := range _connPool {
 		if pooled != nil && pooled.conn != nil {
 			pooled.conn.Close()
 		}
 	}
-	
+
 	slog.Info("Connection pool closed",
 		"total_created", _poolCreatedCount.Load(),
 		"total_reused", _poolReusedCount.Load())

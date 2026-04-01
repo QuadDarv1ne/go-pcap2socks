@@ -26,7 +26,7 @@ func TestEngineSelector_Preferences(t *testing.T) {
 
 func TestEngineType_GetDescription(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		engine EngineType
 		want   string
 	}{
@@ -51,8 +51,8 @@ func TestEngineSelector_GetEngineRecommendation(t *testing.T) {
 	selector := NewEngineSelector()
 
 	tests := []struct {
-		name   string
-		engine EngineType
+		name     string
+		engine   EngineType
 		contains string
 	}{
 		{"WinDivert", EngineWinDivert, "WinDivert"},

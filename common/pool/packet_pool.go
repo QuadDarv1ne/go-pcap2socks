@@ -25,18 +25,18 @@ import (
 // Buffers >64 KB are rare in network processing and should be handled by GC.
 var PacketPool = &packetPool{
 	pools: [12]sync.Pool{
-		{New: func() any { return make([]byte, 0, 64) }},      // 64 B
-		{New: func() any { return make([]byte, 0, 128) }},     // 128 B
-		{New: func() any { return make([]byte, 0, 256) }},     // 256 B
-		{New: func() any { return make([]byte, 0, 512) }},     // 512 B
-		{New: func() any { return make([]byte, 0, 1024) }},    // 1 KB
-		{New: func() any { return make([]byte, 0, 2048) }},    // 2 KB
-		{New: func() any { return make([]byte, 0, 4096) }},    // 4 KB
-		{New: func() any { return make([]byte, 0, 8192) }},    // 8 KB
-		{New: func() any { return make([]byte, 0, 16384) }},   // 16 KB
-		{New: func() any { return make([]byte, 0, 32768) }},   // 32 KB
-		{New: func() any { return make([]byte, 0, 65536) }},   // 64 KB (max Ethernet Jumbo)
-		{New: func() any { return make([]byte, 0, 131072) }},  // 128 KB (for large payloads)
+		{New: func() any { return make([]byte, 0, 64) }},     // 64 B
+		{New: func() any { return make([]byte, 0, 128) }},    // 128 B
+		{New: func() any { return make([]byte, 0, 256) }},    // 256 B
+		{New: func() any { return make([]byte, 0, 512) }},    // 512 B
+		{New: func() any { return make([]byte, 0, 1024) }},   // 1 KB
+		{New: func() any { return make([]byte, 0, 2048) }},   // 2 KB
+		{New: func() any { return make([]byte, 0, 4096) }},   // 4 KB
+		{New: func() any { return make([]byte, 0, 8192) }},   // 8 KB
+		{New: func() any { return make([]byte, 0, 16384) }},  // 16 KB
+		{New: func() any { return make([]byte, 0, 32768) }},  // 32 KB
+		{New: func() any { return make([]byte, 0, 65536) }},  // 64 KB (max Ethernet Jumbo)
+		{New: func() any { return make([]byte, 0, 131072) }}, // 128 KB (for large payloads)
 	},
 }
 
@@ -74,13 +74,13 @@ func (pp *packetPool) PutPacket(buf []byte) {
 	if cap(buf) == 0 {
 		return
 	}
-	
+
 	idx := pp.sizeIndex(cap(buf))
 	// Verify buffer belongs to our pool (safety check)
 	if idx >= len(pp.pools) {
 		return // Buffer too large, let GC handle it
 	}
-	
+
 	pp.frees.Add(1)
 	// Reset buffer before returning to pool
 	pp.pools[idx].Put(buf[:0])
@@ -124,13 +124,14 @@ func (pp *packetPool) Stats() (allocs, frees uint64, inUse int64) {
 // It allows processing multiple packets without intermediate copies.
 //
 // Usage:
-//   batch := BatchPacketPool.GetBatch(10)
-//   for i := range batch {
-//       batch[i] = PacketPool.GetPacket(1500)
-//       // ... fill with packet data ...
-//   }
-//   // ... process batch ...
-//   BatchPacketPool.PutBatch(batch)
+//
+//	batch := BatchPacketPool.GetBatch(10)
+//	for i := range batch {
+//	    batch[i] = PacketPool.GetPacket(1500)
+//	    // ... fill with packet data ...
+//	}
+//	// ... process batch ...
+//	BatchPacketPool.PutBatch(batch)
 var BatchPacketPool = &batchPacketPool{}
 
 // batchPacketPool manages batches of packet buffers
@@ -145,20 +146,20 @@ func (bpp *batchPacketPool) GetBatch(count int) [][]byte {
 	if count <= 0 {
 		return nil
 	}
-	
+
 	batch, ok := bpp.pool.Get().([][]byte)
 	if !ok || cap(batch) < count {
 		batch = make([][]byte, 0, count)
 	} else {
 		batch = batch[:0]
 	}
-	
+
 	// Pre-allocate buffers in the batch
 	for i := 0; i < count; i++ {
 		buf := PacketPool.GetPacket(1500) // Standard Ethernet MTU
 		batch = append(batch, buf)
 	}
-	
+
 	return batch
 }
 
@@ -168,14 +169,14 @@ func (bpp *batchPacketPool) PutBatch(batch [][]byte) {
 	if batch == nil {
 		return
 	}
-	
+
 	// Return individual buffers to PacketPool
 	for _, buf := range batch {
 		if buf != nil {
 			PacketPool.PutPacket(buf)
 		}
 	}
-	
+
 	// Clear and return batch slice to pool
 	batch = batch[:0]
 	bpp.pool.Put(batch)
@@ -185,11 +186,12 @@ func (bpp *batchPacketPool) PutBatch(batch [][]byte) {
 // It wraps a channel with sync.Pool-based buffers to avoid copying.
 //
 // Usage:
-//   ch := NewPacketChannel(100)
-//   ch.Send(PacketPool.GetPacket(1500))
-//   buf := <-ch.Receive()
-//   // ... process packet ...
-//   PacketPool.PutPacket(buf)
+//
+//	ch := NewPacketChannel(100)
+//	ch.Send(PacketPool.GetPacket(1500))
+//	buf := <-ch.Receive()
+//	// ... process packet ...
+//	PacketPool.PutPacket(buf)
 type PacketChannel struct {
 	ch chan []byte
 }

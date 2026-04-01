@@ -9,17 +9,17 @@ import (
 type DeviceType string
 
 const (
-	DevicePS4      DeviceType = "ps4"
-	DevicePS5      DeviceType = "ps5"
-	DeviceXbox     DeviceType = "xbox"
-	DeviceXboxOne  DeviceType = "xbox_one"
-	DeviceXboxSX   DeviceType = "xbox_series"
-	DeviceSwitch   DeviceType = "switch"
-	DevicePC       DeviceType = "pc"
-	DevicePhone    DeviceType = "phone"
-	DeviceTablet   DeviceType = "tablet"
-	DeviceRobot    DeviceType = "robot"
-	DeviceUnknown  DeviceType = "unknown"
+	DevicePS4     DeviceType = "ps4"
+	DevicePS5     DeviceType = "ps5"
+	DeviceXbox    DeviceType = "xbox"
+	DeviceXboxOne DeviceType = "xbox_one"
+	DeviceXboxSX  DeviceType = "xbox_series"
+	DeviceSwitch  DeviceType = "switch"
+	DevicePC      DeviceType = "pc"
+	DevicePhone   DeviceType = "phone"
+	DeviceTablet  DeviceType = "tablet"
+	DeviceRobot   DeviceType = "robot"
+	DeviceUnknown DeviceType = "unknown"
 )
 
 // DeviceProfile contains device-specific optimizations

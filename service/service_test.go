@@ -31,7 +31,7 @@ func TestInstall_NotAdmin(t *testing.T) {
 	// This test will fail if run as admin, but that's expected
 	// It tests that Install returns an error when not running as admin
 	err := Install()
-	
+
 	// Should return an error (access denied or service manager connection error)
 	if err == nil {
 		t.Log("Install() succeeded - test should be run as non-admin")
@@ -42,7 +42,7 @@ func TestInstall_NotAdmin(t *testing.T) {
 
 func TestUninstall_ServiceNotInstalled(t *testing.T) {
 	err := Uninstall()
-	
+
 	if err == nil {
 		t.Log("Uninstall() succeeded - service was installed")
 	} else {
@@ -53,18 +53,18 @@ func TestUninstall_ServiceNotInstalled(t *testing.T) {
 
 func TestStatus_ServiceNotInstalled(t *testing.T) {
 	status, err := Status()
-	
+
 	if err != nil {
 		t.Errorf("Status() returned error: %v", err)
 	}
-	
+
 	// Should return "not_installed" or similar
 	t.Logf("Service status: %s", status)
 }
 
 func TestIsInstalled_ServiceNotInstalled(t *testing.T) {
 	installed := IsInstalled()
-	
+
 	if installed {
 		t.Log("Service is installed")
 	} else {
@@ -75,7 +75,7 @@ func TestIsInstalled_ServiceNotInstalled(t *testing.T) {
 func TestWaitForService_Timeout(t *testing.T) {
 	// Test timeout when service is not installed
 	err := WaitForService(svc.Running, 1*time.Second)
-	
+
 	if err == nil {
 		t.Error("WaitForService() should timeout when service is not installed")
 	} else {
@@ -86,7 +86,7 @@ func TestWaitForService_Timeout(t *testing.T) {
 func TestWaitForService_InvalidState(t *testing.T) {
 	// Test with invalid state
 	err := WaitForService(svc.State(999), 100*time.Millisecond)
-	
+
 	// Should timeout or return error
 	if err == nil {
 		t.Error("WaitForService() should return error for invalid state")
@@ -95,7 +95,7 @@ func TestWaitForService_InvalidState(t *testing.T) {
 
 func TestStart_ServiceNotInstalled(t *testing.T) {
 	err := Start()
-	
+
 	if err == nil {
 		t.Log("Start() succeeded - service was installed")
 	} else {
@@ -105,7 +105,7 @@ func TestStart_ServiceNotInstalled(t *testing.T) {
 
 func TestStop_ServiceNotInstalled(t *testing.T) {
 	err := Stop()
-	
+
 	if err == nil {
 		t.Log("Stop() succeeded - service was installed and stopped")
 	} else {
@@ -214,7 +214,7 @@ func TestWindowsService_Execute_InvalidCommand(t *testing.T) {
 func TestRunMainApp(t *testing.T) {
 	// Test runMainApp function
 	err := runMainApp()
-	
+
 	// This will likely fail in test environment without proper config
 	if err == nil {
 		t.Log("runMainApp() succeeded")
@@ -228,16 +228,16 @@ func TestServiceConfig(t *testing.T) {
 	expectedDisplayName := "go-pcap2socks - SOCKS5 Proxy for Devices"
 	expectedDescription := "Перенаправляет трафик с устройств (PS4, Xbox, Switch) на SOCKS5 прокси"
 	expectedStartType := mgr.StartAutomatic
-	
+
 	// These are compile-time checks, but we can at least verify the constants
 	if expectedDisplayName == "" {
 		t.Error("DisplayName should not be empty")
 	}
-	
+
 	if expectedDescription == "" {
 		t.Error("Description should not be empty")
 	}
-	
+
 	if expectedStartType != mgr.StartAutomatic {
 		t.Errorf("StartType = %v, want %v", expectedStartType, mgr.StartAutomatic)
 	}
@@ -246,7 +246,7 @@ func TestServiceConfig(t *testing.T) {
 func TestServiceRecovery(t *testing.T) {
 	// Note: The current implementation doesn't set service recovery options
 	// This test documents that limitation
-	
+
 	t.Log("Service recovery options are not configured in current implementation")
 	t.Log("Consider adding: sc.exe failure <service> reset= 0 actions= restart/60000")
 }

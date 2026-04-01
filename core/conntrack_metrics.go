@@ -9,43 +9,43 @@ import (
 // ConnMetrics holds detailed connection metrics
 type ConnMetrics struct {
 	// Connection counters
-	activeTCP   *atomic.Int32
-	activeUDP   *atomic.Int32
-	totalTCP    *atomic.Uint64
-	totalUDP    *atomic.Uint64
-	droppedTCP  *atomic.Uint64
-	droppedUDP  *atomic.Uint64
-	
+	activeTCP  *atomic.Int32
+	activeUDP  *atomic.Int32
+	totalTCP   *atomic.Uint64
+	totalUDP   *atomic.Uint64
+	droppedTCP *atomic.Uint64
+	droppedUDP *atomic.Uint64
+
 	// Traffic counters
 	bytesSent     *atomic.Uint64
 	bytesReceived *atomic.Uint64
-	
+
 	// Error counters
-	dialErrors    *atomic.Uint64
-	writeErrors   *atomic.Uint64
-	readErrors    *atomic.Uint64
-	
+	dialErrors  *atomic.Uint64
+	writeErrors *atomic.Uint64
+	readErrors  *atomic.Uint64
+
 	// Performance metrics
-	avgLatencyMs  *atomic.Uint64 // Average latency in milliseconds
-	lastUpdate    *atomic.Int64  // Last update timestamp
+	avgLatencyMs *atomic.Uint64 // Average latency in milliseconds
+	lastUpdate   *atomic.Int64  // Last update timestamp
 }
 
 // NewConnMetrics creates a new connection metrics instance
 func NewConnMetrics() *ConnMetrics {
 	return &ConnMetrics{
-		activeTCP:    &atomic.Int32{},
-		activeUDP:    &atomic.Int32{},
-		totalTCP:     &atomic.Uint64{},
-		totalUDP:     &atomic.Uint64{},
-		droppedTCP:   &atomic.Uint64{},
-		droppedUDP:   &atomic.Uint64{},
-		bytesSent:    &atomic.Uint64{},
+		activeTCP:     &atomic.Int32{},
+		activeUDP:     &atomic.Int32{},
+		totalTCP:      &atomic.Uint64{},
+		totalUDP:      &atomic.Uint64{},
+		droppedTCP:    &atomic.Uint64{},
+		droppedUDP:    &atomic.Uint64{},
+		bytesSent:     &atomic.Uint64{},
 		bytesReceived: &atomic.Uint64{},
-		dialErrors:   &atomic.Uint64{},
-		writeErrors:  &atomic.Uint64{},
-		readErrors:   &atomic.Uint64{},
-		avgLatencyMs: &atomic.Uint64{},
-		lastUpdate:   &atomic.Int64{},
+		dialErrors:    &atomic.Uint64{},
+		writeErrors:   &atomic.Uint64{},
+		readErrors:    &atomic.Uint64{},
+		avgLatencyMs:  &atomic.Uint64{},
+		lastUpdate:    &atomic.Int64{},
 	}
 }
 
@@ -166,11 +166,11 @@ func (ct *ConnTracker) CheckHealth() HealthCheck {
 	if totalConns > 0 {
 		errorRate = float64(totalErrors) / float64(totalConns)
 	}
-	
+
 	// Determine health status
 	var status HealthStatus
 	var message string
-	
+
 	switch {
 	case errorRate > 0.1: // More than 10% errors
 		status = HealthUnhealthy
@@ -185,7 +185,7 @@ func (ct *ConnTracker) CheckHealth() HealthCheck {
 		status = HealthHealthy
 		message = "All systems operational"
 	}
-	
+
 	return HealthCheck{
 		Status:       status,
 		ActiveConns:  totalConns,
@@ -199,22 +199,22 @@ func (ct *ConnTracker) CheckHealth() HealthCheck {
 func (ct *ConnTracker) GetMetrics() MetricsSnapshot {
 	tcpActive, tcpTotal, tcpDropped := ct.GetTCPStats()
 	udpActive, udpTotal, udpDropped := ct.GetUDPStats()
-	
+
 	return MetricsSnapshot{
-		ActiveTCP:   tcpActive,
-		ActiveUDP:   udpActive,
-		TotalTCP:    tcpTotal,
-		TotalUDP:    udpTotal,
-		DroppedTCP:  tcpDropped,
-		DroppedUDP:  udpDropped,
-		LastUpdate:  time.Now(),
+		ActiveTCP:  tcpActive,
+		ActiveUDP:  udpActive,
+		TotalTCP:   tcpTotal,
+		TotalUDP:   udpTotal,
+		DroppedTCP: tcpDropped,
+		DroppedUDP: udpDropped,
+		LastUpdate: time.Now(),
 	}
 }
 
 // ExportPrometheus exports metrics in Prometheus format
 func (ct *ConnTracker) ExportPrometheus() string {
 	metrics := ct.GetMetrics()
-	
+
 	return `# HELP go_pcap2socks_conntrack_active_tcp Active TCP connections
 # TYPE go_pcap2socks_conntrack_active_tcp gauge
 go_pcap2socks_conntrack_active_tcp ` + formatUint64(uint64(metrics.ActiveTCP)) + `
@@ -244,11 +244,11 @@ func formatUint64(v uint64) string {
 		v = q
 	}
 	buf = append(buf, byte('0'+v))
-	
+
 	// Reverse
 	for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
 		buf[i], buf[j] = buf[j], buf[i]
 	}
-	
+
 	return string(buf)
 }

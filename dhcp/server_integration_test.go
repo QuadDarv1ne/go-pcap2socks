@@ -135,10 +135,10 @@ func TestDHCPServer_Configuration(t *testing.T) {
 			}
 
 			config := &dhcp.ServerConfig{
-				Network:   network,
-				ServerIP:  net.ParseIP("192.168.100.1"),
-				FirstIP:   net.ParseIP(tc.poolStart),
-				LastIP:    net.ParseIP(tc.poolEnd),
+				Network:  network,
+				ServerIP: net.ParseIP("192.168.100.1"),
+				FirstIP:  net.ParseIP(tc.poolStart),
+				LastIP:   net.ParseIP(tc.poolEnd),
 			}
 
 			server := dhcp.NewServer(config)

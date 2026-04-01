@@ -60,3 +60,24 @@ WinDivert.dll
 /deps/*/WinDivert64.dll
 /deps/*/WinDivert32.sys
 /deps/*/WinDivert32.dll
+
+# Backup files
+config-backups/
+pre-update-backups/
+*.bak
+*.backup
+
+# Diagnostic and log analysis reports
+diagnostic-report*.txt
+diag-*.txt
+log-analysis-*.txt
+
+# Environment files (keep .env.example, ignore .env)
+.env
+
+# State files
+state.json
+panic.log
+
+# Coverage
+coverage.out

@@ -10,7 +10,7 @@ func TestBufferPoolBasic(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// Test small buffer
@@ -35,7 +35,7 @@ func TestBufferPoolGet(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// Test size-based routing
@@ -74,7 +74,7 @@ func TestBufferPoolPut(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// Test routing based on capacity
@@ -89,7 +89,7 @@ func TestBufferPoolStats(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// Initial stats should be zero
@@ -120,7 +120,7 @@ func TestBufferPoolHitRatio(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// First allocation - miss
@@ -145,7 +145,7 @@ func TestBufferPoolConcurrent(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	var wg sync.WaitGroup
@@ -180,7 +180,7 @@ func TestBufferPoolZeroing(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// Get buffer and write data
@@ -207,7 +207,7 @@ func TestBufferPoolMaxActive(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// Get multiple buffers without returning
@@ -239,7 +239,7 @@ func TestBufferPoolReset(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	// Generate some stats
@@ -265,7 +265,7 @@ func TestDefaultPool(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	// Test global default pool functions
 	buf := Get(1024)
 	Put(buf)
@@ -283,7 +283,7 @@ func TestBufferPoolSizes(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	mp := NewMultiPool()
 
 	sizes := []int{SizeSmall, SizeMedium, SizeLarge, SizeHuge, SizeMax}

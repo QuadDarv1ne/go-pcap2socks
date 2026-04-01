@@ -1,0 +1,76 @@
+#!/bin/sh
+# Pre-commit hook for go-pcap2socks
+# Установите: copy .githooks\pre-commit .git\hooks\pre-commit
+
+echo "Running pre-commit hooks..."
+
+# Check Go code
+echo "Checking Go code..."
+go fmt ./...
+if [ $? -ne 0 ]; then
+    echo "❌ go fmt failed"
+    exit 1
+fi
+echo "✓ go fmt passed"
+
+go vet ./...
+if [ $? -ne 0 ]; then
+    echo "❌ go vet failed"
+    exit 1
+fi
+echo "✓ go vet passed"
+
+# Run tests for changed packages
+echo "Running tests..."
+go test -short ./...
+if [ $? -ne 0 ]; then
+    echo "❌ Tests failed"
+    exit 1
+fi
+echo "✓ Tests passed"
+
+# Check PowerShell scripts
+echo "Checking PowerShell scripts..."
+for ps_file in *.ps1; do
+    if [ -f "$ps_file" ]; then
+        powershell -Command "& { 
+            \$e = \$null
+            [System.Management.Automation.Language.Parser]::ParseFile('$ps_file', [ref]\$null, [ref]\$e)
+            if (\$e.Count -gt 0) { 
+                Write-Host \"❌ $ps_file has \$(\$e.Count) errors\"
+                exit 1
+            }
+        }"
+        if [ $? -ne 0 ]; then
+            echo "❌ PowerShell syntax check failed for $ps_file"
+            exit 1
+        fi
+    fi
+done
+echo "✓ PowerShell scripts passed"
+
+# Check for trailing whitespace
+echo "Checking for trailing whitespace..."
+if git grep -q '[[:space:]]$' -- '*.go' '*.md' '*.ps1'; then
+    echo "❌ Trailing whitespace found"
+    git grep '[[:space:]]$' -- '*.go' '*.md' '*.ps1'
+    exit 1
+fi
+echo "✓ No trailing whitespace"
+
+# Check for large files
+echo "Checking file sizes..."
+for file in $(git diff --cached --name-only); do
+    if [ -f "$file" ]; then
+        size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+        if [ "$size" -gt 1048576 ]; then
+            echo "❌ File $file is larger than 1MB ($size bytes)"
+            exit 1
+        fi
+    fi
+done
+echo "✓ File sizes OK"
+
+echo ""
+echo "✅ All pre-commit checks passed!"
+exit 0

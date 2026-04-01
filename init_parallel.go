@@ -23,15 +23,15 @@ func initComponentsParallel(config *cfg.Config) (
 
 	// Каналы для результатов инициализации
 	type profileResult struct {
-		pm *profiles.Manager
+		pm  *profiles.Manager
 		err error
 	}
 	type upnpResult struct {
-		um *upnpmanager.Manager
+		um  *upnpmanager.Manager
 		err error
 	}
 	type dnsResult struct {
-		dr *dns.Resolver
+		dr  *dns.Resolver
 		err error
 	}
 

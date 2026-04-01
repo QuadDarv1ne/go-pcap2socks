@@ -15,11 +15,11 @@ import (
 // LeaseDB represents a persistent DHCP lease database
 // Optimized with sync.Map for lock-free lease access
 type LeaseDB struct {
-	leases   sync.Map // map[string]*DHCPLease
-	dbPath   string
-	dirty    atomic.Bool
-	saveChan chan struct{}
-	stopChan chan struct{}
+	leases     sync.Map // map[string]*DHCPLease
+	dbPath     string
+	dirty      atomic.Bool
+	saveChan   chan struct{}
+	stopChan   chan struct{}
 	leaseCount atomic.Int32
 }
 

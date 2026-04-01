@@ -13,17 +13,17 @@ import (
 
 // Pre-defined errors for better error handling
 var (
-	ErrConfigFileNotFound     = fmt.Errorf("config file not found")
-	ErrConfigDecode           = fmt.Errorf("failed to decode config")
-	ErrConfigNormalize        = fmt.Errorf("failed to normalize config")
-	ErrConfigValidate         = fmt.Errorf("failed to validate config")
-	ErrNoOutbounds            = fmt.Errorf("no outbounds configured")
+	ErrConfigFileNotFound      = fmt.Errorf("config file not found")
+	ErrConfigDecode            = fmt.Errorf("failed to decode config")
+	ErrConfigNormalize         = fmt.Errorf("failed to normalize config")
+	ErrConfigValidate          = fmt.Errorf("failed to validate config")
+	ErrNoOutbounds             = fmt.Errorf("no outbounds configured")
 	ErrInvalidInterfaceGateway = fmt.Errorf("invalid interface gateway")
-	ErrInvalidNetwork         = fmt.Errorf("invalid network configuration")
-	ErrInvalidLocalIP         = fmt.Errorf("invalid local IP")
-	ErrInvalidDHCPConfig      = fmt.Errorf("invalid DHCP configuration")
-	ErrInvalidDHCPPool        = fmt.Errorf("invalid DHCP pool configuration")
-	ErrInvalidTelegramConfig  = fmt.Errorf("invalid Telegram configuration")
+	ErrInvalidNetwork          = fmt.Errorf("invalid network configuration")
+	ErrInvalidLocalIP          = fmt.Errorf("invalid local IP")
+	ErrInvalidDHCPConfig       = fmt.Errorf("invalid DHCP configuration")
+	ErrInvalidDHCPPool         = fmt.Errorf("invalid DHCP pool configuration")
+	ErrInvalidTelegramConfig   = fmt.Errorf("invalid Telegram configuration")
 )
 
 func Exists(filePath string) bool {
@@ -65,28 +65,28 @@ func Load(filePath string) (*Config, error) {
 }
 
 type Config struct {
-	ExecuteOnStart []string  `json:"executeOnStart,omitempty"`
-	PCAP           PCAP      `json:"pcap"`
-	DHCP           *DHCP     `json:"dhcp,omitempty"`
-	DNS            DNS       `json:"dns"`
+	ExecuteOnStart []string `json:"executeOnStart,omitempty"`
+	PCAP           PCAP     `json:"pcap"`
+	DHCP           *DHCP    `json:"dhcp,omitempty"`
+	DNS            DNS      `json:"dns"`
 	Routing        struct {
 		Rules []Rule `json:"rules"`
 	} `json:"routing"`
-	Outbounds    []Outbound    `json:"outbounds"`
-	WANBalancer  *WANBalancer  `json:"wanBalancer,omitempty"`
-	Capture      Capture       `json:"capture,omitempty"`
-	Language     string        `json:"language,omitempty"`
-	API          *API          `json:"api,omitempty"`
-	Telegram     *Telegram     `json:"telegram,omitempty"`
-	Discord      *Discord      `json:"discord,omitempty"`
-	Hotkey       *Hotkey       `json:"hotkey,omitempty"`
-	UPnP         *UPnP         `json:"upnp,omitempty"`
-	MTU          *MTU          `json:"mtu,omitempty"`
-	MACFilter    *MACFilter    `json:"macFilter,omitempty"`
-	WinDivert    *WinDivert    `json:"windivert,omitempty"`
-	RateLimit    *RateLimit    `json:"rateLimit,omitempty"`
-	RateLimiter  *RateLimiter  `json:"rateLimiter,omitempty"`
-	NAT          *NAT          `json:"nat,omitempty"`
+	Outbounds   []Outbound   `json:"outbounds"`
+	WANBalancer *WANBalancer `json:"wanBalancer,omitempty"`
+	Capture     Capture      `json:"capture,omitempty"`
+	Language    string       `json:"language,omitempty"`
+	API         *API         `json:"api,omitempty"`
+	Telegram    *Telegram    `json:"telegram,omitempty"`
+	Discord     *Discord     `json:"discord,omitempty"`
+	Hotkey      *Hotkey      `json:"hotkey,omitempty"`
+	UPnP        *UPnP        `json:"upnp,omitempty"`
+	MTU         *MTU         `json:"mtu,omitempty"`
+	MACFilter   *MACFilter   `json:"macFilter,omitempty"`
+	WinDivert   *WinDivert   `json:"windivert,omitempty"`
+	RateLimit   *RateLimit   `json:"rateLimit,omitempty"`
+	RateLimiter *RateLimiter `json:"rateLimiter,omitempty"`
+	NAT         *NAT         `json:"nat,omitempty"`
 }
 
 // RateLimiter holds token bucket rate limiting configuration
@@ -130,11 +130,11 @@ func ParseBandwidth(bandwidth string) (uint64, error) {
 	if bandwidth == "" {
 		return 0, fmt.Errorf("empty bandwidth value")
 	}
-	
+
 	// Extract number and unit
 	var numStr string
 	var unit string
-	
+
 	// Find where digits end
 	for i, r := range bandwidth {
 		if r < '0' || r > '9' {
@@ -143,24 +143,24 @@ func ParseBandwidth(bandwidth string) (uint64, error) {
 			break
 		}
 	}
-	
+
 	// If no unit found, entire string is the number
 	if numStr == "" {
 		numStr = bandwidth
 		unit = ""
 	}
-	
+
 	if numStr == "" {
 		return 0, fmt.Errorf("invalid bandwidth format: no number found")
 	}
-	
+
 	num, err := strconv.ParseUint(numStr, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid bandwidth number: %w", err)
 	}
-	
+
 	unitLower := strings.ToLower(unit)
-	
+
 	// Convert to bytes per second
 	switch unitLower {
 	// Decimal (network) units - bits per second
@@ -170,7 +170,7 @@ func ParseBandwidth(bandwidth string) (uint64, error) {
 		return num * 1000000 / 8, nil
 	case "gbps", "gb/s", "gbit/s":
 		return num * 1000000000 / 8, nil
-	
+
 	// Binary units - bytes per second
 	case "k", "kb", "kib", "kib/s", "k/s":
 		return num * 1024, nil
@@ -178,11 +178,11 @@ func ParseBandwidth(bandwidth string) (uint64, error) {
 		return num * 1024 * 1024, nil
 	case "g", "gb", "gib", "gib/s", "g/s":
 		return num * 1024 * 1024 * 1024, nil
-	
+
 	// Plain bytes per second
 	case "bps", "b/s", "":
 		return num, nil
-	
+
 	default:
 		return 0, fmt.Errorf("unknown bandwidth unit: %s", unit)
 	}
@@ -190,14 +190,14 @@ func ParseBandwidth(bandwidth string) (uint64, error) {
 
 // MTU holds Path MTU Discovery configuration
 type MTU struct {
-	Enabled         bool           `json:"enabled"`
-	AutoDiscover    bool           `json:"autoDiscover"`
-	BaseMTU         uint32         `json:"baseMTU"`
-	MinMTU          uint32         `json:"minMTU"`
-	MaxMTU          uint32         `json:"maxMTU"`
-	ProbeTimeout    uint32         `json:"probeTimeout"` // milliseconds
-	CacheExpiry     uint32         `json:"cacheExpiry"`  // seconds
-	MSSClamping     bool           `json:"mssClamping"`
+	Enabled           bool              `json:"enabled"`
+	AutoDiscover      bool              `json:"autoDiscover"`
+	BaseMTU           uint32            `json:"baseMTU"`
+	MinMTU            uint32            `json:"minMTU"`
+	MaxMTU            uint32            `json:"maxMTU"`
+	ProbeTimeout      uint32            `json:"probeTimeout"` // milliseconds
+	CacheExpiry       uint32            `json:"cacheExpiry"`  // seconds
+	MSSClamping       bool              `json:"mssClamping"`
 	ProtocolOverheads map[string]uint32 `json:"protocolOverheads"`
 }
 
@@ -208,8 +208,8 @@ type PCAP struct {
 	LocalIP          string `json:"localIP"`
 	LocalMAC         string `json:"localMAC"`
 	// IPv6 поддержка
-	NetworkIPv6      string `json:"networkIPv6,omitempty"`
-	LocalIPv6        string `json:"localIPv6,omitempty"`
+	NetworkIPv6          string `json:"networkIPv6,omitempty"`
+	LocalIPv6            string `json:"localIPv6,omitempty"`
 	InterfaceGatewayIPv6 string `json:"interfaceGatewayIPv6,omitempty"`
 }
 
@@ -312,8 +312,8 @@ type Rule struct {
 	SrcIPs         []net.IPNet
 	DstIPs         []net.IPNet
 	// IPv6 поддержка
-	SrcIPsIPv6     []net.IPNet
-	DstIPsIPv6     []net.IPNet
+	SrcIPsIPv6 []net.IPNet
+	DstIPsIPv6 []net.IPNet
 }
 
 func (r *Rule) Normalize() error {
@@ -361,6 +361,7 @@ type Outbound struct {
 	Group     *OutboundGroup     `json:"group,omitempty"`
 	HTTP3     *OutboundHTTP3     `json:"http3,omitempty"`
 	WireGuard *OutboundWireGuard `json:"wireguard,omitempty"`
+	WebSocket *OutboundWebSocket `json:"websocket,omitempty"`
 	Tag       string             `json:"tag,omitempty"`
 }
 
@@ -377,57 +378,96 @@ type OutboundDNS struct{}
 
 // OutboundHTTP3 represents HTTP/3 (QUIC) proxy configuration
 type OutboundHTTP3 struct {
-	Address    string `json:"address"`              // e.g. "https://proxy.example.com:443"
+	Address    string `json:"address"`               // e.g. "https://proxy.example.com:443"
 	SkipVerify bool   `json:"skip_verify,omitempty"` // Skip TLS verification
 }
 
 // OutboundWireGuard represents WireGuard tunnel configuration
 type OutboundWireGuard struct {
-	PrivateKey string `json:"private_key"` // Local private key (base64)
-	PublicKey  string `json:"public_key"`  // Remote peer public key (base64)
+	PrivateKey string `json:"private_key"`           // Local private key (base64)
+	PublicKey  string `json:"public_key"`            // Remote peer public key (base64)
 	PreauthKey string `json:"preauth_key,omitempty"` // Pre-shared key (base64, optional)
-	Endpoint   string `json:"endpoint"`    // Remote endpoint (host:port)
-	LocalIP    string `json:"local_ip"`    // Local tunnel IP (e.g., "10.0.0.2")
-	RemoteIP   string `json:"remote_ip"`   // Remote tunnel IP (e.g., "10.0.0.1")
+	Endpoint   string `json:"endpoint"`              // Remote endpoint (host:port)
+	LocalIP    string `json:"local_ip"`              // Local tunnel IP (e.g., "10.0.0.2")
+	RemoteIP   string `json:"remote_ip"`             // Remote tunnel IP (e.g., "10.0.0.1")
+}
+
+// OutboundWebSocket represents WebSocket proxy configuration with obfuscation
+type OutboundWebSocket struct {
+	// URL is the WebSocket server URL (e.g., "wss://proxy.example.com/ws")
+	URL string `json:"url"`
+
+	// Host header for HTTP handshake
+	Host string `json:"host,omitempty"`
+
+	// Origin header for HTTP handshake
+	Origin string `json:"origin,omitempty"`
+
+	// Headers are additional HTTP headers
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// SkipTLSVerify disables TLS certificate verification
+	SkipTLSVerify bool `json:"skip_verify,omitempty"`
+
+	// HandshakeTimeout is the timeout for WebSocket handshake in seconds
+	HandshakeTimeout int `json:"handshake_timeout,omitempty"`
+
+	// EnableCompression enables per-message compression
+	EnableCompression bool `json:"compression,omitempty"`
+
+	// PingInterval is the interval for ping/pong keepalive in seconds
+	PingInterval int `json:"ping_interval,omitempty"`
+
+	// Obfuscation enables XOR obfuscation
+	Obfuscation bool `json:"obfuscation,omitempty"`
+
+	// ObfuscationKey is the XOR key for obfuscation
+	ObfuscationKey string `json:"obfuscation_key,omitempty"`
+
+	// Padding enables packet padding
+	Padding bool `json:"padding,omitempty"`
+
+	// PaddingBlockSize is the block size for padding (default: 64)
+	PaddingBlockSize int `json:"padding_block_size,omitempty"`
 }
 
 // OutboundGroup represents a group of proxies with load balancing
 type OutboundGroup struct {
-	Proxies     []string `json:"proxies"`              // List of outbound tags
-	Policy      string   `json:"policy,omitempty"`      // "failover", "round-robin", "least-load"
-	CheckURL    string   `json:"check_url,omitempty"`   // URL for health check
-	CheckInterval int    `json:"check_interval,omitempty"` // Health check interval in seconds
+	Proxies       []string `json:"proxies"`                  // List of outbound tags
+	Policy        string   `json:"policy,omitempty"`         // "failover", "round-robin", "least-load"
+	CheckURL      string   `json:"check_url,omitempty"`      // URL for health check
+	CheckInterval int      `json:"check_interval,omitempty"` // Health check interval in seconds
 }
 
 // DNSServerType defines the type of DNS server
 type DNSServerType string
 
 const (
-	DNSPlain   DNSServerType = "plain"
-	DNSOverTLS DNSServerType = "tls"
+	DNSPlain     DNSServerType = "plain"
+	DNSOverTLS   DNSServerType = "tls"
 	DNSOverHTTPS DNSServerType = "https"
 )
 
 // DNSServer represents a DNS server configuration
 type DNSServer struct {
-	Address  string        `json:"address"`           // e.g. "8.8.8.8:53" or "https://dns.google/dns-query"
-	Type     DNSServerType `json:"type,omitempty"`    // "plain", "tls", "https"
-	ServerName string      `json:"server_name,omitempty"` // TLS server name (SNI)
-	SkipVerify bool        `json:"skip_verify,omitempty"` // Skip TLS verification
+	Address    string        `json:"address"`               // e.g. "8.8.8.8:53" or "https://dns.google/dns-query"
+	Type       DNSServerType `json:"type,omitempty"`        // "plain", "tls", "https"
+	ServerName string        `json:"server_name,omitempty"` // TLS server name (SNI)
+	SkipVerify bool          `json:"skip_verify,omitempty"` // Skip TLS verification
 }
 
 type DNS struct {
-	Servers       []DNSServer    `json:"servers"`
-	DoHServers    []string       `json:"dohServers,omitempty"`
-	DoTServers    []string       `json:"dotServers,omitempty"`
-	UseSystemDNS  bool           `json:"useSystemDNS"`
-	AutoBench     bool           `json:"autoBench"`
-	BenchInterval int            `json:"benchInterval"` // seconds
-	CacheSize     int            `json:"cacheSize"`
-	CacheTTL      int            `json:"cacheTTL"`     // seconds
-	Server        *DoHServer     `json:"server,omitempty"`
+	Servers       []DNSServer `json:"servers"`
+	DoHServers    []string    `json:"dohServers,omitempty"`
+	DoTServers    []string    `json:"dotServers,omitempty"`
+	UseSystemDNS  bool        `json:"useSystemDNS"`
+	AutoBench     bool        `json:"autoBench"`
+	BenchInterval int         `json:"benchInterval"` // seconds
+	CacheSize     int         `json:"cacheSize"`
+	CacheTTL      int         `json:"cacheTTL"` // seconds
+	Server        *DoHServer  `json:"server,omitempty"`
 	// Pre-warming cache for faster DNS resolution on startup
-	PreWarmCache  bool     `json:"preWarmCache"`
+	PreWarmCache   bool     `json:"preWarmCache"`
 	PreWarmDomains []string `json:"preWarmDomains,omitempty"`
 	// Persistent cache on disk for faster cold start
 	PersistentCache bool   `json:"persistentCache"`
@@ -438,10 +478,10 @@ type DNS struct {
 
 // DNSRateLimiter holds DNS query rate limiting configuration
 type DNSRateLimiter struct {
-	Enabled   bool `json:"enabled,omitempty"`
-	MaxRPS    int  `json:"maxRPS,omitempty"`    // Maximum requests per second
-	BurstSize int  `json:"burstSize,omitempty"` // Burst size (max tokens)
-	MaxRetries int `json:"maxRetries,omitempty"` // Maximum retries on rate limit
+	Enabled    bool `json:"enabled,omitempty"`
+	MaxRPS     int  `json:"maxRPS,omitempty"`     // Maximum requests per second
+	BurstSize  int  `json:"burstSize,omitempty"`  // Burst size (max tokens)
+	MaxRetries int  `json:"maxRetries,omitempty"` // Maximum retries on rate limit
 }
 
 // DoHServer holds DNS-over-HTTPS server configuration
@@ -482,11 +522,11 @@ type Hotkey struct {
 
 // UPnP holds UPnP port forwarding configuration
 type UPnP struct {
-	Enabled        bool              `json:"enabled"`
-	AutoForward    bool              `json:"autoForward"`
-	LeaseDuration  int               `json:"leaseDuration,omitempty"` // seconds, 0 = infinite
-	PortMappings   []PortMapping     `json:"portMappings,omitempty"`
-	GamePresets    map[string][]int  `json:"gamePresets,omitempty"`
+	Enabled       bool             `json:"enabled"`
+	AutoForward   bool             `json:"autoForward"`
+	LeaseDuration int              `json:"leaseDuration,omitempty"` // seconds, 0 = infinite
+	PortMappings  []PortMapping    `json:"portMappings,omitempty"`
+	GamePresets   map[string][]int `json:"gamePresets,omitempty"`
 }
 
 // PortMapping defines a single port mapping
@@ -605,7 +645,7 @@ const (
 // MACFilter holds MAC filtering configuration
 type MACFilter struct {
 	Mode MACFilterMode `json:"mode,omitempty"` // "blacklist" or "whitelist"
-	List []string      `json:"list,omitempty"`  // List of MAC addresses
+	List []string      `json:"list,omitempty"` // List of MAC addresses
 }
 
 // IsAllowed checks if a MAC address is allowed based on the filter mode
@@ -649,9 +689,9 @@ type DHCP struct {
 	IPv6PoolEnd   string `json:"ipv6PoolEnd,omitempty"`
 	IPv6Prefix    string `json:"ipv6Prefix,omitempty"` // IPv6 префикс для SLAAC/DHCPv6
 	// Расширенные DHCP опции
-	DNSServers    []string `json:"dnsServers,omitempty"`
-	NTPServers    []string `json:"ntpServers,omitempty"`
-	WPADURL       string   `json:"wpadURL,omitempty"`
+	DNSServers []string `json:"dnsServers,omitempty"`
+	NTPServers []string `json:"ntpServers,omitempty"`
+	WPADURL    string   `json:"wpadURL,omitempty"`
 }
 
 // Validate validates the DHCP configuration
@@ -806,4 +846,3 @@ type WANHealthCheck struct {
 	// PassThreshold is the number of successes before marking uplink up
 	PassThreshold int `json:"passThreshold,omitempty"`
 }
-

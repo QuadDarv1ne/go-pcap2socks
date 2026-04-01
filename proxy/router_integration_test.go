@@ -17,11 +17,11 @@ func TestRouter_Integration(t *testing.T) {
 	// Create simple routing rules
 	rules := []cfg.Rule{
 		{
-			DstPort: "53",
+			DstPort:     "53",
 			OutboundTag: "dns-out",
 		},
 		{
-			DstPort: "80",
+			DstPort:     "80",
 			OutboundTag: "direct",
 		},
 	}
@@ -65,15 +65,15 @@ func TestRouter_RoutingRules(t *testing.T) {
 
 	rules := []cfg.Rule{
 		{
-			DstPort: "53",
+			DstPort:     "53",
 			OutboundTag: "dns-out",
 		},
 		{
-			DstPort: "443",
+			DstPort:     "443",
 			OutboundTag: "proxy",
 		},
 		{
-			DstPort: "80",
+			DstPort:     "80",
 			OutboundTag: "direct",
 		},
 	}
@@ -88,7 +88,7 @@ func TestRouter_RoutingRules(t *testing.T) {
 	t.Run("RuleUpdate", func(t *testing.T) {
 		newRules := []cfg.Rule{
 			{
-				DstPort: "8080",
+				DstPort:     "8080",
 				OutboundTag: "direct",
 			},
 		}
@@ -105,7 +105,7 @@ func TestRouter_MACFilter(t *testing.T) {
 
 	rules := []cfg.Rule{
 		{
-			DstPort: "53",
+			DstPort:     "53",
 			OutboundTag: "dns-out",
 		},
 	}
@@ -137,7 +137,7 @@ func TestRouter_ConcurrentAccess(t *testing.T) {
 
 	rules := []cfg.Rule{
 		{
-			DstPort: "53",
+			DstPort:     "53",
 			OutboundTag: "dns-out",
 		},
 	}

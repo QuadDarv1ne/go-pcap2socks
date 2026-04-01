@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 )
 
@@ -22,7 +22,7 @@ type ConnMeta struct {
 	SourcePort uint16
 	DestIP     netip.Addr
 	DestPort   uint16
-	Protocol   uint8 // 6 = TCP, 17 = UDP
+	Protocol   uint8  // 6 = TCP, 17 = UDP
 	Domain     string // Если был перехвачен DNS запрос, тут будет домен
 }
 
@@ -85,12 +85,12 @@ type ConnTracker struct {
 	proxyDialer proxy.Proxy
 
 	// Statistics
-	activeTCP   atomic.Int32
-	activeUDP   atomic.Int32
-	totalTCP    atomic.Uint64
-	totalUDP    atomic.Uint64
-	droppedTCP  atomic.Uint64
-	droppedUDP  atomic.Uint64
+	activeTCP  atomic.Int32
+	activeUDP  atomic.Int32
+	totalTCP   atomic.Uint64
+	totalUDP   atomic.Uint64
+	droppedTCP atomic.Uint64
+	droppedUDP atomic.Uint64
 
 	logger *slog.Logger
 }
@@ -111,10 +111,10 @@ func NewConnTracker(cfg ConnTrackerConfig) *ConnTracker {
 	}
 
 	return &ConnTracker{
-		tcpConns:  make(map[string]*TCPConn),
-		udpConns:  make(map[string]*UDPConn),
+		tcpConns:    make(map[string]*TCPConn),
+		udpConns:    make(map[string]*UDPConn),
 		proxyDialer: cfg.ProxyDialer,
-		logger:    logger,
+		logger:      logger,
 	}
 }
 
@@ -151,11 +151,11 @@ func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCP
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	tc := &TCPConn{
-		Meta:      meta,
-		ctx:       ctx,
-		cancel:    cancel,
-		ToProxy:   make(chan []byte, 64),  // 64 packets buffer
-		FromProxy: make(chan []byte, 64),
+		Meta:         meta,
+		ctx:          ctx,
+		cancel:       cancel,
+		ToProxy:      make(chan []byte, 64), // 64 packets buffer
+		FromProxy:    make(chan []byte, 64),
 		lastActivity: atomic.Int64{},
 	}
 	tc.lastActivity.Store(time.Now().Unix())
@@ -248,10 +248,10 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	uc := &UDPConn{
-		Meta:      meta,
-		ctx:       ctx,
-		cancel:    cancel,
-		ToProxy:   make(chan []byte, 128), // Larger buffer for UDP
+		Meta:         meta,
+		ctx:          ctx,
+		cancel:       cancel,
+		ToProxy:      make(chan []byte, 128), // Larger buffer for UDP
 		lastActivity: atomic.Int64{},
 	}
 	uc.lastActivity.Store(time.Now().Unix())
@@ -479,36 +479,36 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		ctx, cancel := context.WithTimeout(tc.ctx, 10*time.Second)
-		
+
 		conn, err := ct.proxyDialer.DialContext(ctx, metadata)
 		cancel()
-		
+
 		if err == nil {
 			tc.ProxyConn = conn
 			ct.logger.Debug("Proxy connection established", "conn", tc.Meta.String(), "attempt", attempt+1)
 			return nil
 		}
-		
+
 		lastErr = err
-		
+
 		// Don't retry on context cancellation
 		if tc.ctx.Err() != nil {
 			return fmt.Errorf("proxy dial cancelled: %w", tc.ctx.Err())
 		}
-		
+
 		// Exponential backoff: 100ms, 200ms, 400ms
 		if attempt < maxRetries-1 {
 			delay := baseDelay * time.Duration(1<<uint(attempt))
-			ct.logger.Debug("Proxy dial failed, retrying", 
-				"conn", tc.Meta.String(), 
-				"attempt", attempt+1, 
+			ct.logger.Debug("Proxy dial failed, retrying",
+				"conn", tc.Meta.String(),
+				"attempt", attempt+1,
 				"max_retries", maxRetries,
 				"delay", delay,
 				"err", err)
 			time.Sleep(delay)
 		}
 	}
-	
+
 	return fmt.Errorf("proxy dial failed after %d attempts: %w", maxRetries, lastErr)
 }
 
@@ -690,12 +690,12 @@ func (ct *ConnTracker) ExportMetrics() map[string]interface{} {
 	udpActive, udpTotal, udpDropped := ct.GetUDPStats()
 
 	return map[string]interface{}{
-		"tcp_active_sessions":   tcpActive,
-		"tcp_total_sessions":    tcpTotal,
-		"tcp_dropped_packets":   tcpDropped,
-		"udp_active_sessions":   udpActive,
-		"udp_total_sessions":    udpTotal,
-		"udp_dropped_packets":   udpDropped,
-		"total_active":          int(tcpActive) + int(udpActive),
+		"tcp_active_sessions": tcpActive,
+		"tcp_total_sessions":  tcpTotal,
+		"tcp_dropped_packets": tcpDropped,
+		"udp_active_sessions": udpActive,
+		"udp_total_sessions":  udpTotal,
+		"udp_dropped_packets": udpDropped,
+		"total_active":        int(tcpActive) + int(udpActive),
 	}
 }

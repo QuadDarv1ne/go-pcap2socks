@@ -10,10 +10,10 @@ import (
 // TestRouterRouting tests router routing logic.
 func TestRouterRouting(t *testing.T) {
 	tests := []struct {
-		name     string
-		dstPort  uint16
-		wantTag  string
-		wantErr  bool
+		name    string
+		dstPort uint16
+		wantTag string
+		wantErr bool
 	}{
 		{
 			name:    "DNS query",
@@ -116,9 +116,9 @@ func TestRouterCache(t *testing.T) {
 
 // Mock types for testing
 type RouteCache struct {
-	hits    uint64
-	misses  uint64
-	data    map[string]string
+	hits   uint64
+	misses uint64
+	data   map[string]string
 }
 
 func NewRouteCache(size int, ttl time.Duration) *RouteCache {

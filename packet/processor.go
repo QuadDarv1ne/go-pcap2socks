@@ -25,14 +25,14 @@ type Processor struct {
 	dropped   atomic.Uint64
 	errors    atomic.Uint64
 	latency   atomic.Int64 // nanoseconds
-	
+
 	// Advanced metrics
-	latencySumNs   atomic.Int64
-	latencyCount   atomic.Int64
-	latencyMaxNs   atomic.Int64
+	latencySumNs    atomic.Int64
+	latencyCount    atomic.Int64
+	latencyMaxNs    atomic.Int64
 	lastProcessTime atomic.Int64
 	activeWorkers   atomic.Int32
-	
+
 	// Handler function
 	handler PacketHandler
 	// Buffer pool for zero-copy
@@ -67,8 +67,8 @@ func DefaultConfig() Config {
 		workers = 4
 	}
 	return Config{
-		Workers:   workers,              // Limited to 4 max
-		QueueSize: 256,                  // Reduced from 2048 to save memory
+		Workers:   workers, // Limited to 4 max
+		QueueSize: 256,     // Reduced from 2048 to save memory
 		Timeout:   100 * time.Millisecond,
 	}
 }
@@ -136,7 +136,7 @@ func (p *Processor) worker(id int) {
 
 			// Mark worker as active
 			p.activeWorkers.Add(1)
-			
+
 			// Record start time for latency measurement
 			startTime := time.Now()
 			packet.Timestamp = startTime
@@ -152,12 +152,12 @@ func (p *Processor) worker(id int) {
 			// Calculate latency
 			latency := time.Since(startTime)
 			latencyNs := latency.Nanoseconds()
-			
+
 			// Update latency statistics atomically
 			p.latencySumNs.Add(latencyNs)
 			p.latencyCount.Add(1)
 			p.latency.Store(latencyNs)
-			
+
 			// Update max latency
 			for {
 				currentMax := p.latencyMaxNs.Load()
@@ -168,10 +168,10 @@ func (p *Processor) worker(id int) {
 					break
 				}
 			}
-			
+
 			// Update last process time
 			p.lastProcessTime.Store(time.Now().UnixNano())
-			
+
 			p.processed.Add(1)
 			p.activeWorkers.Add(-1)
 
@@ -295,12 +295,12 @@ func (p *Processor) AdvancedStats() metrics.AdvancedStats {
 	count := p.latencyCount.Load()
 	sumNs := p.latencySumNs.Load()
 	maxNs := p.latencyMaxNs.Load()
-	
+
 	var avgNs int64
 	if count > 0 {
 		avgNs = sumNs / count
 	}
-	
+
 	return metrics.AdvancedStats{
 		Processed:     p.processed.Load(),
 		Dropped:       p.dropped.Load(),
@@ -331,12 +331,12 @@ func (p *Processor) GetLatencyStats() metrics.LatencyStats {
 	count := p.latencyCount.Load()
 	sumNs := p.latencySumNs.Load()
 	maxNs := p.latencyMaxNs.Load()
-	
+
 	var avgNs int64
 	if count > 0 {
 		avgNs = sumNs / count
 	}
-	
+
 	return metrics.LatencyStats{
 		Average: time.Duration(avgNs),
 		Max:     time.Duration(maxNs),

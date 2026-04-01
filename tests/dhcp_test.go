@@ -45,9 +45,9 @@ func TestDHCPMessage(t *testing.T) {
 				GatewayIP:      net.IPv4zero,
 				ClientHardware: net.HardwareAddr{0x11, 0x22, 0x33, 0x44, 0x55, 0x66},
 				Options: map[uint8][]byte{
-					53: {3},                   // DHCP Request
-					50: {192, 168, 1, 100},    // Requested IP
-					54: {192, 168, 1, 1},      // Server ID
+					53: {3},                // DHCP Request
+					50: {192, 168, 1, 100}, // Requested IP
+					54: {192, 168, 1, 1},   // Server ID
 				},
 			},
 			wantErr: false,
@@ -194,15 +194,15 @@ func ParseDHCPMessage(data []byte) (*DHCPMessage, error) {
 }
 
 type IPPool struct {
-	start, end net.IP
+	start, end  net.IP
 	allocations map[string]net.IP
-	counter int
+	counter     int
 }
 
 func NewIPPool(start, end net.IP) *IPPool {
 	return &IPPool{
-		start: start,
-		end: end,
+		start:       start,
+		end:         end,
 		allocations: make(map[string]net.IP),
 	}
 }
@@ -250,7 +250,9 @@ func (m *LeaseManager) Release(mac net.HardwareAddr) {
 var ErrInvalidDHCPMessage = errorf("invalid DHCP message")
 
 func errorf(s string) error { return &errorString{s} }
+
 type errorString struct{ s string }
+
 func (e *errorString) Error() string { return e.s }
 
 // BenchmarkDHCPMessageParse benchmarks DHCP message parsing.

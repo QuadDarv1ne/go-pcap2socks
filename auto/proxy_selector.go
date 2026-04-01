@@ -57,11 +57,11 @@ type ProxySelector struct {
 // NewProxySelector creates a new proxy selector
 func NewProxySelector(config *cfg.Config) *ProxySelector {
 	return &ProxySelector{
-		config:         config,
-		cache:          make(map[ProxyMode]*ProxyRecommendation),
-		checkInterval:  30 * time.Second,
-		speedTestURL:   "https://www.google.com",
-		connectTimeout: 2 * time.Second,
+		config:          config,
+		cache:           make(map[ProxyMode]*ProxyRecommendation),
+		checkInterval:   30 * time.Second,
+		speedTestURL:    "https://www.google.com",
+		connectTimeout:  2 * time.Second,
 		speedTestResult: make(map[string]int64),
 	}
 }

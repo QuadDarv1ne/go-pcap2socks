@@ -16,8 +16,8 @@ type mockProxy struct {
 	addr string
 }
 
-func (m *mockProxy) Addr() string                            { return m.addr }
-func (m *mockProxy) Mode() proxy.Mode                        { return proxy.ModeSocks5 }
+func (m *mockProxy) Addr() string     { return m.addr }
+func (m *mockProxy) Mode() proxy.Mode { return proxy.ModeSocks5 }
 func (m *mockProxy) DialContext(context.Context, *M.Metadata) (net.Conn, error) {
 	return nil, nil
 }

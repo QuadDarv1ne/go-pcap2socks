@@ -19,11 +19,11 @@ import (
 
 // Pre-defined errors for updater operations
 var (
-	ErrUpdateCheckFailed  = errors.New("failed to check for updates")
+	ErrUpdateCheckFailed    = errors.New("failed to check for updates")
 	ErrUpdateDownloadFailed = errors.New("failed to download update")
-	ErrUpdateApplyFailed  = errors.New("failed to apply update")
-	ErrInvalidVersion     = errors.New("invalid version format")
-	ErrNoAssetForPlatform = errors.New("no asset found for current platform")
+	ErrUpdateApplyFailed    = errors.New("failed to apply update")
+	ErrInvalidVersion       = errors.New("invalid version format")
+	ErrNoAssetForPlatform   = errors.New("no asset found for current platform")
 )
 
 // Updater constants
@@ -36,11 +36,11 @@ const (
 
 // Release represents a GitHub release
 type Release struct {
-	TagName     string `json:"tag_name"`
-	Name        string `json:"name"`
-	Body        string `json:"body"`
-	PublishedAt string `json:"published_at"`
-	HTMLURL     string `json:"html_url"`
+	TagName     string  `json:"tag_name"`
+	Name        string  `json:"name"`
+	Body        string  `json:"body"`
+	PublishedAt string  `json:"published_at"`
+	HTMLURL     string  `json:"html_url"`
 	Assets      []Asset `json:"assets"`
 }
 

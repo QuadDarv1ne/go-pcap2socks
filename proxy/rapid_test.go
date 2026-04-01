@@ -19,11 +19,11 @@ func TestRouterProperties_PropertyBased(t *testing.T) {
 		// Generate random rules
 		ruleCount := rapid.IntRange(1, 20).Draw(t, "ruleCount")
 		rules := make([]cfg.Rule, ruleCount)
-		
+
 		for i := 0; i < ruleCount; i++ {
 			rules[i] = cfg.Rule{
-				DstPort:      rapid.StringMatching(`^\d+(,\d+)*$`).Draw(t, "dstPort"),
-				OutboundTag:  rapid.StringMatching(`^[a-z0-9-]+$`).Draw(t, "outboundTag"),
+				DstPort:     rapid.StringMatching(`^\d+(,\d+)*$`).Draw(t, "dstPort"),
+				OutboundTag: rapid.StringMatching(`^[a-z0-9-]+$`).Draw(t, "outboundTag"),
 			}
 			// Normalize rule
 			_ = rules[i].Normalize()
@@ -50,7 +50,7 @@ func TestRouterProperties_PropertyBased(t *testing.T) {
 
 		// Property 1: Router should not panic on any input
 		conn, err := router.DialContext(context.Background(), metadata)
-		
+
 		// Property 2: Should always return a connection or error (not panic)
 		if conn == nil && err == nil {
 			t.Fatalf("Router.DialContext returned nil, nil for metadata: %+v", metadata)
@@ -64,11 +64,11 @@ func TestRoutingTableProperties_PropertyBased(t *testing.T) {
 		// Generate random rules
 		ruleCount := rapid.IntRange(0, 100).Draw(t, "ruleCount")
 		rules := make([]cfg.Rule, ruleCount)
-		
+
 		for i := 0; i < ruleCount; i++ {
 			rules[i] = cfg.Rule{
-				DstPort:      rapid.StringMatching(`^\d+(,\d+)*$`).Draw(t, "dstPort"),
-				OutboundTag:  rapid.StringMatching(`^[a-z0-9-]+$`).Draw(t, "outboundTag"),
+				DstPort:     rapid.StringMatching(`^\d+(,\d+)*$`).Draw(t, "dstPort"),
+				OutboundTag: rapid.StringMatching(`^[a-z0-9-]+$`).Draw(t, "outboundTag"),
 			}
 			_ = rules[i].Normalize()
 		}
@@ -89,7 +89,7 @@ func TestRoutingTableProperties_PropertyBased(t *testing.T) {
 
 		// Property 1: Match should always return (tag, ok) without panicking
 		tag, ok := rt.Match(metadata)
-		
+
 		// Property 2: If ok is true, tag should be non-empty
 		if ok && tag == "" {
 			t.Fatal("Match returned ok=true but tag is empty")
@@ -112,14 +112,14 @@ func TestRouteCacheProperties_PropertyBased(t *testing.T) {
 
 		// Generate random operations
 		opCount := rapid.IntRange(10, 100).Draw(t, "opCount")
-		
+
 		for i := 0; i < opCount; i++ {
 			key := rapid.StringMatching(`^[a-z0-9:.-]+$`).Draw(t, "key")
 			value := rapid.StringMatching(`^[a-z0-9-]+$`).Draw(t, "value")
-			
+
 			// Set value
 			cache.set(key, value)
-			
+
 			// Property 1: Get should return the value we just set (if not evicted)
 			got, ok := cache.get(key)
 			if ok && got != value {
@@ -143,7 +143,7 @@ func TestBandwidthParseProperties_PropertyBased(t *testing.T) {
 		bandwidth := fmt.Sprintf("%d%s", num, unit)
 
 		result, err := cfg.ParseBandwidth(bandwidth)
-		
+
 		// Property 1: Valid formats should not error
 		if err != nil {
 			t.Fatalf("ParseBandwidth failed for valid input %s: %v", bandwidth, err)
@@ -162,7 +162,7 @@ func TestMACFilterProperties_PropertyBased(t *testing.T) {
 		// Generate random MAC filter
 		mode := rapid.SampledFrom([]cfg.MACFilterMode{cfg.MACFilterBlacklist, cfg.MACFilterWhitelist, cfg.MACFilterDisabled}).Draw(t, "mode")
 		macCount := rapid.IntRange(0, 50).Draw(t, "macCount")
-		
+
 		macs := make([]string, macCount)
 		for i := 0; i < macCount; i++ {
 			macs[i] = rapid.StringMatching(`^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`).Draw(t, "mac")

@@ -15,13 +15,13 @@ type LatencyStats struct {
 
 // AdvancedStats holds comprehensive performance statistics
 type AdvancedStats struct {
-	Processed     uint64
-	Dropped       uint64
-	Errors        uint64
-	QueueSize     int32  // Only for worker pool
-	ActiveWorkers int32
-	TotalWorkers  int32
-	Latency       LatencyStats
+	Processed       uint64
+	Dropped         uint64
+	Errors          uint64
+	QueueSize       int32 // Only for worker pool
+	ActiveWorkers   int32
+	TotalWorkers    int32
+	Latency         LatencyStats
 	LastProcessTime time.Time
-	Utilization   float64 // Percentage of workers actively processing
+	Utilization     float64 // Percentage of workers actively processing
 }

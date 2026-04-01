@@ -19,13 +19,13 @@ type HealthStatus struct {
 
 // EngineFailover handles automatic engine failover
 type EngineFailover struct {
-	mu              sync.RWMutex
-	currentEngine   EngineType
-	healthChecks    map[EngineType]*HealthStatus
-	switchCount     int
-	lastSwitchTime  time.Time
+	mu                sync.RWMutex
+	currentEngine     EngineType
+	healthChecks      map[EngineType]*HealthStatus
+	switchCount       int
+	lastSwitchTime    time.Time
 	minSwitchInterval time.Duration
-	onSwitch        func(EngineType, EngineType)
+	onSwitch          func(EngineType, EngineType)
 }
 
 // NewEngineFailover creates a new engine failover manager
@@ -210,11 +210,11 @@ func (f *EngineFailover) GetEngineStats() map[string]interface{} {
 	healthData := make(map[string]interface{})
 	for engine, status := range f.healthChecks {
 		healthData[string(engine)] = map[string]interface{}{
-			"healthy":       status.IsHealthy,
-			"errors":        status.ErrorCount,
-			"successes":     status.SuccessCount,
-			"latency_ms":    status.Latency.Milliseconds(),
-			"last_check":    status.LastCheck.Format(time.RFC3339),
+			"healthy":    status.IsHealthy,
+			"errors":     status.ErrorCount,
+			"successes":  status.SuccessCount,
+			"latency_ms": status.Latency.Milliseconds(),
+			"last_check": status.LastCheck.Format(time.RFC3339),
 		}
 	}
 	stats["health"] = healthData

@@ -20,8 +20,8 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
-	"github.com/gorilla/websocket"
 	"github.com/getlantern/systray"
+	"github.com/gorilla/websocket"
 	"golang.org/x/sys/windows"
 )
 
@@ -76,7 +76,7 @@ func (c *WebSocketStatusClient) run(ctx context.Context, mStatus, mDevices, mSta
 			return
 		default:
 			c.connectAndListen(ctx, mStatus, mDevices, mStart, mStop)
-			
+
 			// Wait before reconnect
 			select {
 			case <-time.After(3 * time.Second):
@@ -92,7 +92,7 @@ func (c *WebSocketStatusClient) run(ctx context.Context, mStatus, mDevices, mSta
 // connectAndListen establishes connection and listens for messages
 func (c *WebSocketStatusClient) connectAndListen(ctx context.Context, mStatus, mDevices, mStart, mStop *systray.MenuItem) {
 	url := fmt.Sprintf("ws://127.0.0.1:8080/ws?token=%s", apiToken)
-	
+
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		slog.Debug("WebSocket connect failed", "error", err)
@@ -293,7 +293,7 @@ func onReadyWithWebSocket(hotkeyMgr *hotkey.Manager) {
 		wsClient.mu.Lock()
 		connected := wsClient.connected
 		wsClient.mu.Unlock()
-		
+
 		if !connected {
 			slog.Info("WebSocket not available, falling back to polling")
 			go pollStatus(ctx, mStatus, mDevices, mStart, mStop)

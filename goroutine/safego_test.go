@@ -12,11 +12,11 @@ import (
 // TestSafeGo tests basic safe goroutine execution
 func TestSafeGo(t *testing.T) {
 	done := make(chan bool, 1)
-	
+
 	SafeGo(func() {
 		done <- true
 	})
-	
+
 	select {
 	case <-done:
 		// Success
@@ -28,17 +28,17 @@ func TestSafeGo(t *testing.T) {
 // TestSafeGoPanicRecovery tests that panics are recovered
 func TestSafeGoPanicRecovery(t *testing.T) {
 	done := make(chan bool, 1)
-	
+
 	SafeGo(func() {
 		panic("test panic")
 	})
-	
+
 	// Give time for panic recovery
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// If we reach here, panic was recovered
 	done <- true
-	
+
 	select {
 	case <-done:
 		// Success - panic was recovered
@@ -50,11 +50,11 @@ func TestSafeGoPanicRecovery(t *testing.T) {
 // TestSafeGoNamed tests named goroutine
 func TestSafeGoNamed(t *testing.T) {
 	done := make(chan bool, 1)
-	
+
 	SafeGoNamed("test-goroutine", func() {
 		done <- true
 	})
-	
+
 	select {
 	case <-done:
 		// Success
@@ -66,11 +66,11 @@ func TestSafeGoNamed(t *testing.T) {
 // TestSafeGoWithRetrySuccess tests successful execution without retry
 func TestSafeGoWithRetrySuccess(t *testing.T) {
 	done := make(chan bool, 1)
-	
+
 	SafeGoWithRetry("test-success", 3, 10*time.Millisecond, func() {
 		done <- true
 	})
-	
+
 	select {
 	case success := <-done:
 		if !success {
@@ -84,17 +84,17 @@ func TestSafeGoWithRetrySuccess(t *testing.T) {
 // TestSafeGoWithRetryPanic tests retry on panic
 func TestSafeGoWithRetryPanic(t *testing.T) {
 	var attempts int32
-	
+
 	SafeGoWithRetry("test-retry", 2, 10*time.Millisecond, func() {
 		count := atomic.AddInt32(&attempts, 1)
 		if count < 3 {
 			panic("retryable error")
 		}
 	})
-	
+
 	// Wait for retries
 	time.Sleep(200 * time.Millisecond)
-	
+
 	finalAttempts := atomic.LoadInt32(&attempts)
 	if finalAttempts < 3 {
 		t.Errorf("Expected at least 3 attempts, got %d", finalAttempts)
@@ -104,15 +104,15 @@ func TestSafeGoWithRetryPanic(t *testing.T) {
 // TestSafeGoWithRetryMaxExceeded tests max retries exceeded
 func TestSafeGoWithRetryMaxExceeded(t *testing.T) {
 	var attempts int32
-	
+
 	SafeGoWithRetry("test-max", 2, 10*time.Millisecond, func() {
 		atomic.AddInt32(&attempts, 1)
 		panic("always fails")
 	})
-	
+
 	// Wait for all retries
 	time.Sleep(300 * time.Millisecond)
-	
+
 	finalAttempts := atomic.LoadInt32(&attempts)
 	if finalAttempts != 3 { // Initial + 2 retries
 		t.Errorf("Expected 3 attempts, got %d", finalAttempts)
@@ -123,15 +123,15 @@ func TestSafeGoWithRetryMaxExceeded(t *testing.T) {
 func TestWaitGroup(t *testing.T) {
 	var counter int32
 	var wg WaitGroup
-	
+
 	for i := 0; i < 10; i++ {
 		wg.Go(func() {
 			atomic.AddInt32(&counter, 1)
 		})
 	}
-	
+
 	wg.Wait()
-	
+
 	finalCount := atomic.LoadInt32(&counter)
 	if finalCount != 10 {
 		t.Errorf("Expected counter to be 10, got %d", finalCount)
@@ -142,7 +142,7 @@ func TestWaitGroup(t *testing.T) {
 func TestWaitGroupPanicRecovery(t *testing.T) {
 	var counter int32
 	var wg WaitGroup
-	
+
 	for i := 0; i < 5; i++ {
 		wg.Go(func() {
 			atomic.AddInt32(&counter, 1)
@@ -151,10 +151,10 @@ func TestWaitGroupPanicRecovery(t *testing.T) {
 			}
 		})
 	}
-	
+
 	// Should not hang even with panic
 	wg.Wait()
-	
+
 	// At least some goroutines should complete
 	finalCount := atomic.LoadInt32(&counter)
 	if finalCount < 4 {
@@ -167,9 +167,9 @@ func TestGoWithResultSuccess(t *testing.T) {
 	resultCh := GoWithResult(func() (int, error) {
 		return 42, nil
 	})
-	
+
 	result := <-resultCh
-	
+
 	if result.Value != 42 {
 		t.Errorf("Expected value 42, got %d", result.Value)
 	}
@@ -181,13 +181,13 @@ func TestGoWithResultSuccess(t *testing.T) {
 // TestGoWithResultError tests error result
 func TestGoWithResultError(t *testing.T) {
 	expectedErr := errors.New("test error")
-	
+
 	resultCh := GoWithResult(func() (int, error) {
 		return 0, expectedErr
 	})
-	
+
 	result := <-resultCh
-	
+
 	if result.Value != 0 {
 		t.Errorf("Expected value 0, got %d", result.Value)
 	}
@@ -201,7 +201,7 @@ func TestGoWithResultPanic(t *testing.T) {
 	resultCh := GoWithResult(func() (int, error) {
 		panic("test panic")
 	})
-	
+
 	// Channel should be closed without value
 	result, ok := <-resultCh
 	if ok {
@@ -220,12 +220,12 @@ func TestGetCPUCount(t *testing.T) {
 // TestSetMaxProcs tests GOMAXPROCS setting
 func TestSetMaxProcs(t *testing.T) {
 	old := SetMaxProcs()
-	
+
 	// Should return previous value
 	if old < 1 {
 		t.Errorf("Previous GOMAXPROCS should be at least 1, got %d", old)
 	}
-	
+
 	// Current should be >= CPU count
 	current := runtime.GOMAXPROCS(0)
 	if current < GetCPUCount() {
@@ -236,11 +236,11 @@ func TestSetMaxProcs(t *testing.T) {
 // TestOptimizeProcs tests CPU optimization
 func TestOptimizeProcs(t *testing.T) {
 	old := OptimizeProcs()
-	
+
 	if old < 1 {
 		t.Errorf("Previous GOMAXPROCS should be at least 1, got %d", old)
 	}
-	
+
 	// Verify GOMAXPROCS was set
 	current := runtime.GOMAXPROCS(0)
 	if current < 1 {

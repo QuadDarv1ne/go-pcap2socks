@@ -40,14 +40,14 @@ type WebSocketClient struct {
 // WebSocketHub manages WebSocket connections
 // Optimized with sync.Map for lock-free client management
 type WebSocketHub struct {
-	clients    sync.Map // map[*WebSocketClient]bool
-	broadcast  chan []byte
-	register   chan *WebSocketClient
-	unregister chan *WebSocketClient
-	stopChan   chan struct{}
-	stopOnce   sync.Once
+	clients     sync.Map // map[*WebSocketClient]bool
+	broadcast   chan []byte
+	register    chan *WebSocketClient
+	unregister  chan *WebSocketClient
+	stopChan    chan struct{}
+	stopOnce    sync.Once
 	clientCount atomic.Int32
-	wg         sync.WaitGroup // WaitGroup for goroutine cleanup
+	wg          sync.WaitGroup // WaitGroup for goroutine cleanup
 
 	// Pool for client slices to reduce allocations
 	clientSlicePool sync.Pool
@@ -56,9 +56,9 @@ type WebSocketHub struct {
 // NewWebSocketHub creates a new WebSocket hub
 func NewWebSocketHub() *WebSocketHub {
 	h := &WebSocketHub{
-		broadcast:  make(chan []byte, 10000), // Increased buffer for better burst handling
-		register:   make(chan *WebSocketClient, 1000),   // Increased buffer
-		unregister: make(chan *WebSocketClient, 1000),  // Increased buffer
+		broadcast:  make(chan []byte, 10000),          // Increased buffer for better burst handling
+		register:   make(chan *WebSocketClient, 1000), // Increased buffer
+		unregister: make(chan *WebSocketClient, 1000), // Increased buffer
 		stopChan:   make(chan struct{}),
 	}
 	h.clientSlicePool.New = func() any {
@@ -84,7 +84,7 @@ func (h *WebSocketHub) Run() {
 			// Get slice from pool to reduce allocations
 			clientsToClose := h.clientSlicePool.Get().([]*WebSocketClient)
 			clientsToClose = clientsToClose[:0]
-			
+
 			h.clients.Range(func(k, v any) bool {
 				client := k.(*WebSocketClient)
 				select {

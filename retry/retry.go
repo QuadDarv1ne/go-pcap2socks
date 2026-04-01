@@ -69,10 +69,10 @@ type RetryFunc func(ctx context.Context, attempt int) error
 
 // Result holds the result of a retry operation
 type Result struct {
-	Attempts    int           // Number of attempts made
-	TotalTime   time.Duration // Total time spent
-	LastErr     error         // Last error encountered
-	Success     bool          // Whether operation succeeded
+	Attempts  int           // Number of attempts made
+	TotalTime time.Duration // Total time spent
+	LastErr   error         // Last error encountered
+	Success   bool          // Whether operation succeeded
 }
 
 // Do executes a function with retry logic
@@ -179,31 +179,31 @@ func calculateDelay(baseDelay time.Duration, jitter float64) time.Duration {
 
 	// Calculate jitter range
 	jitterRange := float64(baseDelay) * jitter
-	
+
 	// Generate random jitter between -jitterRange and +jitterRange
-	jitterAmount := (rand.Float64() * 2 - 1) * jitterRange
-	
+	jitterAmount := (rand.Float64()*2 - 1) * jitterRange
+
 	// Apply jitter
 	newDelay := float64(baseDelay) + jitterAmount
-	
+
 	// Ensure non-negative
 	if newDelay < 0 {
 		newDelay = 0
 	}
-	
+
 	return time.Duration(newDelay)
 }
 
 // DoWithResult executes a function that returns a value with retry logic
 func DoWithResult[T any](ctx context.Context, fn func(ctx context.Context, attempt int) (T, error), cfg Config) (T, Result) {
 	var zero T
-	
+
 	result := Do(ctx, func(ctx context.Context, attempt int) error {
 		var err error
 		zero, err = fn(ctx, attempt)
 		return err
 	}, cfg)
-	
+
 	return zero, result
 }
 

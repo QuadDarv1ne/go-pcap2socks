@@ -81,4 +81,3 @@ func PutDNS(b []byte) {
 	b = b[:0]
 	dnsBufferPool.Put(b)
 }
-

@@ -190,7 +190,7 @@ func TestValidate(t *testing.T) {
 					Network: "192.168.137.0/24",
 					LocalIP: "192.168.137.1",
 				},
-				DHCP:    &DHCP{Enabled: false},
+				DHCP:      &DHCP{Enabled: false},
 				Outbounds: []Outbound{{Tag: "", Direct: &OutboundDirect{}}},
 			},
 			wantErr: true,
@@ -203,7 +203,7 @@ func TestValidate(t *testing.T) {
 					Network:          "invalid-cidr",
 					LocalIP:          "192.168.137.1",
 				},
-				DHCP:    &DHCP{Enabled: false},
+				DHCP:      &DHCP{Enabled: false},
 				Outbounds: []Outbound{{Tag: "", Direct: &OutboundDirect{}}},
 			},
 			wantErr: true,
@@ -216,7 +216,7 @@ func TestValidate(t *testing.T) {
 					Network:          "192.168.137.0/24",
 					LocalIP:          "10.0.0.1",
 				},
-				DHCP:    &DHCP{Enabled: false},
+				DHCP:      &DHCP{Enabled: false},
 				Outbounds: []Outbound{{Tag: "", Direct: &OutboundDirect{}}},
 			},
 			wantErr: true,
@@ -282,7 +282,7 @@ func TestValidate(t *testing.T) {
 
 func TestExists(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Test existing file
 	existingFile := filepath.Join(tmpDir, "exists.json")
 	err := os.WriteFile(existingFile, []byte("{}"), 0666)

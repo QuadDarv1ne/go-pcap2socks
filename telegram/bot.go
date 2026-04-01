@@ -24,9 +24,9 @@ type Message struct {
 	Chat struct {
 		ID int64 `json:"id"`
 	} `json:"chat"`
-	Text    string `json:"text"`
-	From    User   `json:"from"`
-	MessageID int `json:"message_id"`
+	Text      string `json:"text"`
+	From      User   `json:"from"`
+	MessageID int    `json:"message_id"`
 }
 
 // User represents a Telegram user
@@ -60,11 +60,11 @@ type Bot struct {
 	lastUpdateID int64
 	callbacks    map[string]CommandHandler
 	// External handlers
-	statusHandler   HandlerFunc
-	trafficHandler  HandlerFunc
-	devicesHandler  HandlerFunc
-	startHandler    HandlerFunc
-	stopHandler     HandlerFunc
+	statusHandler  HandlerFunc
+	trafficHandler HandlerFunc
+	devicesHandler HandlerFunc
+	startHandler   HandlerFunc
+	stopHandler    HandlerFunc
 	// Periodic reports
 	reportInterval time.Duration
 	reportStop     chan struct{}
@@ -264,7 +264,7 @@ func (b *Bot) poll() {
 // getUpdates gets updates from Telegram API
 func (b *Bot) getUpdates(offset int64) ([]Update, error) {
 	url := fmt.Sprintf("%sgetUpdates?offset=%d&timeout=30", b.apiURL, offset)
-	
+
 	resp, err := b.httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -300,7 +300,7 @@ func (b *Bot) handleMessage(msg Message) {
 	// Parse command
 	cmd := msg.Text
 	args := []string{}
-	
+
 	// Simple command parsing
 	for i, ch := range msg.Text {
 		if ch == ' ' {
@@ -339,10 +339,10 @@ func (b *Bot) SendMessage(text string) error {
 	}
 
 	url := fmt.Sprintf("%ssendMessage", b.apiURL)
-	
+
 	payload := map[string]string{
-		"chat_id": b.chatID,
-		"text":    text,
+		"chat_id":    b.chatID,
+		"text":       text,
 		"parse_mode": "Markdown",
 	}
 
