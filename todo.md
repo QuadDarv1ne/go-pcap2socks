@@ -20,10 +20,15 @@
 
 **Статус веток:**
 ```
-dev:  62 commits ahead of origin/dev
-main: 103 commits ahead of origin/main
+dev:  63 commits ahead of origin/dev
+main: 104 commits ahead of origin/main
 Разница main/dev: 0 коммитов (ПОЛНОСТЬЮ СИНХРОНИЗИРОВАНЫ)
 ```
+
+**Коммиты:**
+- `7b896a0` (dev) — docs(todo.md): полная перепроверка функционала (01.04.2026, третья волна)
+- `de912c5` — docs(todo.md): добавлена проверка buffer.Put паттернов
+- `ef9cbbc` — fix: критическое исправление defer buffer.Put в цикле relayToProxy
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
 
