@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 )
 
@@ -260,7 +261,9 @@ func NewResolver(config *ResolverConfig) *Resolver {
 	// Start worker pool for concurrent DNS query processing
 	for i := 0; i < r.queryWorkers; i++ {
 		r.queryWg.Add(1)
-		go r.dnsWorker(i)
+		goroutine.SafeGo(func() {
+			r.dnsWorker(i)
+		})
 	}
 	slog.Info("DNS resolver worker pool started", "workers", r.queryWorkers)
 
@@ -282,7 +285,9 @@ func NewResolver(config *ResolverConfig) *Resolver {
 
 	// Pre-warm cache if enabled
 	if config != nil && config.PreWarmCache && len(config.PreWarmDomains) > 0 {
-		go r.preWarmCache(config.PreWarmDomains)
+		goroutine.SafeGo(func() {
+			r.preWarmCache(config.PreWarmDomains)
+		})
 	}
 
 	return r

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -46,10 +47,10 @@ func NewReloader(configPath string, initialConfig *Config) (*Reloader, error) {
 	r.watcher = watcher
 
 	// Start watch goroutine
-	go r.watchLoop()
+	goroutine.SafeGo(r.watchLoop)
 
 	// Start reload goroutine
-	go r.reloadLoop()
+	goroutine.SafeGo(r.reloadLoop)
 
 	return r, nil
 }
