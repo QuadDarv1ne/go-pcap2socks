@@ -41,6 +41,26 @@ type Pool struct {
 // Global default pool
 var defaultPool = New()
 
+// PreWarmPool pre-allocates buffers in the pool to reduce initial allocations
+// Call this during application startup for better performance
+func PreWarmPool(small, medium, large int) {
+	for i := 0; i < small; i++ {
+		buf := make([]byte, 0, SmallBufferSize)
+		defaultPool.smallPool.Put(buf)
+		defaultPool.smallGets.Add(1)
+	}
+	for i := 0; i < medium; i++ {
+		buf := make([]byte, 0, MediumBufferSize)
+		defaultPool.mediumPool.Put(buf)
+		defaultPool.mediumGets.Add(1)
+	}
+	for i := 0; i < large; i++ {
+		buf := make([]byte, 0, LargeBufferSize)
+		defaultPool.largePool.Put(buf)
+		defaultPool.largeGets.Add(1)
+	}
+}
+
 // New creates a new buffer pool
 func New() *Pool {
 	return &Pool{
