@@ -195,33 +195,20 @@ func (ct *ConnTracker) RemoveTCP(tc *TCPConn) {
 		tc.closed.Store(true)
 		tc.cancel() // Останавливаем все горутины этого соединения
 
-		// Close channels
-		close(tc.ToProxy)
-		close(tc.FromProxy)
-
-		// Close proxy connection
+		// Close proxy connection first
 		if tc.ProxyConn != nil {
 			tc.ProxyConn.Close()
 		}
 
-		// Drain and return buffered packets to pool
-		for {
-			select {
-			case data := <-tc.ToProxy:
-				buffer.Put(data)
-			case data := <-tc.FromProxy:
-				buffer.Put(data)
-			default:
-				goto drainDone
-			}
-		}
-	drainDone:
+		// Drain buffered packets and return to pool
+		drainChannel(tc.ToProxy)
+		drainChannel(tc.FromProxy)
 
 		// Close channels
 		close(tc.ToProxy)
 		close(tc.FromProxy)
 
-		// Remove from map
+		// Remove from map with minimal lock hold time
 		ct.mu.Lock()
 		delete(ct.tcpConns, k)
 		ct.mu.Unlock()
@@ -231,6 +218,18 @@ func (ct *ConnTracker) RemoveTCP(tc *TCPConn) {
 			"bytes_sent", tc.bytesSent.Load(),
 			"bytes_received", tc.bytesReceived.Load())
 	})
+}
+
+// drainChannel drains a channel and returns buffers to pool
+func drainChannel(ch <-chan []byte) {
+	for {
+		select {
+		case data := <-ch:
+			buffer.Put(data)
+		default:
+			return
+		}
+	}
 }
 
 // CreateUDP создает новую UDP сессию
@@ -285,16 +284,8 @@ func (ct *ConnTracker) RemoveUDP(uc *UDPConn) {
 		uc.closed.Store(true)
 		uc.cancel()
 
-		// Drain and return buffered packets to pool
-		for {
-			select {
-			case data := <-uc.ToProxy:
-				buffer.Put(data)
-			default:
-				goto drainDone
-			}
-		}
-	drainDone:
+		// Drain buffered packets and return to pool
+		drainChannel(uc.ToProxy)
 
 		// Close channel
 		close(uc.ToProxy)
