@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // DoH Server constants
@@ -127,7 +128,7 @@ func (s *DoHServer) Start() error {
 		"endpoint", DoHPath)
 
 	// Start server
-	go func() {
+	goroutine.SafeGo(func() {
 		var err error
 		if s.config.TLSEnabled {
 			// Setup TLS
@@ -155,7 +156,7 @@ func (s *DoHServer) Start() error {
 		if err != nil && err != http.ErrServerClosed {
 			slog.Error("DoH server error", "error", err)
 		}
-	}()
+	})
 
 	return nil
 }

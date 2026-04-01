@@ -18,6 +18,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
 	"github.com/QuadDarv1ne/go-pcap2socks/observability"
@@ -1727,7 +1728,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 // StartRealTimeUpdates starts broadcasting real-time stats to WebSocket clients
 func (s *Server) StartRealTimeUpdates(interval time.Duration) {
 	ticker := time.NewTicker(interval)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -1737,7 +1738,7 @@ func (s *Server) StartRealTimeUpdates(interval time.Duration) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // StopRealTimeUpdates stops the real-time updates

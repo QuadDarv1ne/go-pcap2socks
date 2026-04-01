@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/auto"
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 )
@@ -138,24 +139,24 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 
 	// Start lease cleanup goroutine
 	s.wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer s.wg.Done()
 		s.cleanupLoop()
-	}()
+	})
 
 	// Start rate limit cache cleanup goroutine
 	s.wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer s.wg.Done()
 		s.cleanupRateLimitCache()
-	}()
+	})
 
 	// Start metrics logging goroutine
 	s.wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer s.wg.Done()
 		s.metricsLoop()
-	}()
+	})
 
 	return s
 }
