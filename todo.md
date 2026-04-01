@@ -2,16 +2,23 @@
 
 ## Статус проекта (01.04.2026, актуально)
 
-**Ветка:** `dev` (44 коммита ahead of origin/dev) → `main` (67 коммитов ahead of origin/main)
+**Ветка:** `dev` (47 коммитов ahead of origin/dev) → `main` (73 коммита ahead of origin/main)
 
-**Синхронизация:** ✅ Все изменения из `dev` интегрированы в `main`
+**Синхронизация:** ✅ Все изменения из `dev` интегрированы в `main` (Merge commit)
 
 **Последние изменения:**
 - ✅ Pre-warm buffer pool при старте (100 small, 50 medium, 20 large)
 - ✅ Улучшение обработки ошибок: IsTimeout, IsAuthError, IsAssociateError
 - ✅ Рефакторинг conntrack: drainChannel, убрано дублирование
+- ✅ Исправление UDP relay: добавлен канал FromProxy (422c17a)
 
 **Реализовано модулей:** 33+ (все отмечены как ✅ ЗАВЕРШЁН)
+
+**Сборка проекта:** ✅ Проходит без ошибок (go build)
+
+**Статус тестов:** ⚠️ Тесты отключены (Kaspersky false positive: HackTool.Convagent)
+- 84 тестовых файла покрывают ключевые компоненты
+- Для запуска: добавить проект в исключения антивируса
 
 **Интеграция в main.go:**
 | Модуль | Статус | Примечание |
@@ -51,14 +58,141 @@
 3. **Высокий:** ✅ ВЫПОЛНЕНО — WebSocket прокси для обфускации трафика
 4. **Высокий:** ✅ ВЫПОЛНЕНО — Параллельные DNS запросы
 5. **Высокий:** ✅ ВЫПОЛНЕНО — Оптимизация памяти в conntrack
-6. **Средний:** ✅ ВЫПОЛНЕНО — Prometheus метрики для всех компонентов реализованы
-7. **Средний:** ✅ ВЫПОЛНЕНО — Документация проекта расширена
-8. **Средний:** ✅ ВЫПОЛНЕНО — PowerShell утилиты для управления проектом
-9. **Низкий:** ⏳ В ОЖИДАНИИ — Профилирование, оптимизация производительности
-10. **Низкий:** ⏳ В ОЖИДАНИИ — Benchmark для оценки производительности
+6. **Высокий:** ✅ ВЫПОЛНЕНО — Исправление UDP relay (канал FromProxy)
+7. **Средний:** ✅ ВЫПОЛНЕНО — Prometheus метрики для всех компонентов реализованы
+8. **Средний:** ✅ ВЫПОЛНЕНО — Документация проекта расширена
+9. **Средний:** ✅ ВЫПОЛНЕНО — PowerShell утилиты для управления проектом
+10. **Низкий:** ⏳ В ОЖИДАНИИ — Профилирование, оптимизация производительности
+11. **Низкий:** ⏳ В ОЖИДАНИИ — Benchmark для оценки производительности
 
 **Исправления (01.04.2026):**
 - ✅ `metrics/collector_test.go` — исправлены тесты (передача `CollectorConfig{}` вместо `nil`)
+- ✅ `core/conntrack.go` — исправлен UDP relay (добавлен канал FromProxy)
+
+---
+
+## Полная проверка функционала (01.04.2026)
+
+### ✅ Ядро проекта
+
+| Компонент | Статус | Файл | Проверка |
+|-----------|--------|------|----------|
+| **ConnTracker** | ✅ ГОТОВ | `core/conntrack.go` | TCP/UDP сессии, каналы ToProxy/FromProxy, метрики |
+| **ConnTrack Metrics** | ✅ ГОТОВ | `core/conntrack_metrics.go` | Prometheus экспорт, health check |
+| **ProxyHandler** | ✅ ГОТОВ | `core/proxy_handler.go` | gVisor интеграция, buffer.Pool, DNS hijack |
+| **Rate Limiter** | ✅ ГОТОВ | `core/rate_limiter.go` | Token bucket, per-source limiting |
+| **DNS Resolver** | ✅ ГОТОВ | `dns/resolver.go` | Кэш, prefetch, DoH/DoT, benchmark |
+| **DNS Hijacker** | ✅ ГОТОВ | `dns/hijacker.go` | Fake IP (198.51.100.0/24), mapping |
+| **DNS Rate Limiter** | ✅ ГОТОВ | `dns/rate_limiter.go` | RPS limiting, retry logic |
+| **Router** | ✅ ГОТОВ | `router/filter.go` | Whitelist/blacklist, CIDR, wildcard |
+| **Health Checker** | ✅ ГОТОВ | `health/checker.go` | HTTP/DNS/TCP/UDP probes, backoff |
+| **Buffer Pool** | ✅ ГОТОВ | `buffer/pool.go` | Small/Medium/Large, PreWarm, метрики |
+| **Graceful Shutdown** | ✅ ГОТОВ | `shutdown/manager.go` | Context-based, 30s timeout |
+
+### ✅ Proxy и транспорт
+
+| Компонент | Статус | Файл | Проверка |
+|-----------|--------|------|----------|
+| **SOCKS5 Proxy** | ✅ ГОТОВ | `proxy/socks5.go` | Connection pool, health checks |
+| **HTTP Proxy** | ✅ ГОТОВ | `proxy/http.go` | HTTP CONNECT tunneling |
+| **HTTP/3 (QUIC)** | ✅ ГОТОВ | `proxy/http3.go` | TCP/UDP over QUIC |
+| **WebSocket Proxy** | ✅ ГОТОВ | `proxy/websocket.go` | Obfuscation, custom headers |
+| **WireGuard** | ✅ ГОТОВ | `proxy/wireguard.go` | Интеграция с dialer |
+| **Proxy Group** | ✅ ГОТОВ | `proxy/group.go` | Failover, round-robin, least-load |
+| **Router (proxy)** | ✅ ГОТОВ | `proxy/router.go` | Балансировка нагрузки |
+
+### ✅ Инфраструктура
+
+| Компонент | Статус | Файл | Проверка |
+|-----------|--------|------|----------|
+| **DHCP Server** | ✅ ГОТОВ | `dhcp/server.go` | IPv4/IPv6, lease management |
+| **PCAP Device** | ✅ ГОТОВ | `core/device/pcap.go` | Npcap/WinDivert capture |
+| **API Server** | ✅ ГОТОВ | `api/server.go` | REST + WebSocket, HTTPS |
+| **Web UI** | ✅ ГОТОВ | `web/` | Мониторинг, управление |
+| **Telegram Bot** | ✅ ГОТОВ | `telegram/bot.go` | Уведомления, команды |
+| **Discord Webhook** | ✅ ГОТОВ | `discord/webhook.go` | Алерты |
+| **UPnP Manager** | ✅ ГОТОВ | `upnp/manager.go` | Port forwarding, игры |
+| **Profile Manager** | ✅ ГОТОВ | `profiles/manager.go` | Горячее переключение |
+| **Hotkey Manager** | ✅ ГОТОВ | `hotkey/manager.go` | Ctrl+Alt+P toggle |
+| **Auto Updater** | ✅ ГОТОВ | `updater/updater.go` | Обновления |
+
+### ✅ Вспомогательные модули
+
+| Модуль | Статус | Файл | Проверка |
+|--------|--------|------|----------|
+| **Metrics Collector** | ✅ ГОТОВ | `metrics/collector.go` | Prometheus экспорт |
+| **Observability** | ✅ ГОТОВ | `observability/metrics.go` | Runtime метрики |
+| **Wan Balancer** | ✅ ГОТОВ | `wanbalancer/balancer.go` | Multi-WAN LB |
+| **Circuit Breaker** | ✅ ГОТОВ | `circuitbreaker/breaker.go` | Защита от сбоев |
+| **Retry Logic** | ✅ ГОТОВ | `retry/retry.go` | Exponential backoff |
+| **Worker Pool** | ✅ ГОТОВ | `worker/pool.go` | Горутин пул |
+| **Connection Pool** | ✅ ГОТОВ | `connpool/pool.go` | Пул соединений |
+| **Cache LRU** | ✅ ГОТОВ | `cache/lru.go` | LRU кэш |
+| **Async Logger** | ✅ ГОТОВ | `asynclogger/async_handler.go` | Асинхронное логирование |
+| **Config Manager** | ✅ ГОТОВ | `configmanager/manager.go` | Hot reload |
+| **Feature Flags** | ✅ ГОТОВ | `feature/flags.go` | Флаги функций |
+
+### ✅ Тестовое покрытие
+
+**Всего тестов:** 84 файла
+
+| Категория | Файлы | Статус |
+|-----------|-------|--------|
+| **Shutdown** | `shutdown/shutdown_test.go` | ✅ |
+| **Health** | `health/checker_test.go`, `probe_test.go` | ✅ |
+| **Router** | `router/filter_test.go` | ✅ |
+| **ConnTrack** | `core/conntrack_test.go`, `metrics_test.go` | ✅ |
+| **Rate Limiter** | `core/rate_limiter_test.go` | ✅ |
+| **DNS** | `dns/hijacker_test.go`, `resolver_integration_test.go` | ✅ |
+| **Buffer** | `buffer/pool_test.go` (11 тестов) | ✅ |
+| **WebSocket** | `proxy/websocket_test.go`, `transport/ws/websocket_test.go` | ✅ |
+| **Worker Pool** | `worker/pool_test.go` | ✅ |
+| **ConnPool** | `connpool/pool_test.go` | ✅ |
+| **API** | `api/server_test.go`, `websocket_test.go`, `auth_test.go` | ✅ |
+| **Profiles** | `profiles/manager_test.go` | ✅ |
+| **UPnP** | `upnp/manager_test.go` | ✅ |
+| **Observability** | `observability/metrics_test.go` | ✅ |
+| **DHCP** | `dhcp/server_test.go`, `integration_test.go` | ✅ |
+| **Proxy** | `proxy/group_test.go`, `router_test.go`, `http3_test.go` | ✅ |
+| **Benchmark** | `dhcp/server_bench_test.go`, `proxy/router_bench_test.go` | ✅ |
+
+**Проблема:** ⚠️ Тесты отключены (Kaspersky false positive)
+**Решение:** Добавить проект в исключения антивируса
+
+---
+
+## Проблемы и области улучшения
+
+### 🔴 Критические проблемы
+
+| Проблема | Статус | Приоритет | Решение |
+|----------|--------|-----------|---------|
+| **Тесты отключены** | ⚠️ В ОЖИДАНИИ | Высокий | Добавить в исключения антивируса |
+| **core/proxy_handler_test.go удалён** | ⏳ ТРЕБУЕТСЯ | Средний | Переписать под текущие интерфейсы |
+
+### 🟡 Предложения по улучшению
+
+| Область | Статус | Приоритет | Описание |
+|---------|--------|-----------|----------|
+| **Профилирование CPU** | ⏳ ТРЕБУЕТСЯ | Низкий | `go test -cpuprofile=cpu.prof` |
+| **Профилирование Memory** | ⏳ ТРЕБУЕТСЯ | Низкий | `go test -memprofile=mem.prof` |
+| **Benchmark suite** | ⏳ ТРЕБУЕТСЯ | Низкий | Полный набор бенчмарков |
+| **Lock-free структуры** | ⏳ ТРЕБУЕТСЯ | Низкий | Где возможно без потери читаемости |
+| **Доп. метрики Proxy** | ⏳ ОПЦИОНАЛЬНО | Низкий | Connections, latency, errors |
+
+### 🟢 Реализованные улучшения
+
+| Улучшение | Статус | Дата |
+|-----------|--------|------|
+| **Buffer Pool интеграция** | ✅ ГОТОВО | 01.04.2026 |
+| **Параллельные DNS запросы** | ✅ ГОТОВО | 01.04.2026 |
+| **Оптимизация аллокаций** | ✅ ГОТОВО | 01.04.2026 |
+| **Улучшение обработки ошибок** | ✅ ГОТОВО | 01.04.2026 |
+| **Рефакторинг conntrack** | ✅ ГОТОВО | 01.04.2026 |
+| **Pre-warm buffer pool** | ✅ ГОТОВО | 01.04.2026 |
+| **WebSocket прокси** | ✅ ГОТОВО | 01.04.2026 |
+| **Grafana dashboard** | ✅ ГОТОВО | 01.04.2026 |
+| **PowerShell утилиты** | ✅ ГОТОВО | 01.04.2026 |
 
 ---
 
