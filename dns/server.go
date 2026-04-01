@@ -19,6 +19,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 )
 
 // DoH Server constants
@@ -373,64 +375,70 @@ func parseDNSQueryHostname(query []byte) (string, error) {
 }
 
 // buildDNSResponse builds a DNS response from query and IPs
+// Optimized with buffer pool for reduced allocations
 func buildDNSResponse(query []byte, ips []net.IP) ([]byte, error) {
 	if len(query) < 12 {
 		return nil, fmt.Errorf("query too short")
 	}
 
-	response := make([]byte, 12)
-	copy(response, query[:12])
+	// Use buffer pool for efficient memory management
+	buf := buffer.Get(buffer.SmallBufferSize)
+	defer buffer.Put(buf)
+
+	// Copy header (12 bytes)
+	copy(buf, query[:12])
 
 	// Set response flags
 	// QR=1 (response), AA=1 (authoritative), RA=1 (recursion available)
-	response[2] = 0x81
-	response[3] = 0x80
+	buf[2] = 0x81
+	buf[3] = 0x80
 
 	// Set question count
-	response[4] = query[4]
-	response[5] = query[5]
+	buf[4] = query[4]
+	buf[5] = query[5]
 
 	// Set answer count (1 per IP)
 	answerCount := uint16(len(ips))
-	response[6] = byte(answerCount >> 8)
-	response[7] = byte(answerCount & 0xFF)
+	buf[6] = byte(answerCount >> 8)
+	buf[7] = byte(answerCount & 0xFF)
 
 	// Authority and additional counts = 0
-	response[8] = 0
-	response[9] = 0
-	response[10] = 0
-	response[11] = 0
+	buf[8] = 0
+	buf[9] = 0
+	buf[10] = 0
+	buf[11] = 0
 
 	offset := 12
 
 	// Copy question section
-	copy(response[offset:], query[12:])
+	copy(buf[offset:], query[12:])
 	offset += len(query) - 12
 
 	// Add answer records
 	for _, ip := range ips {
 		if ip4 := ip.To4(); ip4 != nil {
 			// Name compression pointer to question
-			response = append(response, 0xC0, 0x0C)
+			buf = append(buf, 0xC0, 0x0C)
 
 			// Type A (1)
-			response = append(response, 0x00, 0x01)
+			buf = append(buf, 0x00, 0x01)
 
 			// Class IN (1)
-			response = append(response, 0x00, 0x01)
+			buf = append(buf, 0x00, 0x01)
 
 			// TTL (300 seconds)
-			response = append(response, 0x00, 0x00, 0x01, 0x2C)
+			buf = append(buf, 0x00, 0x00, 0x01, 0x2C)
 
 			// Data length (4 for IPv4)
-			response = append(response, 0x00, 0x04)
+			buf = append(buf, 0x00, 0x04)
 
 			// IP address
-			response = append(response, ip4...)
+			buf = append(buf, ip4...)
 		}
 	}
 
-	return response, nil
+	// Return a copy of the response
+	return buffer.Clone(buf), nil
 }
 
 // generateSelfSignedCert generates a self-signed certificate
