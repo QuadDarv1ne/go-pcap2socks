@@ -30,10 +30,35 @@
 
 **Статус веток:**
 ```
-dev:  60 commits ahead of origin/dev
-main: 94 commits ahead of origin/main
-Разница main/dev: 1 файл (conntrack.go — критическое исправление)
+dev:  61 commits ahead of origin/dev
+main: 98 commits ahead of origin/main
+Разница main/dev: пустая (полностью синхронизированы)
 ```
+
+---
+
+## ✅ Проверка buffer.Put паттернов (01.04.2026)
+
+После исправления критической проблемы в `relayToProxy`, проверил все места использования `buffer.Put`:
+
+| Файл | Функция | Паттерн | Статус |
+|------|---------|---------|--------|
+| **core/conntrack.go** | relayToProxy | Явный вызов в цикле | ✅ ИСПРАВЛЕНО |
+| **core/conntrack.go** | relayFromProxy | defer для основного buf | ✅ ГОТОВ |
+| **core/conntrack.go** | relayUDPPackets | Явный вызов в цикле | ✅ ГОТОВ |
+| **core/conntrack.go** | readUDPFromProxy | defer + явный для Clone | ✅ ГОТОВ |
+| **core/proxy_handler.go** | HandleTCP (gVisor→proxy) | defer + явный для Clone | ✅ ГОТОВ |
+| **core/proxy_handler.go** | HandleUDP (gVisor→proxy) | defer + явный для Clone | ✅ ГОТОВ |
+| **core/conntrack_metrics.go** | formatUint64 | defer для основного buf | ✅ ГОТОВ |
+| **dns/server.go** | buildDNSResponse | defer для основного buf | ✅ ГОТОВ |
+| **api/server.go** | generateSecureToken | defer для основного buf | ✅ ГОТОВ |
+| **dhcp/dhcp.go** | Marshal | defer для основного buf | ✅ ГОТОВ |
+| **dhcp/dhcpv6.go** | Marshal | defer для основного buf | ✅ ГОТОВ |
+| **proxy/socks5.go** | CopyData | defer для основного buf | ✅ ГОТОВ |
+| **transport/socks5.go** | ClientHandshake | defer для основного buf | ✅ ГОТОВ |
+| **transport/ws/websocket.go** | Read/Write UDP | defer для основного buf | ✅ ГОТОВ |
+
+**Вывод:** Все места использования `buffer.Put` проверены и исправлены.
 
 ---
 
