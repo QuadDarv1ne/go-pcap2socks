@@ -94,6 +94,12 @@ func (p *Pool) Put(buf []byte) {
 		return
 	}
 
+	// Ensure buffer is not corrupted
+	if len(buf) > cap {
+		// Buffer is corrupted, don't pool it
+		return
+	}
+
 	switch {
 	case cap <= SmallBufferSize:
 		p.smallPuts.Add(1)
@@ -135,6 +141,23 @@ func Copy(src []byte) []byte {
 
 	buf := Get(len(src))
 	return append(buf, src...)
+}
+
+// Reset clears a buffer and returns it to the pool
+// Returns a new buffer from the pool with the same or larger size
+func Reset(buf []byte, newSize int) []byte {
+	Put(buf)
+	return Get(newSize)
+}
+
+// SafePut safely puts a buffer to the pool, handling nil and invalid buffers
+func SafePut(buf []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Ignore panics from pool operations
+		}
+	}()
+	Put(buf)
 }
 
 // PoolStats holds statistics about pool usage
