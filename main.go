@@ -29,6 +29,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
 	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
 	"github.com/QuadDarv1ne/go-pcap2socks/auto"
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
@@ -376,6 +377,10 @@ func main() {
 	setAdaptiveMemoryLimit()
 
 	slog.Debug("GC tuned for low latency", "gc_percent", 20)
+
+	// Pre-warm buffer pool to reduce initial allocations
+	buffer.PreWarmPool(100, 50, 20)
+	slog.Debug("Buffer pool pre-warmed", "small", 100, "medium", 50, "large", 20)
 
 	// Initialize shutdown manager
 	executable, _ := os.Executable()
