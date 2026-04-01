@@ -26,7 +26,7 @@ func TestErrorCategoryString(t *testing.T) {
 		{CategoryResource, "resource"},
 		{ErrorCategory(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
 			if got := tt.category.String(); got != tt.want {
@@ -43,7 +43,7 @@ func TestErrorError(t *testing.T) {
 		Code:     "TEST",
 		Message:  "test error",
 	}
-	
+
 	want := "[network:TEST] test error"
 	if got := err.Error(); got != want {
 		t.Errorf("Error() = %v, want %v", got, want)
@@ -59,7 +59,7 @@ func TestErrorErrorWithCause(t *testing.T) {
 		Message:  "connection failed",
 		Cause:    cause,
 	}
-	
+
 	want := "[proxy:CONNECT] connection failed: underlying cause"
 	if got := err.Error(); got != want {
 		t.Errorf("Error() = %v, want %v", got, want)
@@ -72,7 +72,7 @@ func TestErrorUnwrap(t *testing.T) {
 	err := &Error{
 		Cause: cause,
 	}
-	
+
 	if unwrapped := err.Unwrap(); unwrapped != cause {
 		t.Errorf("Unwrap() = %v, want %v", unwrapped, cause)
 	}
@@ -84,25 +84,25 @@ func TestErrorIs(t *testing.T) {
 		Category: CategoryNetwork,
 		Code:     "TIMEOUT",
 	}
-	
+
 	err2 := &Error{
 		Category: CategoryNetwork,
 		Code:     "TIMEOUT",
 	}
-	
+
 	err3 := &Error{
 		Category: CategoryNetwork,
 		Code:     "UNREACHABLE",
 	}
-	
+
 	if !err1.Is(err2) {
 		t.Error("Same category and code should be equal")
 	}
-	
+
 	if err1.Is(err3) {
 		t.Error("Different code should not be equal")
 	}
-	
+
 	regularErr := errors.New("regular")
 	if err1.Is(regularErr) {
 		t.Error("Should not match non-Error type")
@@ -114,15 +114,15 @@ func TestErrorWithContext(t *testing.T) {
 	err := New(CategoryProxy, "TEST", "test error")
 	err = err.WithContext("key", "value")
 	err = err.WithContext("number", 42)
-	
+
 	if err.Context == nil {
 		t.Fatal("Context should not be nil")
 	}
-	
+
 	if v, ok := err.Context["key"]; !ok || v != "value" {
 		t.Errorf("Context[key] = %v, want 'value'", v)
 	}
-	
+
 	if v, ok := err.Context["number"]; !ok || v != 42 {
 		t.Errorf("Context[number] = %v, want 42", v)
 	}
@@ -131,13 +131,13 @@ func TestErrorWithContext(t *testing.T) {
 // TestErrorWithRetryable tests retryable flag
 func TestErrorWithRetryable(t *testing.T) {
 	err := New(CategoryNetwork, "TIMEOUT", "timeout")
-	
+
 	if err.Retryable {
 		t.Error("Retryable should be false initially")
 	}
-	
+
 	err = err.WithRetryable()
-	
+
 	if !err.Retryable {
 		t.Error("Retryable should be true after WithRetryable")
 	}
@@ -146,7 +146,7 @@ func TestErrorWithRetryable(t *testing.T) {
 // TestNew tests error creation
 func TestNew(t *testing.T) {
 	err := New(CategoryDNS, "NOT_FOUND", "domain not found")
-	
+
 	if err.Category != CategoryDNS {
 		t.Errorf("Category = %v, want %v", err.Category, CategoryDNS)
 	}
@@ -168,7 +168,7 @@ func TestNew(t *testing.T) {
 func TestWrap(t *testing.T) {
 	cause := errors.New("underlying")
 	err := Wrap(cause, CategoryProxy, "AUTH", "auth failed")
-	
+
 	if err.Cause != cause {
 		t.Errorf("Cause = %v, want %v", err.Cause, cause)
 	}
@@ -181,7 +181,7 @@ func TestWrap(t *testing.T) {
 func TestWrapf(t *testing.T) {
 	cause := errors.New("underlying")
 	err := Wrapf(cause, CategoryNetwork, "CONN", "connection to %s failed", "example.com")
-	
+
 	if err.Message != "connection to example.com failed" {
 		t.Errorf("Message = %v, want 'connection to example.com failed'", err.Message)
 	}
@@ -190,7 +190,7 @@ func TestWrapf(t *testing.T) {
 // TestNewf tests error creation with formatting
 func TestNewf(t *testing.T) {
 	err := Newf(CategoryConfig, "INVALID", "invalid config for %s", "proxy")
-	
+
 	if err.Message != "invalid config for proxy" {
 		t.Errorf("Message = %v, want 'invalid config for proxy'", err.Message)
 	}
@@ -209,7 +209,7 @@ func TestPredefinedErrors(t *testing.T) {
 		{ErrDHCPNoIPs, CategoryDHCP},
 		{ErrRouteNotFound, CategoryRouting},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.err.Code, func(t *testing.T) {
 			if tt.err.Category != tt.category {
@@ -223,9 +223,9 @@ func TestPredefinedErrors(t *testing.T) {
 func TestNewNetworkError(t *testing.T) {
 	addr := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080}
 	cause := errors.New("connection refused")
-	
+
 	err := NewNetworkError("dial", addr, cause)
-	
+
 	if err.Category != CategoryNetwork {
 		t.Errorf("Category = %v, want %v", err.Category, CategoryNetwork)
 	}
@@ -240,9 +240,9 @@ func TestNewNetworkError(t *testing.T) {
 // TestNewProxyError tests proxy error helper
 func TestNewProxyError(t *testing.T) {
 	cause := errors.New("timeout")
-	
+
 	err := NewProxyError("socks5", "proxy.example.com:1080", cause)
-	
+
 	if err.Category != CategoryProxy {
 		t.Errorf("Category = %v, want %v", err.Category, CategoryProxy)
 	}
@@ -258,15 +258,15 @@ func TestNewProxyError(t *testing.T) {
 func TestIsRetryable(t *testing.T) {
 	retryableErr := New(CategoryNetwork, "TIMEOUT", "timeout").WithRetryable()
 	nonRetryableErr := New(CategoryConfig, "INVALID", "invalid")
-	
+
 	if !IsRetryable(retryableErr) {
 		t.Error("Should be retryable")
 	}
-	
+
 	if IsRetryable(nonRetryableErr) {
 		t.Error("Should not be retryable")
 	}
-	
+
 	regularErr := errors.New("regular")
 	if IsRetryable(regularErr) {
 		t.Error("Regular error should not be retryable")
@@ -276,15 +276,15 @@ func TestIsRetryable(t *testing.T) {
 // TestIsCategory tests category check
 func TestIsCategory(t *testing.T) {
 	err := New(CategoryDNS, "NOT_FOUND", "not found")
-	
+
 	if !IsCategory(err, CategoryDNS) {
 		t.Error("Should be DNS category")
 	}
-	
+
 	if IsCategory(err, CategoryProxy) {
 		t.Error("Should not be Proxy category")
 	}
-	
+
 	regularErr := errors.New("regular")
 	if IsCategory(regularErr, CategoryDNS) {
 		t.Error("Regular error should not match any category")
@@ -294,11 +294,11 @@ func TestIsCategory(t *testing.T) {
 // TestGetCategory tests category extraction
 func TestGetCategory(t *testing.T) {
 	err := New(CategoryAuth, "FAILED", "auth failed")
-	
+
 	if got := GetCategory(err); got != CategoryAuth {
 		t.Errorf("GetCategory() = %v, want %v", got, CategoryAuth)
 	}
-	
+
 	regularErr := errors.New("regular")
 	if got := GetCategory(regularErr); got != CategoryUnknown {
 		t.Errorf("GetCategory() = %v, want %v", got, CategoryUnknown)
@@ -308,7 +308,7 @@ func TestGetCategory(t *testing.T) {
 // TestGetContext tests context extraction
 func TestGetContext(t *testing.T) {
 	err := New(CategoryProxy, "TEST", "test").WithContext("key", "value")
-	
+
 	ctx := GetContext(err)
 	if ctx == nil {
 		t.Fatal("Context should not be nil")
@@ -316,7 +316,7 @@ func TestGetContext(t *testing.T) {
 	if v, ok := ctx["key"]; !ok || v != "value" {
 		t.Errorf("Context[key] = %v, want 'value'", v)
 	}
-	
+
 	regularErr := errors.New("regular")
 	if ctx := GetContext(regularErr); ctx != nil {
 		t.Errorf("GetContext() = %v, want nil", ctx)
@@ -326,12 +326,12 @@ func TestGetContext(t *testing.T) {
 // TestErrorAs tests errors.As compatibility
 func TestErrorAs(t *testing.T) {
 	var err error = New(CategoryNetwork, "TEST", "test error")
-	
+
 	var structuredErr *Error
 	if !errors.As(err, &structuredErr) {
 		t.Fatal("Should unwrap to *Error")
 	}
-	
+
 	if structuredErr.Category != CategoryNetwork {
 		t.Errorf("Category = %v, want %v", structuredErr.Category, CategoryNetwork)
 	}
@@ -341,12 +341,12 @@ func TestErrorAs(t *testing.T) {
 func TestWrappedErrorAs(t *testing.T) {
 	baseErr := New(CategoryProxy, "BASE", "base error")
 	wrapped := fmt.Errorf("wrapped: %w", baseErr)
-	
+
 	var structuredErr *Error
 	if !errors.As(wrapped, &structuredErr) {
 		t.Fatal("Should unwrap to *Error")
 	}
-	
+
 	if structuredErr.Code != "BASE" {
 		t.Errorf("Code = %v, want 'BASE'", structuredErr.Code)
 	}

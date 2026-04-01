@@ -22,8 +22,8 @@ var (
 )
 
 var (
-	lastNotification sync.Map // map[string]int64 (key -> timestamp nanoseconds)
-	minInterval      int64 = 30 * int64(time.Second) // Минимальный интервал между одинаковыми уведомлениями
+	lastNotification sync.Map                           // map[string]int64 (key -> timestamp nanoseconds)
+	minInterval      int64    = 30 * int64(time.Second) // Минимальный интервал между одинаковыми уведомлениями
 	notifyCount      atomic.Int64
 
 	// telegramBot holds Telegram bot instance

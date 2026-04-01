@@ -22,9 +22,9 @@ type Flag struct {
 
 // Manager manages feature flags
 type Manager struct {
-	flags    sync.Map // map[string]*Flag
+	flags     sync.Map // map[string]*Flag
 	listeners []func(string, bool)
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 }
 
 // Config holds feature flag configuration
@@ -254,7 +254,7 @@ func (f *Flag) IfElse(ifFn, elseFn func()) {
 
 // Gate is a middleware-style feature flag gate
 type Gate struct {
-	flag   *Flag
+	flag     *Flag
 	fallback func() error
 }
 

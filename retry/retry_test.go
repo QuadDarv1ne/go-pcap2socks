@@ -12,7 +12,7 @@ var errPermanent = errors.New("permanent error")
 
 func TestRetrySuccess(t *testing.T) {
 	cfg := DefaultConfig()
-	
+
 	attempts := 0
 	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
 		attempts++
@@ -115,7 +115,7 @@ func TestRetryContextCancellation(t *testing.T) {
 	}, cfg)
 
 	elapsed := time.Since(start)
-	
+
 	if result.Success {
 		t.Error("Expected failure due to context cancellation")
 	}
@@ -138,7 +138,7 @@ func TestRetryExponentialBackoff(t *testing.T) {
 
 	delays := []time.Duration{}
 	currentDelay := cfg.InitialDelay
-	
+
 	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
 		if attempt > 1 {
 			delays = append(delays, currentDelay)
@@ -179,7 +179,7 @@ func TestRetryWithTimeout(t *testing.T) {
 	}
 
 	attemptDurations := []time.Duration{}
-	
+
 	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
 		start := time.Now()
 		<-ctx.Done()
@@ -271,11 +271,11 @@ func TestIsRetryableError(t *testing.T) {
 
 func TestGetRetryableErrors(t *testing.T) {
 	errors := GetRetryableErrors()
-	
+
 	if len(errors) == 0 {
 		t.Error("Expected some retryable errors")
 	}
-	
+
 	// Check for common errors
 	foundDeadline := false
 	for _, err := range errors {
@@ -284,7 +284,7 @@ func TestGetRetryableErrors(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !foundDeadline {
 		t.Error("Expected context.DeadlineExceeded in retryable errors")
 	}
@@ -298,7 +298,7 @@ func TestRetryJitter(t *testing.T) {
 	}
 
 	delays := make(map[time.Duration]int)
-	
+
 	Do(context.Background(), func(ctx context.Context, attempt int) error {
 		if attempt > 1 {
 			// Record delay (simplified - actual delay calculation)

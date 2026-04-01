@@ -16,11 +16,11 @@ import (
 
 // Config holds pprof configuration
 type Config struct {
-	Enabled      bool          `json:"enabled"`
-	Port         int           `json:"port"`
-	BlockProfile bool          `json:"block_profile"`
-	MutexProfile bool          `json:"mutex_profile"`
-	MemProfileRate int         `json:"mem_profile_rate"`
+	Enabled        bool `json:"enabled"`
+	Port           int  `json:"port"`
+	BlockProfile   bool `json:"block_profile"`
+	MutexProfile   bool `json:"mutex_profile"`
+	MemProfileRate int  `json:"mem_profile_rate"`
 }
 
 // DefaultConfig returns default pprof configuration
@@ -56,32 +56,32 @@ func (s *Server) Start() error {
 
 	// Configure profiling
 	runtime.MemProfileRate = s.config.MemProfileRate
-	
+
 	if s.config.BlockProfile {
 		runtime.SetBlockProfileRate(1)
 	}
-	
+
 	if s.config.MutexProfile {
 		runtime.SetMutexProfileFraction(1)
 	}
 
 	// Create mux for pprof
 	mux := http.NewServeMux()
-	
+
 	// Register pprof handlers
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	
+
 	// Add custom endpoints
 	mux.HandleFunc("/debug/pprof/heap", s.heapProfile)
 	mux.HandleFunc("/debug/pprof/goroutine", s.goroutineProfile)
 	mux.HandleFunc("/debug/pprof/stats", s.statsHandler)
 
 	addr := fmt.Sprintf(":%d", s.config.Port)
-	
+
 	s.server = &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -90,7 +90,7 @@ func (s *Server) Start() error {
 	}
 
 	slog.Info("pprof server starting", "port", s.config.Port)
-	
+
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("pprof server error", "err", err)
@@ -113,11 +113,11 @@ func (s *Server) Stop(ctx context.Context) error {
 // heapProfile serves heap profile
 func (s *Server) heapProfile(w http.ResponseWriter, r *http.Request) {
 	gcBefore := r.URL.Query().Get("gc") == "1"
-	
+
 	if gcBefore {
 		runtime.GC()
 	}
-	
+
 	profile := LookupProfile("heap")
 	if profile != nil {
 		profile.WriteTo(w, 0)
@@ -138,16 +138,16 @@ func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
 	runtime.ReadMemStats(&m)
 
 	stats := map[string]interface{}{
-		"goroutines":           runtime.NumGoroutine(),
-		"memory_alloc":         m.Alloc,
-		"memory_total_alloc":   m.TotalAlloc,
-		"memory_sys":           m.Sys,
-		"memory_heap_alloc":    m.HeapAlloc,
-		"memory_heap_sys":      m.HeapSys,
-		"gc_pause_total_ns":    m.PauseTotalNs,
-		"gc_num":               m.NumGC,
-		"gc_cpu_fraction":      m.GCCPUFraction,
-		"mem_profile_rate":     runtime.MemProfileRate,
+		"goroutines":         runtime.NumGoroutine(),
+		"memory_alloc":       m.Alloc,
+		"memory_total_alloc": m.TotalAlloc,
+		"memory_sys":         m.Sys,
+		"memory_heap_alloc":  m.HeapAlloc,
+		"memory_heap_sys":    m.HeapSys,
+		"gc_pause_total_ns":  m.PauseTotalNs,
+		"gc_num":             m.NumGC,
+		"gc_cpu_fraction":    m.GCCPUFraction,
+		"mem_profile_rate":   runtime.MemProfileRate,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -175,7 +175,7 @@ func WriteProfile(name string, filename string, debug int) error {
 // CaptureProfiles captures all profiles to files
 func CaptureProfiles(prefix string) error {
 	profiles := []string{"heap", "goroutine", "threadcreate", "block", "mutex"}
-	
+
 	for _, name := range profiles {
 		filename := fmt.Sprintf("%s_%s.prof", prefix, name)
 		profile := LookupProfile(name)
@@ -214,7 +214,7 @@ func LookupProfile(name string) *rpprof.Profile {
 func LogMemoryStats() {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	slog.Info("Memory stats",
 		"alloc_mb", m.Alloc/1024/1024,
 		"sys_mb", m.Sys/1024/1024,

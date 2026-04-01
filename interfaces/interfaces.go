@@ -156,8 +156,8 @@ type HealthChecker interface {
 
 // HealthStatus represents health check status
 type HealthStatus struct {
-	Healthy   bool
-	Probes    []ProbeStatus
+	Healthy    bool
+	Probes     []ProbeStatus
 	Recoveries int
 }
 

@@ -13,7 +13,7 @@ import (
 
 // Pre-defined errors for Discord webhook operations
 var (
-	ErrWebhookDisabled  = errors.New("webhook disabled")
+	ErrWebhookDisabled   = errors.New("webhook disabled")
 	ErrWebhookSendFailed = errors.New("failed to send webhook")
 	ErrInvalidWebhookURL = errors.New("invalid webhook URL")
 )
@@ -25,18 +25,18 @@ type WebhookClient struct {
 	enabled    bool
 	// Status handler for external requests
 	statusHandler func() string
-	
+
 	// Rate limiting for device notifications
-	deviceNotifyMu sync.Mutex
-	lastDeviceNotify map[string]time.Time // MAC -> last notify time
+	deviceNotifyMu    sync.Mutex
+	lastDeviceNotify  map[string]time.Time // MAC -> last notify time
 	minNotifyInterval time.Duration
 }
 
 // Embed represents a Discord embed
 type Embed struct {
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
-	Color       int    `json:"color,omitempty"`
+	Title       string       `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Color       int          `json:"color,omitempty"`
 	Fields      []EmbedField `json:"fields,omitempty"`
 	Footer      EmbedFooter  `json:"footer,omitempty"`
 	Timestamp   string       `json:"timestamp,omitempty"`
@@ -65,10 +65,10 @@ type Payload struct {
 // NewWebhookClient creates a new Discord webhook client
 func NewWebhookClient(webhookURL string) *WebhookClient {
 	return &WebhookClient{
-		webhookURL: webhookURL,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		enabled:    webhookURL != "",
-		lastDeviceNotify: make(map[string]time.Time),
+		webhookURL:        webhookURL,
+		httpClient:        &http.Client{Timeout: 30 * time.Second},
+		enabled:           webhookURL != "",
+		lastDeviceNotify:  make(map[string]time.Time),
 		minNotifyInterval: 30 * time.Second, // Min 30s between notifications per device
 	}
 }

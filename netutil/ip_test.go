@@ -200,7 +200,7 @@ func TestCountIPsInCIDR(t *testing.T) {
 
 func TestGetIPInfo(t *testing.T) {
 	tests := []struct {
-		ip     string
+		ip      string
 		private bool
 	}{
 		{"192.168.1.1", true},

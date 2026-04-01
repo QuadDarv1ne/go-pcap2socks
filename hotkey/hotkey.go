@@ -13,17 +13,17 @@ import (
 
 // Pre-defined errors for hotkey operations
 var (
-	ErrHotkeyRegisterFailed = errors.New("failed to register hotkey")
+	ErrHotkeyRegisterFailed    = errors.New("failed to register hotkey")
 	ErrHotkeyAlreadyRegistered = errors.New("hotkey already registered")
 )
 
 // Hotkey constants
 const (
 	// Virtual key codes
-	VK_P     = 0x50
-	VK_R     = 0x52
-	VK_S     = 0x53
-	VK_L     = 0x4C
+	VK_P = 0x50
+	VK_R = 0x52
+	VK_S = 0x53
+	VK_L = 0x4C
 
 	// Modifier keys
 	MOD_ALT   = 0x0001
@@ -35,25 +35,25 @@ const (
 )
 
 var (
-	user32   = syscall.NewLazyDLL("user32.dll")
+	user32               = syscall.NewLazyDLL("user32.dll")
 	procRegisterHotkey   = user32.NewProc("RegisterHotKey")
 	procUnregisterHotkey = user32.NewProc("UnregisterHotKey")
 )
 
 type Manager struct {
-	mu          sync.RWMutex
-	hotkeys     map[int]HotkeyConfig
-	callbacks   map[int]func()
-	hwnd        uintptr
-	running     bool
-	stopChan    chan struct{}
+	mu        sync.RWMutex
+	hotkeys   map[int]HotkeyConfig
+	callbacks map[int]func()
+	hwnd      uintptr
+	running   bool
+	stopChan  chan struct{}
 }
 
 type HotkeyConfig struct {
-	ID       int
+	ID         int
 	VirtualKey int
 	Modifiers  int
-	Name      string
+	Name       string
 }
 
 func NewManager() *Manager {
