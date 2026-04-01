@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/arpr"
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device/iobased"
@@ -209,9 +210,8 @@ func (t *PCAP) Read() []byte {
 			// DHCP uses ports 67 (server) and 68 (client)
 			if (srcPort == 68 || dstPort == 67) && t.dhcpServer != nil {
 				// Handle DHCP in separate goroutine to avoid blocking main read loop
-				// Copy data for async processing
-				dataCopy := make([]byte, len(data))
-				copy(dataCopy, data)
+				// Copy data for async processing using buffer pool
+				dataCopy := buffer.Clone(data)
 				go t.handleDHCPAsync(dataCopy)
 				return nil // Don't pass DHCP packets to the stack
 			}

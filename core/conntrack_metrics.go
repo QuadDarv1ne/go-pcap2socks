@@ -4,6 +4,8 @@ package core
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 )
 
 // ConnMetrics holds detailed connection metrics
@@ -237,7 +239,10 @@ go_pcap2socks_conntrack_dropped_udp ` + formatUint64(metrics.DroppedUDP) + `
 }
 
 func formatUint64(v uint64) string {
-	buf := make([]byte, 0, 20)
+	// Use buffer pool for efficient memory management
+	buf := buffer.Get(buffer.SmallBufferSize)
+	defer buffer.Put(buf)
+
 	for v >= 10 {
 		q := v / 10
 		buf = append(buf, byte('0'+v-q*10))
