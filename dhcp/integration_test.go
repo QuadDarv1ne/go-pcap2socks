@@ -24,10 +24,10 @@ func TestDHCPServer_Integration(t *testing.T) {
 		IP:   net.ParseIP("192.168.137.0"),
 		Mask: net.CIDRMask(24, 32),
 	}
-	
+
 	serverIP := net.ParseIP("192.168.137.1")
 	serverMAC, _ := net.ParseMAC("aa:bb:cc:dd:ee:ff")
-	
+
 	config := &ServerConfig{
 		ServerIP:      serverIP,
 		ServerMAC:     serverMAC,
@@ -37,16 +37,16 @@ func TestDHCPServer_Integration(t *testing.T) {
 		LastIP:        net.ParseIP("192.168.137.20"),
 		DNSServers:    []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")},
 	}
-	
+
 	server := NewServer(config)
 	if server == nil {
 		t.Fatal("Failed to create DHCP server")
 	}
 	defer server.Stop()
-	
+
 	// Test DHCP Discover
 	clientMAC, _ := net.ParseMAC("11:22:33:44:55:66")
-	
+
 	discoverMsg := &DHCPMessage{
 		OpCode:         1, // BOOTREQUEST
 		HardwareType:   1,
@@ -60,26 +60,26 @@ func TestDHCPServer_Integration(t *testing.T) {
 		Options:        make(map[uint8][]byte),
 	}
 	discoverMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPDiscover)}
-	
+
 	offer, err := server.HandleRequest(discoverMsg.Marshal())
 	if err != nil {
 		t.Fatalf("HandleRequest(Discover) error: %v", err)
 	}
-	
+
 	if offer == nil {
 		t.Fatal("HandleRequest(Discover) returned nil, expected OFFER")
 	}
-	
+
 	// Parse offer to verify
 	offerMsg, err := ParseDHCPMessage(offer)
 	if err != nil {
 		t.Fatalf("ParseDHCPMessage(Offer) error: %v", err)
 	}
-	
+
 	if getDHCPMessageType(offerMsg.Options) != DHCPOffer {
 		t.Errorf("Expected OFFER, got %v", getDHCPMessageType(offerMsg.Options))
 	}
-	
+
 	// Test DHCP Request
 	requestMsg := &DHCPMessage{
 		OpCode:         1,
@@ -95,38 +95,38 @@ func TestDHCPServer_Integration(t *testing.T) {
 	}
 	requestMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRequest)}
 	requestMsg.Options[OptionRequestedIP] = offerMsg.YourIP.To4()
-	
+
 	ack, err := server.HandleRequest(requestMsg.Marshal())
 	if err != nil {
 		t.Fatalf("HandleRequest(Request) error: %v", err)
 	}
-	
+
 	if ack == nil {
 		t.Fatal("HandleRequest(Request) returned nil, expected ACK")
 	}
-	
+
 	// Parse ACK to verify
 	ackMsg, err := ParseDHCPMessage(ack)
 	if err != nil {
 		t.Fatalf("ParseDHCPMessage(ACK) error: %v", err)
 	}
-	
+
 	if getDHCPMessageType(ackMsg.Options) != DHCPAck {
 		t.Errorf("Expected ACK, got %v", getDHCPMessageType(ackMsg.Options))
 	}
-	
+
 	// Verify lease was created
 	leases := server.GetLeases()
 	if len(leases) != 1 {
 		t.Errorf("Expected 1 lease, got %d", len(leases))
 	}
-	
+
 	macStr := clientMAC.String()
 	lease, exists := leases[macStr]
 	if !exists {
 		t.Fatal("Lease not found for client MAC")
 	}
-	
+
 	if lease.IP == nil {
 		t.Error("Lease IP is nil")
 	}
@@ -138,7 +138,7 @@ func TestDHCPServer_MultipleClients(t *testing.T) {
 		IP:   net.ParseIP("10.0.0.0"),
 		Mask: net.CIDRMask(24, 32),
 	}
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("10.0.0.1"),
 		ServerMAC:     mustParseMAC("aa:bb:cc:dd:ee:ff"),
@@ -148,19 +148,19 @@ func TestDHCPServer_MultipleClients(t *testing.T) {
 		LastIP:        net.ParseIP("10.0.0.20"),
 		DNSServers:    []net.IP{net.ParseIP("8.8.8.8")},
 	}
-	
+
 	server := NewServer(config)
 	defer server.Stop()
-	
+
 	// Simulate multiple clients
 	clientMACs := []string{
 		"11:22:33:44:55:66",
 		"11:22:33:44:55:67",
 		"11:22:33:44:55:68",
 	}
-	
+
 	assignedIPs := make(map[string]bool)
-	
+
 	for _, macStr := range clientMACs {
 		clientMAC, _ := net.ParseMAC(macStr)
 
@@ -218,12 +218,12 @@ func TestDHCPServer_MultipleClients(t *testing.T) {
 			t.Errorf("Expected ACK for %s, got %v", macStr, getDHCPMessageType(ackMsg.Options))
 		}
 	}
-	
+
 	// Verify all clients got unique IPs
 	if len(assignedIPs) != len(clientMACs) {
 		t.Errorf("Expected %d unique IPs, got %d", len(clientMACs), len(assignedIPs))
 	}
-	
+
 	// Verify all IPs are in pool range
 	for ipStr := range assignedIPs {
 		ip := net.ParseIP(ipStr)
@@ -239,7 +239,7 @@ func TestDHCPServer_LeaseRenewal(t *testing.T) {
 		IP:   net.ParseIP("172.16.0.0"),
 		Mask: net.CIDRMask(24, 32),
 	}
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("172.16.0.1"),
 		ServerMAC:     mustParseMAC("aa:bb:cc:dd:ee:ff"),
@@ -249,12 +249,12 @@ func TestDHCPServer_LeaseRenewal(t *testing.T) {
 		LastIP:        net.ParseIP("172.16.0.20"),
 		DNSServers:    []net.IP{net.ParseIP("8.8.8.8")},
 	}
-	
+
 	server := NewServer(config)
 	defer server.Stop()
-	
+
 	clientMAC, _ := net.ParseMAC("11:22:33:44:55:66")
-	
+
 	// Initial Discover/Request
 	discoverMsg := &DHCPMessage{
 		OpCode:         1,
@@ -292,16 +292,16 @@ func TestDHCPServer_LeaseRenewal(t *testing.T) {
 	ackMsg, _ := ParseDHCPMessage(ack)
 
 	initialIP := ackMsg.YourIP.String()
-	
+
 	// Get initial lease
 	leases := server.GetLeases()
 	macStr := clientMAC.String()
 	initialLease := leases[macStr]
-	
+
 	if initialLease == nil {
 		t.Fatal("Initial lease not found")
 	}
-	
+
 	// Simulate renewal (Request same IP)
 	renewalMsg := &DHCPMessage{
 		OpCode:         1,
@@ -327,15 +327,15 @@ func TestDHCPServer_LeaseRenewal(t *testing.T) {
 	if getDHCPMessageType(renewalAckMsg.Options) != DHCPAck {
 		t.Errorf("Expected ACK for renewal, got %v", getDHCPMessageType(renewalAckMsg.Options))
 	}
-	
+
 	// Verify lease was updated
 	leases = server.GetLeases()
 	renewedLease := leases[macStr]
-	
+
 	if renewedLease == nil {
 		t.Fatal("Renewed lease not found")
 	}
-	
+
 	if renewedLease.IP.String() != initialIP {
 		t.Errorf("Lease IP changed: %s -> %s", initialIP, renewedLease.IP.String())
 	}
@@ -347,7 +347,7 @@ func TestDHCPServer_IPPoolExhaustion(t *testing.T) {
 		IP:   net.ParseIP("192.168.1.0"),
 		Mask: net.CIDRMask(24, 32),
 	}
-	
+
 	// Small pool for testing
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("192.168.1.1"),
@@ -358,10 +358,10 @@ func TestDHCPServer_IPPoolExhaustion(t *testing.T) {
 		LastIP:        net.ParseIP("192.168.1.11"), // Only 2 IPs
 		DNSServers:    []net.IP{net.ParseIP("8.8.8.8")},
 	}
-	
+
 	server := NewServer(config)
 	defer server.Stop()
-	
+
 	// Exhaust the pool
 	for i := 0; i < 3; i++ {
 		clientMAC, _ := net.ParseMAC(fmt.Sprintf("11:22:33:44:55:%02x", i))
@@ -379,9 +379,9 @@ func TestDHCPServer_IPPoolExhaustion(t *testing.T) {
 			Options:        make(map[uint8][]byte),
 		}
 		discoverMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPDiscover)}
-		
+
 		offer, err := server.HandleRequest(discoverMsg.Marshal())
-		
+
 		if i < 2 {
 			// First two should succeed
 			if err != nil {
@@ -405,7 +405,7 @@ func TestDHCPServer_LeaseRelease(t *testing.T) {
 		IP:   net.ParseIP("10.10.0.0"),
 		Mask: net.CIDRMask(24, 32),
 	}
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("10.10.0.1"),
 		ServerMAC:     mustParseMAC("aa:bb:cc:dd:ee:ff"),
@@ -415,12 +415,12 @@ func TestDHCPServer_LeaseRelease(t *testing.T) {
 		LastIP:        net.ParseIP("10.10.0.20"),
 		DNSServers:    []net.IP{net.ParseIP("8.8.8.8")},
 	}
-	
+
 	server := NewServer(config)
 	defer server.Stop()
-	
+
 	clientMAC, _ := net.ParseMAC("11:22:33:44:55:66")
-	
+
 	// Initial Discover/Request
 	discoverMsg := &DHCPMessage{
 		OpCode:         1,
@@ -476,9 +476,9 @@ func TestDHCPServer_LeaseRelease(t *testing.T) {
 		Options:        make(map[uint8][]byte),
 	}
 	releaseMsg.Options[OptionDHCPMessageType] = []byte{byte(DHCPRelease)}
-	
+
 	server.HandleRequest(releaseMsg.Marshal())
-	
+
 	// Verify lease was removed
 	leases = server.GetLeases()
 	if len(leases) != 0 {
@@ -492,7 +492,7 @@ func TestDHCPServer_ConcurrentRequests(t *testing.T) {
 		IP:   net.ParseIP("172.20.0.0"),
 		Mask: net.CIDRMask(24, 32),
 	}
-	
+
 	config := &ServerConfig{
 		ServerIP:      net.ParseIP("172.20.0.1"),
 		ServerMAC:     mustParseMAC("aa:bb:cc:dd:ee:ff"),
@@ -502,15 +502,15 @@ func TestDHCPServer_ConcurrentRequests(t *testing.T) {
 		LastIP:        net.ParseIP("172.20.0.50"), // Large pool
 		DNSServers:    []net.IP{net.ParseIP("8.8.8.8")},
 	}
-	
+
 	server := NewServer(config)
 	defer server.Stop()
-	
+
 	var wg sync.WaitGroup
 	numClients := 20
-	
+
 	wg.Add(numClients)
-	
+
 	for i := 0; i < numClients; i++ {
 		go func(clientNum int) {
 			defer wg.Done()
@@ -571,9 +571,9 @@ func TestDHCPServer_ConcurrentRequests(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify all leases were created
 	leases := server.GetLeases()
 	if len(leases) != numClients {
@@ -595,6 +595,6 @@ func isIPInRange(ip, start, end net.IP) bool {
 	ipInt := binary.BigEndian.Uint32(ip.To4())
 	startInt := binary.BigEndian.Uint32(start.To4())
 	endInt := binary.BigEndian.Uint32(end.To4())
-	
+
 	return ipInt >= startInt && ipInt <= endInt
 }

@@ -21,27 +21,27 @@ import (
 // Uses worker pool for concurrent DHCP request processing
 type Server struct {
 	config         *ServerConfig
-	leases         sync.Map // map[string]*DHCPLease (MAC -> Lease)
-	ipIndex        sync.Map // map[string]string (IP -> MAC) for O(1) IP lookup
+	leases         sync.Map     // map[string]*DHCPLease (MAC -> Lease)
+	ipIndex        sync.Map     // map[string]string (IP -> MAC) for O(1) IP lookup
 	nextIP         atomic.Value // net.IP
 	stopChan       chan struct{}
 	reserved       sync.Map // map[string]bool
-	leaseDB        *LeaseDB                   // Persistent lease database
+	leaseDB        *LeaseDB // Persistent lease database
 	metrics        *MetricsCollector
-	smartDHCP      *auto.SmartDHCPManager     // Smart DHCP with device-based IP allocation
-	deviceProfiles sync.Map // map[string]auto.DeviceProfile
+	smartDHCP      *auto.SmartDHCPManager // Smart DHCP with device-based IP allocation
+	deviceProfiles sync.Map               // map[string]auto.DeviceProfile
 	leaseCount     atomic.Int32
 	wg             sync.WaitGroup // WaitGroup for graceful shutdown
 
 	// Rate limiting for DHCP requests (protection against flood attacks)
-	requestCount   sync.Map // map[string]*requestCounter (MAC -> counter)
-	rateLimit      int      // max requests per minute per MAC
+	requestCount    sync.Map      // map[string]*requestCounter (MAC -> counter)
+	rateLimit       int           // max requests per minute per MAC
 	rateLimitWindow time.Duration // time window for rate limiting
 
 	// Multi-threaded processing
-	workerCount int                    // Number of worker goroutines
-	requestQueue chan *dhcpRequest    // Queue for DHCP requests
-	processWg    sync.WaitGroup       // WaitGroup for workers
+	workerCount  int               // Number of worker goroutines
+	requestQueue chan *dhcpRequest // Queue for DHCP requests
+	processWg    sync.WaitGroup    // WaitGroup for workers
 }
 
 // dhcpRequest represents a DHCP request to be processed
@@ -57,7 +57,7 @@ type requestCounter struct {
 }
 
 const (
-	defaultRateLimit = 10 // 10 requests per minute per MAC
+	defaultRateLimit       = 10 // 10 requests per minute per MAC
 	defaultRateLimitWindow = time.Minute
 )
 
@@ -513,7 +513,7 @@ func (s *Server) handleRelease(msg *DHCPMessage) ([]byte, error) {
 	// Only decrement if lease actually existed
 	if lease, exists := s.leases.Load(macStr); exists {
 		ipStr := lease.(*DHCPLease).IP.String()
-		s.ipIndex.Delete(ipStr)  // Remove from IP index
+		s.ipIndex.Delete(ipStr) // Remove from IP index
 		s.leases.Delete(macStr)
 		s.leaseCount.Add(-1)
 
@@ -715,7 +715,7 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 				Transaction: 0,
 			}
 			s.leases.Store(macStr, lease)
-			s.ipIndex.Store(ipStr, macStr)  // Update IP index
+			s.ipIndex.Store(ipStr, macStr) // Update IP index
 			s.leaseCount.Add(1)
 
 			// Save to persistent database
@@ -795,7 +795,7 @@ func (s *Server) cleanupLeases() {
 		lease := v.(*DHCPLease)
 		if now.After(lease.ExpiresAt) {
 			ipStr := lease.IP.String()
-			s.ipIndex.Delete(ipStr)  // Remove from IP index
+			s.ipIndex.Delete(ipStr) // Remove from IP index
 			s.leases.Delete(mac)
 			deleted++
 			slog.Debug("DHCP lease expired", "mac", mac, "ip", lease.IP.String())

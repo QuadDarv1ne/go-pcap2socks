@@ -46,10 +46,10 @@ func NewSystemTuner() *SystemTuner {
 // detectSystemResources detects current system resources
 func detectSystemResources() *SystemResources {
 	res := &SystemResources{
-		CPUCount:     runtime.NumCPU(),
-		TotalMemory:  getTotalMemory(),
-		GOOS:         runtime.GOOS,
-		GOARCH:       runtime.GOARCH,
+		CPUCount:    runtime.NumCPU(),
+		TotalMemory: getTotalMemory(),
+		GOOS:        runtime.GOOS,
+		GOARCH:      runtime.GOARCH,
 	}
 
 	// Estimate available memory (assume 50% free for simplicity)

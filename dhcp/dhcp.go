@@ -146,7 +146,7 @@ func (m *DHCPMessage) Marshal() []byte {
 
 	// Add options in deterministic order for reliability
 	// Order: Message Type → Server ID → Subnet Mask → Router → DNS → Lease Time → Requested IP → Others
-	
+
 	// Helper function to add an option
 	addOption := func(code uint8, value []byte) {
 		buf[optionPos] = code
@@ -156,7 +156,7 @@ func (m *DHCPMessage) Marshal() []byte {
 		copy(buf[optionPos:optionPos+len(value)], value)
 		optionPos += len(value)
 	}
-	
+
 	// Add mandatory and common options in fixed order
 	if msgType, ok := m.Options[OptionDHCPMessageType]; ok {
 		addOption(OptionDHCPMessageType, msgType)

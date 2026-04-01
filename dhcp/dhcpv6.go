@@ -38,50 +38,50 @@ const (
 
 // DHCPv6 options (RFC 8415)
 const (
-	DHCPv6OptionClientID           = 1
-	DHCPv6OptionServerID           = 2
-	DHCPv6OptionIANA               = 3  // Identity Association for Non-temporary Addresses
-	DHCPv6OptionIATA               = 4  // Identity Association for Temporary Addresses
-	DHCPv6OptionIAAddr             = 5  // IA Address
-	DHCPv6OptionORO                = 6  // Option Request Option
-	DHCPv6OptionPreference       = 7
-	DHCPv6OptionElapsedTime      = 8
-	DHCPv6OptionRelayMessage     = 9
-	DHCPv6OptionAuth            = 11
-	DHCPv6OptionUnicast         = 12
-	DHCPv6OptionStatusCode      = 13
-	DHCPv6OptionRapidCommit     = 14
-	DHCPv6OptionUserClass       = 15
-	DHCPv6OptionVendorClass     = 16
-	DHCPv6OptionVendorInfo      = 17
-	DHCPv6OptionInterfaceID     = 18
-	DHCPv6OptionReconfMessage   = 19
-	DHCPv6OptionReconfAccept    = 20
-	DHCPv6OptionSIPServerD      = 21
-	DHCPv6OptionSIPServerA      = 22
+	DHCPv6OptionClientID               = 1
+	DHCPv6OptionServerID               = 2
+	DHCPv6OptionIANA                   = 3 // Identity Association for Non-temporary Addresses
+	DHCPv6OptionIATA                   = 4 // Identity Association for Temporary Addresses
+	DHCPv6OptionIAAddr                 = 5 // IA Address
+	DHCPv6OptionORO                    = 6 // Option Request Option
+	DHCPv6OptionPreference             = 7
+	DHCPv6OptionElapsedTime            = 8
+	DHCPv6OptionRelayMessage           = 9
+	DHCPv6OptionAuth                   = 11
+	DHCPv6OptionUnicast                = 12
+	DHCPv6OptionStatusCode             = 13
+	DHCPv6OptionRapidCommit            = 14
+	DHCPv6OptionUserClass              = 15
+	DHCPv6OptionVendorClass            = 16
+	DHCPv6OptionVendorInfo             = 17
+	DHCPv6OptionInterfaceID            = 18
+	DHCPv6OptionReconfMessage          = 19
+	DHCPv6OptionReconfAccept           = 20
+	DHCPv6OptionSIPServerD             = 21
+	DHCPv6OptionSIPServerA             = 22
 	DHCPv6OptionDNSRecursiveNameServer = 23
-	DHCPv6OptionDomainSearchList     = 24
-	DHCPv6OptionIAPD              = 25  // IA Prefix Delegation
-	DHCPv6OptionIAPrefix          = 26
-	DHCPv6OptionNTPServer         = 56
+	DHCPv6OptionDomainSearchList       = 24
+	DHCPv6OptionIAPD                   = 25 // IA Prefix Delegation
+	DHCPv6OptionIAPrefix               = 26
+	DHCPv6OptionNTPServer              = 56
 )
 
 // DHCPv6 status codes
 const (
-	DHCPv6StatusSuccess      = 0
-	DHCPv6StatusUnspecFail   = 1
-	DHCPv6StatusNoAddrsAvail = 2
+	DHCPv6StatusSuccess       = 0
+	DHCPv6StatusUnspecFail    = 1
+	DHCPv6StatusNoAddrsAvail  = 2
 	DHCPv6StatusNoPrefixAvail = 3
 )
 
 // DHCPv6Message represents a DHCPv6 packet
 type DHCPv6Message struct {
-	MsgType         uint8
-	TransactionID   uint32
-	Options         map[uint16][]byte
-	LinkLayerAddr   net.HardwareAddr
-	PeerAddr        net.IP
-	LocalAddr       net.IP
+	MsgType       uint8
+	TransactionID uint32
+	Options       map[uint16][]byte
+	LinkLayerAddr net.HardwareAddr
+	PeerAddr      net.IP
+	LocalAddr     net.IP
 }
 
 // NewDHCPv6Message creates a new DHCPv6 message
@@ -165,21 +165,21 @@ func ParseDHCPv6Message(data []byte) (*DHCPv6Message, error) {
 
 // DHCPv6Lease represents an IPv6 lease
 type DHCPv6Lease struct {
-	IPv6        net.IP
-	DUID        []byte  // DHCP Unique Identifier
-	IAID        uint32  // Identity Association ID
-	ExpiresAt   time.Time
-	PreferredAt time.Time
-	ValidTime   uint32
+	IPv6          net.IP
+	DUID          []byte // DHCP Unique Identifier
+	IAID          uint32 // Identity Association ID
+	ExpiresAt     time.Time
+	PreferredAt   time.Time
+	ValidTime     uint32
 	PreferredTime uint32
-	Hostname    string
+	Hostname      string
 }
 
 // ServerV6Config holds DHCPv6 server configuration
 type ServerV6Config struct {
 	ServerIP      net.IP
 	ServerMAC     net.HardwareAddr
-	ServerDUID    []byte  // DHCP Unique Identifier for server
+	ServerDUID    []byte // DHCP Unique Identifier for server
 	Network       *net.IPNet
 	IPv6Prefix    *net.IPNet
 	LeaseDuration time.Duration
@@ -198,10 +198,10 @@ type ServerV6 struct {
 	leases   map[string]*DHCPv6Lease // keyed by DUID+IAID
 	stopChan chan struct{}
 	conn     *net.UDPConn
-	
+
 	// Statistics
-	statsMu   sync.RWMutex
-	stats     DHCPv6Stats
+	statsMu sync.RWMutex
+	stats   DHCPv6Stats
 }
 
 // DHCPv6Stats holds DHCPv6 server statistics
@@ -236,8 +236,8 @@ func NewServerV6(config *ServerV6Config) (*ServerV6, error) {
 // generateDUIDLL generates a DUID-LL (RFC 8415)
 func generateDUIDLL(mac net.HardwareAddr) []byte {
 	duid := make([]byte, 10)
-	binary.BigEndian.PutUint16(duid[0:], 1)  // DUID-LL
-	binary.BigEndian.PutUint16(duid[2:], 1)  // Ethernet
+	binary.BigEndian.PutUint16(duid[0:], 1) // DUID-LL
+	binary.BigEndian.PutUint16(duid[2:], 1) // Ethernet
 	copy(duid[4:], mac)
 	return duid
 }
@@ -536,12 +536,12 @@ func (s *ServerV6) allocateIPv6(clientID []byte, iaid uint32) (net.IP, error) {
 		if available {
 			// Create new lease
 			lease := &DHCPv6Lease{
-				IPv6:        ip,
-				DUID:        clientID,
-				IAID:        iaid,
-				ExpiresAt:   time.Now().Add(s.config.LeaseDuration),
-				PreferredAt: time.Now().Add(s.config.PreferredTime),
-				ValidTime:   uint32(s.config.LeaseDuration / time.Second),
+				IPv6:          ip,
+				DUID:          clientID,
+				IAID:          iaid,
+				ExpiresAt:     time.Now().Add(s.config.LeaseDuration),
+				PreferredAt:   time.Now().Add(s.config.PreferredTime),
+				ValidTime:     uint32(s.config.LeaseDuration / time.Second),
 				PreferredTime: uint32(s.config.PreferredTime / time.Second),
 			}
 			s.leases[leaseKey] = lease
@@ -588,14 +588,14 @@ func (s *ServerV6) createAdvertise(request *DHCPv6Message, ipv6 net.IP, clientID
 		iana, ok := request.Options[DHCPv6OptionIANA]
 		if ok {
 			iaid := binary.BigEndian.Uint32(iana[0:4])
-			
+
 			// Build IA Address option
 			iaAddr := make([]byte, 24)
 			binary.BigEndian.PutUint32(iaAddr[0:], iaid)
 			copy(iaAddr[4:20], ipv6.To16())
 			binary.BigEndian.PutUint32(iaAddr[20:], uint32(s.config.PreferredTime/time.Second))
 			binary.BigEndian.PutUint32(iaAddr[24:], uint32(s.config.LeaseDuration/time.Second))
-			
+
 			response.Options[DHCPv6OptionIANA] = iaAddr
 		}
 	}
@@ -638,14 +638,14 @@ func (s *ServerV6) createReply(request *DHCPv6Message, clientID []byte, ipv6 net
 		iana, ok := request.Options[DHCPv6OptionIANA]
 		if ok {
 			iaid := binary.BigEndian.Uint32(iana[0:4])
-			
+
 			// Build IA Address option
 			iaAddr := make([]byte, 28)
 			binary.BigEndian.PutUint32(iaAddr[0:], iaid)
 			copy(iaAddr[4:20], ipv6.To16())
 			binary.BigEndian.PutUint32(iaAddr[20:], uint32(s.config.PreferredTime/time.Second))
 			binary.BigEndian.PutUint32(iaAddr[24:], uint32(s.config.LeaseDuration/time.Second))
-			
+
 			response.Options[DHCPv6OptionIANA] = iaAddr
 		}
 	}
@@ -674,7 +674,7 @@ func (s *ServerV6) createReply(request *DHCPv6Message, clientID []byte, ipv6 net
 // sendResponse sends a DHCPv6 response
 func (s *ServerV6) sendResponse(response *DHCPv6Message, clientAddr *net.UDPAddr) {
 	data := response.Marshal()
-	
+
 	_, err := s.conn.WriteToUDP(data, clientAddr)
 	if err != nil {
 		slog.Debug("Failed to send DHCPv6 response", "error", err)

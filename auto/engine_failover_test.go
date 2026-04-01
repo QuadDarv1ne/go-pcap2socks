@@ -212,7 +212,7 @@ func TestEngineFailover_SetOnSwitch(t *testing.T) {
 	// Verify callback works
 	f.healthChecks[EngineWinDivert].IsHealthy = false
 	f.currentEngine = EngineWinDivert
-	
+
 	// Don't wait - just verify no crash
 	_ = f.CheckAndSwitch()
 	_ = switched

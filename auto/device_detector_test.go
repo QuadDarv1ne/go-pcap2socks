@@ -66,9 +66,9 @@ func TestDetectByMAC_DifferentFormats(t *testing.T) {
 
 func TestDeviceProfile_IsGamingDevice(t *testing.T) {
 	tests := []struct {
-		name  string
+		name    string
 		profile DeviceProfile
-		want  bool
+		want    bool
 	}{
 		{"PS4", DeviceProfile{Type: DevicePS4}, true},
 		{"PS5", DeviceProfile{Type: DevicePS5}, true},
@@ -92,9 +92,9 @@ func TestDeviceProfile_IsGamingDevice(t *testing.T) {
 
 func TestDeviceProfile_IsMobileDevice(t *testing.T) {
 	tests := []struct {
-		name  string
+		name    string
 		profile DeviceProfile
-		want  bool
+		want    bool
 	}{
 		{"Phone", DeviceProfile{Type: DevicePhone}, true},
 		{"Tablet", DeviceProfile{Type: DeviceTablet}, true},
@@ -113,9 +113,9 @@ func TestDeviceProfile_IsMobileDevice(t *testing.T) {
 
 func TestDeviceProfile_IsRobot(t *testing.T) {
 	tests := []struct {
-		name  string
+		name    string
 		profile DeviceProfile
-		want  bool
+		want    bool
 	}{
 		{"Robot", DeviceProfile{Type: DeviceRobot}, true},
 		{"PC", DeviceProfile{Type: DevicePC}, false},

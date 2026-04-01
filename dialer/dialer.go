@@ -11,8 +11,8 @@ import (
 
 // Pre-defined errors for dialer operations
 var (
-	ErrBindToDevice    = errors.New("failed to bind to device")
-	ErrSetRoutingMark  = errors.New("failed to set routing mark")
+	ErrBindToDevice     = errors.New("failed to bind to device")
+	ErrSetRoutingMark   = errors.New("failed to set routing mark")
 	ErrInvalidInterface = errors.New("invalid network interface")
 )
 

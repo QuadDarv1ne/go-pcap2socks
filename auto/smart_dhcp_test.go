@@ -226,7 +226,7 @@ func TestIPPool_NewIPPool(t *testing.T) {
 	if pool.End == nil {
 		t.Error("End IP should not be nil")
 	}
-	
+
 	// Count allocated using Range
 	allocatedCount := 0
 	pool.Allocated.Range(func(k, v any) bool {

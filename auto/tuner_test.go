@@ -102,10 +102,10 @@ func TestCalculateOptimalMTU(t *testing.T) {
 	// This test verifies the MTU is set correctly in AutoTune
 	tuner := &SystemTuner{
 		resources: &SystemResources{
-			CPUCount:      4,
+			CPUCount:        4,
 			AvailableMemory: 4 * GB,
-			NetworkSpeed:  100,
-			GOOS:          "windows",
+			NetworkSpeed:    100,
+			GOOS:            "windows",
 		},
 	}
 	config := tuner.AutoTune()

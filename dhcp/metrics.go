@@ -10,23 +10,23 @@ import (
 // MetricsCollector collects DHCP server metrics
 // Optimized with atomic counters for lock-free updates in hot path
 type MetricsCollector struct {
-	startTime         time.Time
-	discoverCount     atomic.Int64
-	offerCount        atomic.Int64
-	requestCount      atomic.Int64
-	ackCount          atomic.Int64
-	nakCount          atomic.Int64
-	releaseCount      atomic.Int64
-	declineCount      atomic.Int64
-	errorCount        atomic.Int64
-	activeLeases      atomic.Int64
-	totalAllocations  atomic.Int64
-	totalRenewals     atomic.Int64
-	lastAllocationAt  atomic.Value // time.Time
-	lastRequestMAC    atomic.Value // string
-	lastRequestIP     atomic.Value // string
-	hourlyStatsMu     sync.RWMutex
-	hourlyStats       map[int64]*HourlyStats // hour timestamp -> stats
+	startTime        time.Time
+	discoverCount    atomic.Int64
+	offerCount       atomic.Int64
+	requestCount     atomic.Int64
+	ackCount         atomic.Int64
+	nakCount         atomic.Int64
+	releaseCount     atomic.Int64
+	declineCount     atomic.Int64
+	errorCount       atomic.Int64
+	activeLeases     atomic.Int64
+	totalAllocations atomic.Int64
+	totalRenewals    atomic.Int64
+	lastAllocationAt atomic.Value // time.Time
+	lastRequestMAC   atomic.Value // string
+	lastRequestIP    atomic.Value // string
+	hourlyStatsMu    sync.RWMutex
+	hourlyStats      map[int64]*HourlyStats // hour timestamp -> stats
 }
 
 // HourlyStats holds per-hour statistics
@@ -67,7 +67,7 @@ func (m *MetricsCollector) getOrCreateHourlyStats(hourKey int64) *HourlyStats {
 
 	m.hourlyStatsMu.Lock()
 	defer m.hourlyStatsMu.Unlock()
-	
+
 	// Double-check after acquiring write lock
 	if hs, exists := m.hourlyStats[hourKey]; exists {
 		return hs
@@ -172,7 +172,7 @@ func (m *MetricsCollector) GetMetrics() MetricsSnapshot {
 	// Handle nil values for atomic.Value fields
 	var lastAllocAt time.Time
 	var lastMac, lastIp string
-	
+
 	if v := m.lastAllocationAt.Load(); v != nil {
 		lastAllocAt = v.(time.Time)
 	}
@@ -182,7 +182,7 @@ func (m *MetricsCollector) GetMetrics() MetricsSnapshot {
 	if v := m.lastRequestIP.Load(); v != nil {
 		lastIp = v.(string)
 	}
-	
+
 	return MetricsSnapshot{
 		StartTime:        m.startTime,
 		UptimeSeconds:    int64(time.Since(m.startTime).Seconds()),
