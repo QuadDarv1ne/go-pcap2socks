@@ -7,7 +7,7 @@ import (
 )
 
 func TestCollector_RecordConnection(t *testing.T) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	c.RecordConnection()
 	c.RecordConnection()
@@ -26,7 +26,7 @@ func TestCollector_RecordConnection(t *testing.T) {
 }
 
 func TestCollector_RecordTraffic(t *testing.T) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	c.RecordTraffic(100, 200)
 	c.RecordTraffic(50, 150)
@@ -43,7 +43,7 @@ func TestCollector_RecordTraffic(t *testing.T) {
 }
 
 func TestCollector_RecordPacket(t *testing.T) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	c.RecordPacket()
 	c.RecordPacket()
@@ -55,7 +55,7 @@ func TestCollector_RecordPacket(t *testing.T) {
 }
 
 func TestCollector_RecordError(t *testing.T) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	c.RecordError()
 	c.RecordError()
@@ -66,7 +66,7 @@ func TestCollector_RecordError(t *testing.T) {
 }
 
 func TestCollector_RecordCache(t *testing.T) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	c.RecordCacheHit()
 	c.RecordCacheHit()
@@ -83,7 +83,7 @@ func TestCollector_RecordCache(t *testing.T) {
 }
 
 func TestCollector_WriteMetrics(t *testing.T) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	c.RecordConnection()
 	c.RecordTraffic(1000, 2000)
@@ -122,7 +122,7 @@ func TestCollector_WriteMetrics(t *testing.T) {
 }
 
 func TestCollector_GetMetrics(t *testing.T) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	c.RecordConnection()
 	c.RecordTraffic(500, 500)
@@ -139,7 +139,7 @@ func TestCollector_GetMetrics(t *testing.T) {
 }
 
 func BenchmarkCollector_RecordTraffic(b *testing.B) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -148,7 +148,7 @@ func BenchmarkCollector_RecordTraffic(b *testing.B) {
 }
 
 func BenchmarkCollector_WriteMetrics(b *testing.B) {
-	c := NewCollector(nil)
+	c := NewCollector(CollectorConfig{})
 
 	// Pre-populate some data
 	for i := 0; i < 100; i++ {
