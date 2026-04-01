@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // LeaseDB represents a persistent DHCP lease database
@@ -47,7 +49,7 @@ func NewLeaseDB(dbPath string) *LeaseDB {
 	}
 
 	// Start background saver
-	go db.saveLoop()
+	goroutine.SafeGo(db.saveLoop)
 
 	return db
 }

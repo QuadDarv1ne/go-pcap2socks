@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // LimiterConfig holds rate limiter configuration
@@ -97,7 +99,7 @@ func NewLimiter(cfg LimiterConfig) *ConnectionLimiter {
 
 	// Start cleanup goroutine
 	l.cleanupWg.Add(1)
-	go l.cleanupLoop()
+	goroutine.SafeGo(l.cleanupLoop)
 
 	return l
 }

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // LRUCache is a lock-free LRU cache with TTL support
@@ -213,7 +215,7 @@ func (c *LRUCache[K, V]) Cleanup() {
 // StartCleanup starts a background goroutine that periodically cleans up expired entries
 func (c *LRUCache[K, V]) StartCleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -223,7 +225,7 @@ func (c *LRUCache[K, V]) StartCleanup(interval time.Duration) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // Stop stops the cleanup goroutine
