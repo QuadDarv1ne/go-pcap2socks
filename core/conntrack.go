@@ -387,15 +387,13 @@ func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
 				return
 			}
 
-			// Return buffer to pool after use
-			defer buffer.Put(payload)
-
 			// Update activity timestamp
 			tc.lastActivity.Store(time.Now().Unix())
 
 			if tc.ProxyConn == nil {
 				// Lazy dial on first packet
 				if err := ct.dialProxy(tc); err != nil {
+					buffer.Put(payload) // Return buffer to pool on error
 					ct.logger.Warn("Dial proxy failed", "err", err, "conn", tc.Meta.String())
 					return
 				}
@@ -404,10 +402,14 @@ func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
 			tc.ProxyConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			n, err := tc.ProxyConn.Write(payload)
 			if err != nil {
+				buffer.Put(payload) // Return buffer to pool on error
 				ct.logger.Debug("Write to proxy failed", "err", err)
 				return
 			}
 			tc.bytesSent.Add(uint64(n))
+
+			// Return buffer to pool after successful use
+			buffer.Put(payload)
 		}
 	}
 }
