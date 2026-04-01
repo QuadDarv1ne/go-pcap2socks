@@ -2,18 +2,18 @@
 
 ## Статус проекта (01.04.2026, актуально)
 
-**Ветка:** `dev` (36 коммитов ahead of origin/dev) → `main` (52 коммита ahead of origin/main)
+**Ветка:** `dev` (39 коммитов ahead of origin/dev) → `main` (58 коммитов ahead of origin/main)
 
 **Синхронизация:** ✅ Все изменения из `dev` интегрированы в `main` (0 коммитов main..dev)
 
 **Последние изменения:**
+- ✅ Оптимизация API: buffer.Get в generateSecureToken
+- ✅ Оптимизация DNS сервера: buffer.Get в buildDNSResponse
+- ✅ Оптимизация metrics: buffer.Get в formatUint64
+- ✅ Оптимизация PCAP: buffer.Clone для DHCP
 - ✅ Оптимизация памяти: buffer.Get в dns/queryDNS
 - ✅ Buffer pool: валидация, функции Reset и SafePut
 - ✅ Conntrack: расширенные метрики (dropped_rate, health_score)
-- ✅ Исправлены тесты `metrics/collector_test.go`
-- ✅ Актуализирован статус проекта в todo.md
-- ✅ Параллельные DNS запросы реализованы
-- ✅ Оптимизация памяти в conntrack выполнена
 
 **Реализовано модулей:** 33+ (все отмечены как ✅ ЗАВЕРШЁН)
 
@@ -93,6 +93,37 @@
 - Лучшая наблюдаемость через расширенные метрики
 - Безопасная работа с buffer pool
 - Мониторинг здоровья соединений
+
+**Статус:** ✅ РЕАЛИЗОВАНО (01.04.2026), ✅ В main.go
+
+---
+
+### ✅ Оптимизация аллокаций памяти — РЕАЛИЗОВАНО
+
+**Файлы:** `api/server.go`, `dns/server.go`, `core/conntrack_metrics.go`, `core/device/pcap.go`
+
+**Изменения в api/server.go:**
+- `generateSecureToken`: buffer.Get(32) вместо `make([]byte, 32)`
+- Снижение аллокаций при генерации API токенов
+
+**Изменения в dns/server.go:**
+- `buildDNSResponse`: buffer.Get(SmallBufferSize) вместо `make([]byte, 12)`
+- buffer.Clone для возврата результата
+- Снижение аллокаций при обработке DNS ответов
+
+**Изменения в core/conntrack_metrics.go:**
+- `formatUint64`: buffer.Get(SmallBufferSize) вместо `make([]byte, 0, 20)`
+- Снижение аллокаций при форматировании метрик
+
+**Изменения в core/device/pcap.go:**
+- DHCP обработка: buffer.Clone(data) вместо `make([]byte, len(data)); copy()`
+- Более эффективное копирование данных для асинхронной обработки
+
+**Преимущества:**
+- Снижение нагрузки на GC
+- Меньше аллокаций в hot path
+- Более эффективное использование памяти
+- Переиспользование буферов через sync.Pool
 
 **Статус:** ✅ РЕАЛИЗОВАНО (01.04.2026), ✅ В main.go
 
