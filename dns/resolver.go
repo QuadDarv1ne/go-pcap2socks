@@ -987,7 +987,6 @@ func buildDNSQuery(hostname string, qtype uint16) ([]byte, error) {
 
 	// Get buffer from pool
 	buf := dnsQueryPool.Get().(*bytes.Buffer)
-	defer dnsQueryPool.Put(buf) // Ensure buffer is returned even on error
 	buf.Reset()
 
 	// Transaction ID (random)
