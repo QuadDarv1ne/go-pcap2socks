@@ -53,7 +53,7 @@ func TestMetricsHistogram(t *testing.T) {
 	if avg != 20 {
 		t.Errorf("Expected avg 20, got %.1f", avg)
 	}
-	
+
 	t.Logf("Histogram: count=%d, sum=%d, avg=%.1f", count, sum, avg)
 }
 

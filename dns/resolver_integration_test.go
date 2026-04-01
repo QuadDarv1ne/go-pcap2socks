@@ -84,13 +84,13 @@ func TestDNSResolver_PreWarmCache(t *testing.T) {
 	defer os.Remove(cacheFile)
 
 	config := &dns.ResolverConfig{
-		Servers:        []string{"8.8.8.8:53"},
-		CacheSize:      100,
-		CacheTTL:       60, // seconds
-		PreWarmCache:   true,
-		PreWarmDomains: []string{"google.com", "github.com"},
+		Servers:         []string{"8.8.8.8:53"},
+		CacheSize:       100,
+		CacheTTL:        60, // seconds
+		PreWarmCache:    true,
+		PreWarmDomains:  []string{"google.com", "github.com"},
 		PersistentCache: true,
-		CacheFile:      cacheFile,
+		CacheFile:       cacheFile,
 	}
 
 	resolver := dns.NewResolver(config)

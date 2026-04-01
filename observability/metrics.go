@@ -15,13 +15,13 @@ import (
 
 // Metrics represents application metrics
 type Metrics struct {
-	mu            sync.RWMutex
-	counters      map[string]*atomic.Uint64
-	gauges        map[string]*atomic.Int64
-	histograms    map[string]*Histogram
-	startTime     time.Time
-	labels        map[string]string
-	collectors    []Collector
+	mu         sync.RWMutex
+	counters   map[string]*atomic.Uint64
+	gauges     map[string]*atomic.Int64
+	histograms map[string]*Histogram
+	startTime  time.Time
+	labels     map[string]string
+	collectors []Collector
 }
 
 // Collector is an interface for metrics collectors
@@ -31,23 +31,23 @@ type Collector interface {
 
 // Histogram represents a value histogram
 type Histogram struct {
-	count atomic.Uint64
-	sum   atomic.Uint64
-	min   atomic.Uint64
-	max   atomic.Uint64
+	count   atomic.Uint64
+	sum     atomic.Uint64
+	min     atomic.Uint64
+	max     atomic.Uint64
 	buckets []atomic.Uint64
 }
 
 // Trace represents a distributed trace
 type Trace struct {
-	ID       string                 `json:"id"`
-	ParentID string                 `json:"parent_id,omitempty"`
-	Name     string                 `json:"name"`
-	StartTime time.Time             `json:"start_time"`
-	EndTime   time.Time             `json:"end_time,omitempty"`
-	Duration  time.Duration         `json:"duration,omitempty"`
-	Tags      map[string]string     `json:"tags,omitempty"`
-	Children  []*Trace              `json:"children,omitempty"`
+	ID        string            `json:"id"`
+	ParentID  string            `json:"parent_id,omitempty"`
+	Name      string            `json:"name"`
+	StartTime time.Time         `json:"start_time"`
+	EndTime   time.Time         `json:"end_time,omitempty"`
+	Duration  time.Duration     `json:"duration,omitempty"`
+	Tags      map[string]string `json:"tags,omitempty"`
+	Children  []*Trace          `json:"children,omitempty"`
 	exporter  TraceExporter
 	mu        sync.Mutex
 }
@@ -301,7 +301,7 @@ func (m *Metrics) GetStartTime() time.Time {
 func (m *Metrics) GetCounters() map[string]uint64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	result := make(map[string]uint64, len(m.counters))
 	for name, counter := range m.counters {
 		result[name] = counter.Load()
@@ -313,7 +313,7 @@ func (m *Metrics) GetCounters() map[string]uint64 {
 func (m *Metrics) GetGauges() map[string]int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	result := make(map[string]int64, len(m.gauges))
 	for name, gauge := range m.gauges {
 		result[name] = gauge.Load()
@@ -325,7 +325,7 @@ func (m *Metrics) GetGauges() map[string]int64 {
 func (m *Metrics) GetHistograms() map[string]*Histogram {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	result := make(map[string]*Histogram, len(m.histograms))
 	for name, hist := range m.histograms {
 		result[name] = hist
@@ -379,7 +379,7 @@ func (t *Tracer) StartSpan(ctx context.Context, name string, opts ...SpanOption)
 	span.name = name
 	span.startTime = time.Now()
 	span.tags = make(map[string]string, 4) // Reset tags
-	span.tracer = t // Set tracer reference
+	span.tracer = t                        // Set tracer reference
 
 	// Apply options
 	for _, opt := range opts {
@@ -492,13 +492,13 @@ func (c *RuntimeCollector) Collect() map[string]interface{} {
 
 	return map[string]interface{}{
 		"runtime": map[string]interface{}{
-			"goroutines":     runtime.NumGoroutine(),
-			"memory_alloc":   m.Alloc,
-			"memory_sys":     m.Sys,
-			"gc_pause_ns":    m.PauseTotalNs,
-			"gc_num":         m.NumGC,
-			"heap_alloc":     m.HeapAlloc,
-			"heap_sys":       m.HeapSys,
+			"goroutines":   runtime.NumGoroutine(),
+			"memory_alloc": m.Alloc,
+			"memory_sys":   m.Sys,
+			"gc_pause_ns":  m.PauseTotalNs,
+			"gc_num":       m.NumGC,
+			"heap_alloc":   m.HeapAlloc,
+			"heap_sys":     m.HeapSys,
 		},
 	}
 }

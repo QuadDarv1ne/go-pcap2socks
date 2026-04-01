@@ -335,7 +335,7 @@ func replaceAll(s, old, new string) string {
 	if old == "" {
 		return s
 	}
-	
+
 	var result []byte
 	i := 0
 	for i < len(s) {

@@ -96,9 +96,9 @@ func (c *DoHClient) ExchangeWithContext(ctx context.Context, msg *dns.Msg) (*dns
 
 // DoTClient is a DNS-over-TLS client
 type DoTClient struct {
-	server     string
-	tlsConfig  *TLSConfig
-	dnsClient  *dns.Client
+	server    string
+	tlsConfig *TLSConfig
+	dnsClient *dns.Client
 }
 
 // TLSConfig holds TLS configuration

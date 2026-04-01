@@ -17,10 +17,10 @@ import (
 
 // Pre-defined errors for health checking
 var (
-	ErrProbeTimeout      = errors.New("probe timeout")
-	ErrProbeFailed       = errors.New("probe failed")
-	ErrRecoveryFailed    = errors.New("recovery failed")
-	ErrHealthCheckFailed = errors.New("health check failed")
+	ErrProbeTimeout       = errors.New("probe timeout")
+	ErrProbeFailed        = errors.New("probe failed")
+	ErrRecoveryFailed     = errors.New("recovery failed")
+	ErrHealthCheckFailed  = errors.New("health check failed")
 	ErrComponentUnhealthy = errors.New("component unhealthy")
 )
 
@@ -42,9 +42,9 @@ func (e *ProbeError) Unwrap() error {
 
 // RecoveryError wraps recovery errors with context
 type RecoveryError struct {
-	Component string   // Component being recovered
-	Attempt   int      // Attempt number
-	Err       error    // Underlying error
+	Component string // Component being recovered
+	Attempt   int    // Attempt number
+	Err       error  // Underlying error
 }
 
 func (e *RecoveryError) Error() string {
@@ -147,7 +147,7 @@ func NewHTTPProbe(name, url string, timeout time.Duration) *HTTPProbe {
 	}
 }
 
-func (p *HTTPProbe) Name() string { return p.name }
+func (p *HTTPProbe) Name() string    { return p.name }
 func (p *HTTPProbe) Type() ProbeType { return ProbeHTTP }
 
 func (p *HTTPProbe) Run(ctx context.Context) ProbeResult {
@@ -201,10 +201,10 @@ func (p *HTTPProbe) Run(ctx context.Context) ProbeResult {
 
 // DNSProbe checks DNS resolution
 type DNSProbe struct {
-	name     string
+	name      string
 	dnsServer string
-	domain   string
-	timeout  time.Duration
+	domain    string
+	timeout   time.Duration
 }
 
 // NewDNSProbe creates a new DNS probe
@@ -217,7 +217,7 @@ func NewDNSProbe(name, dnsServer, domain string, timeout time.Duration) *DNSProb
 	}
 }
 
-func (p *DNSProbe) Name() string { return p.name }
+func (p *DNSProbe) Name() string    { return p.name }
 func (p *DNSProbe) Type() ProbeType { return ProbeDNS }
 
 func (p *DNSProbe) Run(ctx context.Context) ProbeResult {
@@ -272,7 +272,7 @@ func NewDHCPProbe(name, description string, checkFunc func() bool) *DHCPProbe {
 	}
 }
 
-func (p *DHCPProbe) Name() string { return p.name }
+func (p *DHCPProbe) Name() string    { return p.name }
 func (p *DHCPProbe) Type() ProbeType { return ProbeDHCP }
 
 func (p *DHCPProbe) Run(ctx context.Context) ProbeResult {
@@ -334,13 +334,13 @@ type HealthChecker struct {
 
 // HealthCheckerConfig holds configuration for the health checker
 type HealthCheckerConfig struct {
-	CheckInterval     time.Duration
-	RecoveryThreshold int // Number of consecutive failures before triggering recovery
-	MinBackoff        time.Duration // Minimum backoff between checks after failure
-	MaxBackoff        time.Duration // Maximum backoff between checks
-	BackoffMultiplier float64       // Multiplier for exponential backoff
-	BackoffJitter     float64       // Jitter factor (0.0-1.0) to prevent thundering herd
-	OnRecoveryNeeded  func()
+	CheckInterval      time.Duration
+	RecoveryThreshold  int           // Number of consecutive failures before triggering recovery
+	MinBackoff         time.Duration // Minimum backoff between checks after failure
+	MaxBackoff         time.Duration // Maximum backoff between checks
+	BackoffMultiplier  float64       // Multiplier for exponential backoff
+	BackoffJitter      float64       // Jitter factor (0.0-1.0) to prevent thundering herd
+	OnRecoveryNeeded   func()
 	OnRecoveryComplete func(error)
 }
 
@@ -395,7 +395,7 @@ func (hc *HealthChecker) AddProbe(probe Probe) {
 func (hc *HealthChecker) RemoveProbe(name string) {
 	hc.mu.Lock()
 	defer hc.mu.Unlock()
-	
+
 	for i, probe := range hc.probes {
 		if probe.Name() == name {
 			hc.probes = append(hc.probes[:i], hc.probes[i+1:]...)
@@ -412,8 +412,8 @@ func (hc *HealthChecker) Start(ctx context.Context) {
 		defer hc.wg.Done()
 		hc.run(ctx)
 	}()
-	
-	slog.Info("Health checker started", 
+
+	slog.Info("Health checker started",
 		"interval", hc.checkInterval,
 		"recovery_threshold", hc.recoveryThreshold,
 		"probes", len(hc.probes))
@@ -481,12 +481,12 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 	// Collect results
 	for result := range results {
 		hc.totalProbes.Add(1)
-		
+
 		// Record metrics
 		latencyMs := uint64(result.Latency.Milliseconds())
 		isTimeout := result.Error != nil && strings.Contains(result.Error.Error(), "timeout")
 		hc.metrics.RecordProbe(result.Success, isTimeout, latencyMs)
-		
+
 		if result.Success {
 			hc.successfulProbes.Add(1)
 			hc.lastSuccessTime.Store(result.Timestamp)
@@ -634,25 +634,25 @@ func (hc *HealthChecker) triggerRecovery(ctx context.Context, failedProbes []Pro
 		slog.Warn("Recovery needed but no recovery handler configured")
 		return
 	}
-	
+
 	// Prevent recovery loops - only one recovery at a time
 	if hc.consecutiveFailures.Load() > int32(hc.recoveryThreshold)*2 {
 		slog.Warn("Recovery already in progress, skipping")
 		return
 	}
-	
+
 	slog.Info("Starting network recovery", "failed_probes", len(failedProbes))
 	hc.totalRecoveries.Add(1)
-	
+
 	// Call recovery handler
 	hc.onRecoveryNeeded()
-	
+
 	// Wait a bit for recovery to complete
 	time.Sleep(5 * time.Second)
-	
+
 	// Run checks again to verify recovery
 	hc.runChecks(ctx)
-	
+
 	// Check if recovery was successful
 	if hc.consecutiveFailures.Load() == 0 {
 		if hc.onRecoveryComplete != nil {
@@ -706,14 +706,14 @@ func (hc *HealthChecker) ExportPrometheusMetrics() string {
 	if hc.metrics == nil {
 		return ""
 	}
-	
+
 	// Update current state
 	hc.mu.RLock()
 	probeCount := len(hc.probes)
 	hc.mu.RUnlock()
-	
+
 	hc.metrics.SetActiveProbes(int32(probeCount))
-	
+
 	// Calculate healthy/unhealthy components based on last check
 	stats := hc.GetStats()
 	if stats.ConsecutiveFailures == 0 {
@@ -724,22 +724,22 @@ func (hc *HealthChecker) ExportPrometheusMetrics() string {
 		hc.metrics.SetHealthyCount(0)
 		hc.metrics.SetUnhealthyCount(int32(probeCount))
 	}
-	
+
 	return hc.metrics.ExportPrometheus()
 }
 
 // HealthStats holds health checker statistics
 type HealthStats struct {
-	TotalChecks         int64   `json:"total_checks"`
-	ConsecutiveFailures int32   `json:"consecutive_failures"`
-	TotalRecoveries     int64   `json:"total_recoveries"`
-	LastCheckTime       time.Time `json:"last_check_time"`
-	LastSuccessTime     time.Time `json:"last_success_time"`
-	ProbeCount          int     `json:"probe_count"`
-	TotalProbes         int64   `json:"total_probes"`
-	SuccessfulProbes    int64   `json:"successful_probes"`
-	FailedProbes        int64   `json:"failed_probes"`
-	SuccessRate         float64 `json:"success_rate"`
+	TotalChecks         int64         `json:"total_checks"`
+	ConsecutiveFailures int32         `json:"consecutive_failures"`
+	TotalRecoveries     int64         `json:"total_recoveries"`
+	LastCheckTime       time.Time     `json:"last_check_time"`
+	LastSuccessTime     time.Time     `json:"last_success_time"`
+	ProbeCount          int           `json:"probe_count"`
+	TotalProbes         int64         `json:"total_probes"`
+	SuccessfulProbes    int64         `json:"successful_probes"`
+	FailedProbes        int64         `json:"failed_probes"`
+	SuccessRate         float64       `json:"success_rate"`
 	CurrentBackoff      time.Duration `json:"current_backoff"`
 	MinBackoff          time.Duration `json:"min_backoff"`
 	MaxBackoff          time.Duration `json:"max_backoff"`
@@ -763,7 +763,7 @@ func NewTCPProbe(name, address string, timeout time.Duration) *TCPProbe {
 	}
 }
 
-func (p *TCPProbe) Name() string { return p.name }
+func (p *TCPProbe) Name() string    { return p.name }
 func (p *TCPProbe) Type() ProbeType { return ProbeTCP }
 
 func (p *TCPProbe) Run(ctx context.Context) ProbeResult {
@@ -814,7 +814,7 @@ func (p *UDPProbe) WithExpectedResponse(size int) *UDPProbe {
 	return p
 }
 
-func (p *UDPProbe) Name() string { return p.name }
+func (p *UDPProbe) Name() string    { return p.name }
 func (p *UDPProbe) Type() ProbeType { return ProbeUDP }
 
 func (p *UDPProbe) Run(ctx context.Context) ProbeResult {
