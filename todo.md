@@ -2,20 +2,14 @@
 
 ## Статус проекта (01.04.2026, актуально)
 
-**Ветка:** `dev` (42 коммита ahead of origin/dev) → `main` (63 коммита ahead of origin/main)
+**Ветка:** `dev` (44 коммита ahead of origin/dev) → `main` (67 коммитов ahead of origin/main)
 
-**Синхронизация:** ✅ Все изменения из `dev` интегрированы в `main` (0 коммитов main..dev)
+**Синхронизация:** ✅ Все изменения из `dev` интегрированы в `main`
 
 **Последние изменения:**
-- ✅ Улучшение обработки ошибок: методы IsTimeout, IsAuthError, IsAssociateError
-- ✅ Рефакторинг conntrack: функция drainChannel, убрано дублирование
-- ✅ Оптимизация API: buffer.Get в generateSecureToken
-- ✅ Оптимизация DNS сервера: buffer.Get в buildDNSResponse
-- ✅ Оптимизация metrics: buffer.Get в formatUint64
-- ✅ Оптимизация PCAP: buffer.Clone для DHCP
-- ✅ Оптимизация памяти: buffer.Get в dns/queryDNS
-- ✅ Buffer pool: валидация, функции Reset и SafePut
-- ✅ Conntrack: расширенные метрики (dropped_rate, health_score)
+- ✅ Pre-warm buffer pool при старте (100 small, 50 medium, 20 large)
+- ✅ Улучшение обработки ошибок: IsTimeout, IsAuthError, IsAssociateError
+- ✅ Рефакторинг conntrack: drainChannel, убрано дублирование
 
 **Реализовано модулей:** 33+ (все отмечены как ✅ ЗАВЕРШЁН)
 
