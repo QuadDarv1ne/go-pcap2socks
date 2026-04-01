@@ -16,15 +16,15 @@ import (
 
 // Pre-defined errors for SOCKS5 operations
 var (
-	ErrVersionMismatch     = errors.New("socks version mismatched")
-	ErrAuthRequired        = errors.New("auth required")
-	ErrAuthTooLong         = errors.New("auth username/password too long")
-	ErrAuthRejected        = errors.New("rejected username/password")
-	ErrUnsupportedMethod   = errors.New("unsupported method")
-	ErrInvalidAddressType  = errors.New("invalid address type")
-	ErrInsufficientBuffer  = errors.New("insufficient buffer")
-	ErrFragmentedPayload   = errors.New("discarding fragmented payload")
-	ErrAddressNil          = errors.New("socks5 addr is nil")
+	ErrVersionMismatch    = errors.New("socks version mismatched")
+	ErrAuthRequired       = errors.New("auth required")
+	ErrAuthTooLong        = errors.New("auth username/password too long")
+	ErrAuthRejected       = errors.New("rejected username/password")
+	ErrUnsupportedMethod  = errors.New("unsupported method")
+	ErrInvalidAddressType = errors.New("invalid address type")
+	ErrInsufficientBuffer = errors.New("insufficient buffer")
+	ErrFragmentedPayload  = errors.New("discarding fragmented payload")
+	ErrAddressNil         = errors.New("socks5 addr is nil")
 )
 
 // AuthMethod is the authentication method as defined in RFC 1928 section 3.

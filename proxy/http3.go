@@ -22,12 +22,12 @@ var _ Proxy = (*HTTP3)(nil)
 type HTTP3 struct {
 	*Base
 
-	client      *http.Client
-	transport   *http3.Transport
-	addr        string
-	host        string // host:port for quic.DialAddr
-	tlsConfig   *tls.Config
-	quicConfig  *quic.Config
+	client     *http.Client
+	transport  *http3.Transport
+	addr       string
+	host       string // host:port for quic.DialAddr
+	tlsConfig  *tls.Config
+	quicConfig *quic.Config
 }
 
 // NewHTTP3 creates a new HTTP/3 proxy
@@ -71,12 +71,12 @@ func NewHTTP3(addr string, skipVerify bool) (*HTTP3, error) {
 			addr: addr,
 			mode: ModeHTTP3,
 		},
-		client:      client,
-		transport:   transport,
-		addr:        addr,
-		host:        host,
-		tlsConfig:   tlsConfig,
-		quicConfig:  quicConfig,
+		client:     client,
+		transport:  transport,
+		addr:       addr,
+		host:       host,
+		tlsConfig:  tlsConfig,
+		quicConfig: quicConfig,
 	}, nil
 }
 

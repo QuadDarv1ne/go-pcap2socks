@@ -8,16 +8,16 @@ import (
 	"sync"
 	"time"
 
-	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
+	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
 // Socks5ConnPool manages a pool of reusable SOCKS5 connections
 type Socks5ConnPool struct {
-	addr       string
-	user       string
-	pass       string
-	pool       sync.Pool
+	addr        string
+	user        string
+	pass        string
+	pool        sync.Pool
 	dialTimeout time.Duration
 	maxIdleTime time.Duration
 }
@@ -89,13 +89,13 @@ func (p *Socks5ConnPool) PutConnection(conn net.Conn) {
 	if conn == nil {
 		return
 	}
-	
+
 	pc := &pooledSocks5Conn{
 		conn:      conn,
 		createdAt: time.Now(),
 		lastUsed:  time.Now(),
 	}
-	
+
 	p.pool.Put(pc)
 	slog.Debug("Socks5 pool: connection returned", "addr", p.addr)
 }
@@ -112,13 +112,13 @@ func (p *Socks5ConnPool) CloseConnection(conn net.Conn) {
 func (p *Socks5ConnPool) dialNewConnection(ctx context.Context) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.dialTimeout)
 	defer cancel()
-	
+
 	c, err := dialer.DialContext(ctx, "tcp", p.addr)
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", p.addr, err)
 	}
 	setKeepAlive(c)
-	
+
 	return c, nil
 }
 
@@ -141,7 +141,7 @@ func NewSocks5WithPool(addr, user, pass string) (*Socks5WithPool, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &Socks5WithPool{
 		Socks5: socks5,
 		pool:   NewSocks5ConnPool(addr, user, pass),

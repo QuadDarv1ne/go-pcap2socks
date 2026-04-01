@@ -255,17 +255,17 @@ func TestProxyGroup_Failover_OnConnectionFailure(t *testing.T) {
 	healthy := true
 	// proxy1 reports healthy but fails on dial
 	proxy1 := &mockProxyWithHealth{
-		addr: "proxy1://",
-		failDial: true,
+		addr:          "proxy1://",
+		failDial:      true,
 		healthCheckOK: &healthy,
 	}
 	// proxy2 is healthy and succeeds
 	proxy2 := &mockProxyWithHealth{
-		addr: "proxy2://",
+		addr:          "proxy2://",
 		healthCheckOK: &healthy,
 	}
 	proxy3 := &mockProxyWithHealth{
-		addr: "proxy3://",
+		addr:          "proxy3://",
 		healthCheckOK: &healthy,
 	}
 

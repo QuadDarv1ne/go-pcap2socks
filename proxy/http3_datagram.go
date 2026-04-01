@@ -17,7 +17,7 @@ type quicDatagramConn struct {
 	localAddr  net.Addr
 	remoteAddr net.Addr
 	closed     atomic.Bool
-	once       sync.Once     // Для однократного закрытия каналов
+	once       sync.Once // Для однократного закрытия каналов
 	readChan   chan []byte
 	errChan    chan error
 

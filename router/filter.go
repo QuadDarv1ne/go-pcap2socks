@@ -26,10 +26,10 @@ const (
 type Router struct {
 	mu sync.RWMutex
 
-	filterType  FilterType
-	networks    []netip.Prefix // List of IP networks for filtering
-	domains     map[string]bool // List of domains for filtering
-	ipSet       map[netip.Addr]bool // Set of individual IPs
+	filterType FilterType
+	networks   []netip.Prefix      // List of IP networks for filtering
+	domains    map[string]bool     // List of domains for filtering
+	ipSet      map[netip.Addr]bool // Set of individual IPs
 
 	logger *slog.Logger
 }

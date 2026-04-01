@@ -20,9 +20,9 @@ import (
 
 // Pre-defined errors for SOCKS5 operations
 var (
-	ErrSocksConnect     = errors.New("failed to connect to SOCKS5 server")
-	ErrSocksHandshake   = errors.New("SOCKS5 handshake failed")
-	ErrSocksAuth        = errors.New("SOCKS5 authentication failed")
+	ErrSocksConnect      = errors.New("failed to connect to SOCKS5 server")
+	ErrSocksHandshake    = errors.New("SOCKS5 handshake failed")
+	ErrSocksAuth         = errors.New("SOCKS5 authentication failed")
 	ErrSocksUDPAssociate = errors.New("SOCKS5 UDP associate failed")
 	ErrInvalidUDPBinding = errors.New("invalid UDP binding address")
 )
@@ -37,13 +37,13 @@ type Socks5 struct {
 
 	// unix indicates if socks5 over UDS is enabled.
 	unix bool
-	
+
 	// Health check fields
 	healthCheckInterval time.Duration
 	lastHealthCheck     time.Time
 	lastHealthStatus    bool
 	healthCheckMu       sync.RWMutex
-	
+
 	// Connection pool
 	connPool *connpool.Pool
 }
@@ -59,7 +59,7 @@ func (ss *Socks5) HealthStatus() (bool, time.Time) {
 func (ss *Socks5) CheckHealth() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	start := time.Now()
 	conn, err := dialer.DialContext(ctx, "tcp", ss.Addr())
 	if err != nil {
@@ -70,7 +70,7 @@ func (ss *Socks5) CheckHealth() bool {
 		return false
 	}
 	conn.Close()
-	
+
 	ss.healthCheckMu.Lock()
 	ss.lastHealthStatus = true
 	ss.lastHealthCheck = start
@@ -88,10 +88,10 @@ func NewSocks5(addr, user, pass string) (*Socks5, error) {
 		pass: pass,
 		unix: len(addr) > 0 && addr[0] == '/',
 	}
-	
+
 	// Initialize connection pool
 	ss.connPool = connpool.NewPool(addr, 10, 5*time.Minute)
-	
+
 	return ss, nil
 }
 
@@ -130,7 +130,7 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 	c, err = ss.connPool.Get(ctx, func(dialCtx context.Context) (net.Conn, error) {
 		return dialer.DialContext(dialCtx, network, ss.Addr())
 	})
-	
+
 	if err != nil {
 		return nil, &DialError{
 			ProxyAddr: ss.Addr(),
@@ -139,7 +139,7 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 			Err:       fmt.Errorf("connect: %w", err),
 		}
 	}
-	
+
 	setKeepAlive(c)
 
 	defer func(c net.Conn) {

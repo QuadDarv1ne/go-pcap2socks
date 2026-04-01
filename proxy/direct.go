@@ -5,8 +5,8 @@ import (
 	"net"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
-	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
+	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
 )
 
 var _ Proxy = (*Direct)(nil)
@@ -30,10 +30,10 @@ func (d *Direct) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 	}
 	setKeepAlive(c)
 	setNoDelay(c)
-	
+
 	// Apply MTU-based optimizations
 	applyMTUOptimizations(c, metadata.DstIP.To4() == nil, "direct")
-	
+
 	return c, nil
 }
 
@@ -41,7 +41,7 @@ func (d *Direct) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 func applyMTUOptimizations(conn net.Conn, isIPv6 bool, protocol string) {
 	// Get optimal MTU for protocol
 	optimalMTU := mtu.GetOptimalMTU(protocol, mtu.DefaultMTU)
-	
+
 	// Calculate and apply MSS
 	mss := mtu.CalculateMSS(optimalMTU, isIPv6)
 	if err := mtu.ApplyMSSClamping(conn, mss); err != nil {

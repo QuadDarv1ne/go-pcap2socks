@@ -154,8 +154,8 @@ func TestDNSCache_Stats(t *testing.T) {
 	// Generate some hits and misses
 	cache.get(key) // miss
 	cache.set(key, msg, 5*time.Second)
-	cache.get(key) // hit
-	cache.get(key) // hit
+	cache.get(key)           // hit
+	cache.get(key)           // hit
 	cache.get("nonexistent") // miss
 
 	hits, misses := cache.stats()

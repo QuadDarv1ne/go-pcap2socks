@@ -300,12 +300,12 @@ func TestSplitAddr(t *testing.T) {
 
 func TestSerializeAddr(t *testing.T) {
 	tests := []struct {
-		name      string
-		domain    string
-		ip        net.IP
-		port      uint16
-		wantType  Atyp
-		wantLen   int
+		name     string
+		domain   string
+		ip       net.IP
+		port     uint16
+		wantType Atyp
+		wantLen  int
 	}{
 		{
 			name:     "IPv4",
@@ -352,9 +352,9 @@ func TestSerializeAddr(t *testing.T) {
 
 func TestParseAddr(t *testing.T) {
 	tests := []struct {
-		name     string
-		addr     net.Addr
-		wantErr  bool
+		name    string
+		addr    net.Addr
+		wantErr bool
 	}{
 		{
 			name: "TCPAddr",
@@ -389,9 +389,9 @@ func TestParseAddr(t *testing.T) {
 
 func TestParseAddrString(t *testing.T) {
 	tests := []struct {
-		name     string
-		s        string
-		wantErr  bool
+		name    string
+		s       string
+		wantErr bool
 	}{
 		{
 			name:    "IPv4",
@@ -452,33 +452,33 @@ func TestDecodeUDPPacket(t *testing.T) {
 		checkAddr bool
 	}{
 		{
-			name:    "valid packet",
-			packet:  []byte{0x00, 0x00, 0x00, AtypIPv4, 8, 8, 8, 8, 0, 53, 1, 2, 3, 4},
-			wantErr: false,
+			name:      "valid packet",
+			packet:    []byte{0x00, 0x00, 0x00, AtypIPv4, 8, 8, 8, 8, 0, 53, 1, 2, 3, 4},
+			wantErr:   false,
 			checkAddr: true,
 		},
 		{
-			name:    "too short",
-			packet:  []byte{0x00, 0x00, 0x00},
-			wantErr: true,
+			name:      "too short",
+			packet:    []byte{0x00, 0x00, 0x00},
+			wantErr:   true,
 			checkAddr: false,
 		},
 		{
-			name:    "non-zero reserved",
-			packet:  []byte{0x01, 0x00, 0x00, AtypIPv4, 8, 8, 8, 8, 0, 53},
-			wantErr: true,
+			name:      "non-zero reserved",
+			packet:    []byte{0x01, 0x00, 0x00, AtypIPv4, 8, 8, 8, 8, 0, 53},
+			wantErr:   true,
 			checkAddr: false,
 		},
 		{
-			name:    "fragmented",
-			packet:  []byte{0x00, 0x00, 0x01, AtypIPv4, 8, 8, 8, 8, 0, 53},
-			wantErr: true,
+			name:      "fragmented",
+			packet:    []byte{0x00, 0x00, 0x01, AtypIPv4, 8, 8, 8, 8, 0, 53},
+			wantErr:   true,
 			checkAddr: false,
 		},
 		{
-			name:    "invalid address",
-			packet:  []byte{0x00, 0x00, 0x00, 0xFF},
-			wantErr: true,
+			name:      "invalid address",
+			packet:    []byte{0x00, 0x00, 0x00, 0xFF},
+			wantErr:   true,
 			checkAddr: false,
 		},
 	}
@@ -520,24 +520,24 @@ func TestDecodeUDPPacketInPlace(t *testing.T) {
 			wantPayload: 4,
 		},
 		{
-			name:      "too short",
-			packet:    []byte{0x00, 0x00, 0x00},
-			wantErr:   true,
+			name:    "too short",
+			packet:  []byte{0x00, 0x00, 0x00},
+			wantErr: true,
 		},
 		{
-			name:      "non-zero reserved",
-			packet:    []byte{0x01, 0x00, 0x00, AtypIPv4, 8, 8, 8, 8, 0, 53},
-			wantErr:   true,
+			name:    "non-zero reserved",
+			packet:  []byte{0x01, 0x00, 0x00, AtypIPv4, 8, 8, 8, 8, 0, 53},
+			wantErr: true,
 		},
 		{
-			name:      "fragmented",
-			packet:    []byte{0x00, 0x00, 0x01, AtypIPv4, 8, 8, 8, 8, 0, 53},
-			wantErr:   true,
+			name:    "fragmented",
+			packet:  []byte{0x00, 0x00, 0x01, AtypIPv4, 8, 8, 8, 8, 0, 53},
+			wantErr: true,
 		},
 		{
-			name:      "invalid address",
-			packet:    []byte{0x00, 0x00, 0x00, 0xFF},
-			wantErr:   true,
+			name:    "invalid address",
+			packet:  []byte{0x00, 0x00, 0x00, 0xFF},
+			wantErr: true,
 		},
 	}
 
@@ -657,8 +657,8 @@ func TestClientHandshake_AuthRequired(t *testing.T) {
 func TestClientHandshake_NoAuth(t *testing.T) {
 	// Mock server that doesn't require authentication
 	readBuffer := &bytes.Buffer{}
-	readBuffer.Write([]byte{Version, MethodNoAuth})  // No auth required
-	readBuffer.Write([]byte{Version, 0x00, 0x00})    // Connection success
+	readBuffer.Write([]byte{Version, MethodNoAuth}) // No auth required
+	readBuffer.Write([]byte{Version, 0x00, 0x00})   // Connection success
 	readBuffer.Write([]byte{AtypIPv4, 10, 0, 0, 1, 0, 80})
 
 	reader := bufio.NewReader(bytes.NewReader(readBuffer.Bytes()))

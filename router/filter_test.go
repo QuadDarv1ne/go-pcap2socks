@@ -78,7 +78,7 @@ func TestRouter_ShouldProxy_None(t *testing.T) {
 	})
 
 	ip := netip.MustParseAddr("192.168.1.100")
-	
+
 	// Should proxy everything in None mode
 	if !r.ShouldProxy(ip, "") {
 		t.Error("ShouldProxy should return true in None filter mode")
@@ -294,8 +294,8 @@ func TestIsPrivateIP(t *testing.T) {
 		{"169.254.1.1", true},
 		{"8.8.8.8", false},
 		{"1.1.1.1", false},
-		{"198.51.100.1", true},  // TEST-NET
-		{"203.0.113.1", true},   // TEST-NET
+		{"198.51.100.1", true}, // TEST-NET
+		{"203.0.113.1", true},  // TEST-NET
 	}
 
 	for _, tt := range tests {
@@ -338,11 +338,11 @@ func TestDefaultBlacklist(t *testing.T) {
 		ip       string
 		expected bool // true = should proxy
 	}{
-		{"8.8.8.8", true},       // Public - proxy
-		{"10.0.0.1", false},     // Private - no proxy
-		{"192.168.1.1", false},  // Private - no proxy
-		{"127.0.0.1", false},    // Loopback - no proxy
-		{"224.0.0.1", false},    // Multicast - no proxy
+		{"8.8.8.8", true},      // Public - proxy
+		{"10.0.0.1", false},    // Private - no proxy
+		{"192.168.1.1", false}, // Private - no proxy
+		{"127.0.0.1", false},   // Loopback - no proxy
+		{"224.0.0.1", false},   // Multicast - no proxy
 	}
 
 	for _, tt := range tests {
