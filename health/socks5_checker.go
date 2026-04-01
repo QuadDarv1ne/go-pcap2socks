@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 )
 
@@ -119,10 +120,10 @@ func NewChecker(cfg CheckerConfig) *Checker {
 // Start starts the health checking loop.
 func (c *Checker) Start() {
 	c.wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer c.wg.Done()
 		c.run()
-	}()
+	})
 
 	c.logger.Info("Health checker started",
 		"interval", c.checkInterval,

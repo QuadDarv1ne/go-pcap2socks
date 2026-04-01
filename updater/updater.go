@@ -15,6 +15,8 @@ import (
 	"path"
 	"runtime"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Pre-defined errors for updater operations
@@ -223,12 +225,12 @@ func (u *Updater) ApplyUpdate(newVersion string) error {
 	slog.Info("Update applied successfully", "new_version", newVersion)
 
 	// Remove backup after successful update (in background with error handling)
-	go func() {
+	goroutine.SafeGo(func() {
 		time.Sleep(5 * time.Minute)
 		if err := os.Remove(backupFile); err != nil {
 			slog.Debug("Failed to remove backup file", "file", backupFile, "err", err)
 		}
-	}()
+	})
 
 	return nil
 }
@@ -242,7 +244,7 @@ func (u *Updater) StartAutoCheck() {
 	u.checkStop = make(chan struct{})
 	u.checkRunning = true
 
-	go func() {
+	goroutine.SafeGo(func() {
 		ticker := time.NewTicker(u.checkInterval)
 		defer ticker.Stop()
 
@@ -270,7 +272,7 @@ func (u *Updater) StartAutoCheck() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // StopAutoCheck stops periodic update checking

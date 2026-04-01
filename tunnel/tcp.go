@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 
@@ -121,7 +122,7 @@ func pipe(origin, remote net.Conn) {
 		"remote", remote.RemoteAddr())
 
 	// Start both copy operations in separate goroutines
-	go func() {
+	goroutine.SafeGo(func() {
 		defer wg.Done()
 		result := copyBuffer(remote, origin, "o->r", bufOR)
 		bytesCopied.Add(result.bytes)
@@ -131,9 +132,9 @@ func pipe(origin, remote net.Conn) {
 		} else {
 			slog.Info("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
 		}
-	}()
+	})
 
-	go func() {
+	goroutine.SafeGo(func() {
 		defer wg.Done()
 		result := copyBuffer(origin, remote, "r->o", bufRO)
 		bytesCopied.Add(result.bytes)
@@ -143,7 +144,7 @@ func pipe(origin, remote net.Conn) {
 		} else {
 			slog.Info("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
 		}
-	}()
+	})
 
 	// Wait for both copies to complete
 	wg.Wait()

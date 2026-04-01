@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Manager handles UPnP port forwarding
@@ -82,10 +83,10 @@ func (m *Manager) Start() error {
 	defer externalIPCancel()
 
 	done := make(chan struct{})
-	go func() {
+	goroutine.SafeGo(func() {
 		_, _ = m.upnp.GetExternalIP()
 		close(done)
-	}()
+	})
 
 	select {
 	case <-done:
