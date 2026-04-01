@@ -21,8 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // DNS constants
