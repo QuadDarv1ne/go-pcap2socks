@@ -760,42 +760,86 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	}
 	r.mu.RUnlock()
 
-	var allIPs []net.IP
-	var lastErr error
-
-	// Try each server in order of preference
-	for _, server := range servers {
-		// Query both A and AAAA records
-		ipsA, errA := r.queryDNS(ctx, hostname, server, 1)        // A record
-		ipsAAAA, errAAAA := r.queryDNS(ctx, hostname, server, 28) // AAAA record
-
-		if errA == nil && len(ipsA) > 0 {
-			allIPs = append(allIPs, ipsA...)
-		}
-		if errAAAA == nil && len(ipsAAAA) > 0 {
-			allIPs = append(allIPs, ipsAAAA...)
-		}
-
-		if len(allIPs) > 0 {
-			return allIPs, nil
-		}
-
-		if errA != nil {
-			lastErr = errA
-		}
-		if errAAAA != nil {
-			lastErr = errAAAA
-		}
+	// Channel to collect results from parallel queries
+	type serverResult struct {
+		ips []net.IP
+		err error
 	}
 
-	// Try DoH servers
+	// Launch parallel queries to all servers
+	resultCh := make(chan serverResult, len(servers)+len(r.dohServers))
+	ctx, cancel := context.WithTimeout(ctx, DefaultDNSTimeout)
+	defer cancel()
+
+	// Query regular DNS servers in parallel
+	for _, server := range servers {
+		go func(srv string) {
+			var allIPs []net.IP
+			// Query both A and AAAA records in parallel
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			var firstErr error
+
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				ips, err := r.queryDNS(ctx, hostname, srv, 1) // A record
+				mu.Lock()
+				defer mu.Unlock()
+				if err == nil && len(ips) > 0 {
+					allIPs = append(allIPs, ips...)
+				} else if firstErr == nil {
+					firstErr = err
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				ips, err := r.queryDNS(ctx, hostname, srv, 28) // AAAA record
+				mu.Lock()
+				defer mu.Unlock()
+				if err == nil && len(ips) > 0 {
+					allIPs = append(allIPs, ips...)
+				} else if firstErr == nil {
+					firstErr = err
+				}
+			}()
+			wg.Wait()
+
+			resultCh <- serverResult{ips: allIPs, err: firstErr}
+		}(server)
+	}
+
+	// Query DoH servers in parallel
 	for _, dohServer := range r.dohServers {
-		ips, err := r.queryDoH(ctx, hostname, dohServer)
-		if err == nil && len(ips) > 0 {
-			return ips, nil
-		}
-		if err != nil {
-			lastErr = err
+		go func(srv string) {
+			ips, err := r.queryDoH(ctx, hostname, srv)
+			resultCh <- serverResult{ips: ips, err: err}
+		}(dohServer)
+	}
+
+	// Collect results with timeout
+	var allIPs []net.IP
+	var lastErr error
+	totalServers := len(servers) + len(r.dohServers)
+
+	for i := 0; i < totalServers; i++ {
+		select {
+		case result := <-resultCh:
+			if result.err == nil && len(result.ips) > 0 {
+				allIPs = append(allIPs, result.ips...)
+			} else if result.err != nil {
+				lastErr = result.err
+			}
+			// Return immediately if we have results
+			if len(allIPs) > 0 {
+				return allIPs, nil
+			}
+		case <-ctx.Done():
+			// Timeout, return what we have
+			if len(allIPs) > 0 {
+				return allIPs, nil
+			}
+			return nil, ctx.Err()
 		}
 	}
 
