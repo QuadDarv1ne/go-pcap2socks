@@ -481,7 +481,7 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 		ctx, cancel := context.WithTimeout(tc.ctx, 10*time.Second)
 
 		conn, err := ct.proxyDialer.DialContext(ctx, metadata)
-		
+
 		if err == nil {
 			cancel() // Success - cancel context
 			tc.ProxyConn = conn
@@ -703,9 +703,9 @@ func (ct *ConnTracker) ExportMetrics() map[string]interface{} {
 		"udp_dropped_packets": udpDropped,
 		"total_active":        int(tcpActive) + int(udpActive),
 		// Extended metrics for better observability
-		"tcp_dropped_rate":    float64(tcpDropped) / float64(max64(tcpTotal, 1)),
-		"udp_dropped_rate":    float64(udpDropped) / float64(max64(udpTotal, 1)),
-		"health_score":        calculateHealthScore(int(tcpActive), int(tcpTotal), int(tcpDropped), int(udpActive), int(udpTotal), int(udpDropped)),
+		"tcp_dropped_rate": float64(tcpDropped) / float64(max64(tcpTotal, 1)),
+		"udp_dropped_rate": float64(udpDropped) / float64(max64(udpTotal, 1)),
+		"health_score":     calculateHealthScore(int(tcpActive), int(tcpTotal), int(tcpDropped), int(udpActive), int(udpTotal), int(udpDropped)),
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 )
 
 // parseAddr parses net.Addr to IP and port.
+//
 //go:inline
 func parseAddr(addr net.Addr) (net.IP, uint16) {
 	switch v := addr.(type) {

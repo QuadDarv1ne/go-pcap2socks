@@ -359,6 +359,7 @@ func splitString(s, sep string) []string {
 }
 
 // parseInt parses an integer from string
+//
 //go:inline
 func parseInt(s string) int {
 	var n int
@@ -442,6 +443,7 @@ func Restart() error {
 }
 
 // GetExecutableDir returns the directory containing the executable
+//
 //go:inline
 func GetExecutableDir() string {
 	execPath, err := os.Executable()

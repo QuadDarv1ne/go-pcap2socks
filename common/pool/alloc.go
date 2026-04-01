@@ -37,6 +37,7 @@ func NewAllocator() *Allocator {
 
 // Get gets a []byte from pool with most appropriate cap.
 // Optimized for hot path with inline hint
+//
 //go:inline
 func (alloc *Allocator) Get(size int) []byte {
 	// Handle zero or negative size explicitly - return empty non-nil slice
@@ -59,6 +60,7 @@ func (alloc *Allocator) Get(size int) []byte {
 // Put returns a []byte to pool for future use,
 // which the cap must be exactly 2^n.
 // Optimized for hot path with inline hint
+//
 //go:inline
 func (alloc *Allocator) Put(buf []byte) error {
 	b := msb(cap(buf))
@@ -73,6 +75,7 @@ func (alloc *Allocator) Put(buf []byte) error {
 }
 
 // msb returns the pos of most significant bit.
+//
 //go:inline
 func msb(size int) uint16 {
 	return uint16(bits.Len32(uint32(size)) - 1)
