@@ -189,6 +189,7 @@ func GenerateMACHostname(mac net.HardwareAddr) string {
 }
 
 // LookupOUI looks up manufacturer by OUI
+//
 //go:noinline
 func LookupOUI(oui string) string {
 	oui = strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(oui, ":", ""), "-", ""))

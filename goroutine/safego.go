@@ -16,12 +16,14 @@ type GoFunc func()
 // This prevents panics from crashing the entire application.
 //
 // Usage:
-//   goroutine.SafeGo(func() {
-//       // Your code here
-//   })
+//
+//	goroutine.SafeGo(func() {
+//	    // Your code here
+//	})
 //
 // Or with a named function:
-//   goroutine.SafeGo(myFunction)
+//
+//	goroutine.SafeGo(myFunction)
 func SafeGo(fn GoFunc) {
 	go func() {
 		defer func() {

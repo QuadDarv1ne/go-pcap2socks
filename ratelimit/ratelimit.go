@@ -27,6 +27,7 @@ func NewTokenBucket(maxTokens, refillRate float64) *TokenBucket {
 }
 
 // Allow checks if n tokens can be consumed
+//
 //go:inline
 func (tb *TokenBucket) Allow(n int) bool {
 	tb.mu.Lock()
@@ -132,6 +133,7 @@ func (rl *RateLimiter) GetLimiter(mac string, isUpload bool) *TokenBucket {
 }
 
 // Allow checks if traffic is allowed for a device
+//
 //go:inline
 func (rl *RateLimiter) Allow(mac string, bytes int, isUpload bool) bool {
 	limiter := rl.GetLimiter(mac, isUpload)
