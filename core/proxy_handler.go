@@ -138,10 +138,7 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 
 	// Start relay: gVisor -> proxy
 	go func() {
-		defer func() {
-			conn.Close()
-			h.connTracker.RemoveTCP(tc)
-		}()
+		defer conn.Close()
 
 		buf := buffer.Get(buffer.LargeBufferSize) // 9KB buffer for TCP
 		defer buffer.Put(buf)
@@ -169,11 +166,11 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 		}
 	}()
 
-	// Start relay: proxy -> gVisor
+	// Start relay: proxy -> gVisor (this goroutine handles cleanup)
 	go func() {
 		defer func() {
 			conn.Close()
-			h.connTracker.RemoveTCP(tc)
+			h.connTracker.RemoveTCP(tc) // Only one goroutine should cleanup
 		}()
 
 		for {
@@ -240,10 +237,7 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 
 	// Read packets from gVisor and send to proxy
 	go func() {
-		defer func() {
-			conn.Close()
-			h.connTracker.RemoveUDP(uc)
-		}()
+		defer conn.Close()
 
 		buf := buffer.Get(buffer.MediumBufferSize) // 2KB buffer for UDP
 		defer buffer.Put(buf)
@@ -268,11 +262,11 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 		}
 	}()
 
-	// Read packets from proxy and send to gVisor
+	// Read packets from proxy and send to gVisor (this goroutine handles cleanup)
 	go func() {
 		defer func() {
 			conn.Close()
-			h.connTracker.RemoveUDP(uc)
+			h.connTracker.RemoveUDP(uc) // Only one goroutine should cleanup
 		}()
 
 		for {
