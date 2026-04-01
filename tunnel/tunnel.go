@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 const (
@@ -324,20 +325,22 @@ func GetWorkerCount() int32 {
 // process spawns workers to handle TCP connections with concurrency limit
 func process() {
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
+	goroutine.SafeGo(func() {
 		<-_stopChan
 		cancel()
-	}()
+	})
 
 	// Start connection pool cleanup goroutine
 	_connPoolWg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer _connPoolWg.Done()
 		cleanupPool()
-	}()
+	})
 
 	// Start adaptive worker pool manager
-	go scaleWorkers(ctx)
+	goroutine.SafeGo(func() {
+		scaleWorkers(ctx)
+	})
 
 	// Start initial workers (minimum pool size)
 	var wg sync.WaitGroup
@@ -419,10 +422,10 @@ func scaleWorkers(ctx context.Context) {
 				// Scale up: add a worker
 				if int(_workerCount.Load()) < maxWorkerPoolSize {
 					_workerCount.Add(1)
-					go func() {
+					goroutine.SafeGo(func() {
 						defer _workerCount.Add(-1)
 						worker(ctx, int(_workerCount.Load()))
-					}()
+					})
 					slog.Debug("Worker pool scaled up", "workers", _workerCount.Load())
 				}
 			} else if delta < 0 {
