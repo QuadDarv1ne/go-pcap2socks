@@ -20,6 +20,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 )
 
 // DNS constants
@@ -902,11 +904,12 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string,
 			return nil, err
 		}
 
-		// Read response
-		buf := make([]byte, 512)
+		// Read response - use buffer pool for efficient memory management
+		buf := buffer.Get(buffer.SmallBufferSize)
 		n, err := conn.Read(buf)
 		conn.Close()
 		if err != nil {
+			buffer.Put(buf)
 			lastErr = err
 			if attempt < 2 {
 				select {
@@ -920,7 +923,9 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string,
 		}
 
 		// Parse response
-		return parseDNSResponse(buf[:n], qtype)
+		ips, err := parseDNSResponse(buf[:n], qtype)
+		buffer.Put(buf)
+		return ips, err
 	}
 
 	return nil, lastErr

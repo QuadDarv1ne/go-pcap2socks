@@ -701,5 +701,35 @@ func (ct *ConnTracker) ExportMetrics() map[string]interface{} {
 		"udp_total_sessions":  udpTotal,
 		"udp_dropped_packets": udpDropped,
 		"total_active":        int(tcpActive) + int(udpActive),
+		// Extended metrics for better observability
+		"tcp_dropped_rate":    float64(tcpDropped) / float64(max64(tcpTotal, 1)),
+		"udp_dropped_rate":    float64(udpDropped) / float64(max64(udpTotal, 1)),
+		"health_score":        calculateHealthScore(int(tcpActive), int(tcpTotal), int(tcpDropped), int(udpActive), int(udpTotal), int(udpDropped)),
 	}
+}
+
+// calculateHealthScore calculates a health score from 0.0 to 1.0
+func calculateHealthScore(tcpActive, tcpTotal, tcpDropped, udpActive, udpTotal, udpDropped int) float64 {
+	totalSessions := tcpTotal + udpTotal
+	totalDropped := tcpDropped + udpDropped
+
+	if totalSessions == 0 {
+		return 1.0 // No sessions, considered healthy
+	}
+
+	dropRate := float64(totalDropped) / float64(totalSessions)
+	// Health score: 1.0 = perfect, 0.0 = all dropped
+	health := 1.0 - dropRate
+	if health < 0 {
+		health = 0
+	}
+	return health
+}
+
+// max64 returns the maximum of two uint64 values
+func max64(a, b uint64) uint64 {
+	if a > b {
+		return a
+	}
+	return b
 }
