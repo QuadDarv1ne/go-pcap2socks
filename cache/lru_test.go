@@ -13,7 +13,7 @@ func TestLRUCacheBasic(t *testing.T) {
 	// Set and get
 	cache.Set("key1", 100)
 	val, found := cache.Get("key1")
-	
+
 	if !found {
 		t.Error("Expected to find key1")
 	}
@@ -35,7 +35,7 @@ func TestLRUCacheTTL(t *testing.T) {
 	cache := NewLRUCache[string, int](100, 50*time.Millisecond)
 
 	cache.Set("key1", 100)
-	
+
 	// Should exist initially
 	_, found := cache.Get("key1")
 	if !found {
@@ -57,7 +57,7 @@ func TestLRUCacheDelete(t *testing.T) {
 
 	cache.Set("key1", 100)
 	deleted := cache.Delete("key1")
-	
+
 	if !deleted {
 		t.Error("Expected to delete key1")
 	}
@@ -109,7 +109,7 @@ func TestLRUCacheStats(t *testing.T) {
 	cache.Get("key2") // Miss
 
 	hits, misses, _, _ := cache.Stats()
-	
+
 	if hits != 2 {
 		t.Errorf("Expected 2 hits, got %d", hits)
 	}
@@ -131,7 +131,7 @@ func TestLRUCacheHitRatio(t *testing.T) {
 	cache.Get("key6") // Miss
 
 	ratio := cache.HitRatio()
-	
+
 	// 2 hits, 6 misses = 25%
 	if ratio < 20 || ratio > 30 {
 		t.Errorf("Expected ~25%% hit ratio, got %.1f%%", ratio)
@@ -140,9 +140,9 @@ func TestLRUCacheHitRatio(t *testing.T) {
 
 func TestLRUCacheConcurrent(t *testing.T) {
 	cache := NewLRUCache[string, int](1000, time.Minute)
-	
+
 	var wg sync.WaitGroup
-	
+
 	// Concurrent writes
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
@@ -169,7 +169,7 @@ func TestLRUCacheConcurrent(t *testing.T) {
 
 	count := cache.Count()
 	t.Logf("Concurrent test: %d entries", count)
-	
+
 	if count == 0 {
 		t.Error("Expected some entries after concurrent operations")
 	}
@@ -225,7 +225,7 @@ func TestLRUCacheEviction(t *testing.T) {
 	}
 
 	count := cache.Count()
-	
+
 	// Verify eviction occurred (count should be less than what we added)
 	if count >= 50 {
 		t.Errorf("Expected eviction to occur, got %d entries", count)
@@ -236,7 +236,7 @@ func TestLRUCacheEviction(t *testing.T) {
 	if evicts == 0 {
 		t.Error("Expected some evictions")
 	}
-	
+
 	t.Logf("Eviction test: %d entries, %d evictions", count, evicts)
 }
 

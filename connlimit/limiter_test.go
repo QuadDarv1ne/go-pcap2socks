@@ -241,10 +241,10 @@ func TestListenerWrapper(t *testing.T) {
 
 	// Note: Connection type check removed - implementation detail
 	// The important thing is that the listener wraps connections
-	
+
 	limiter.Stop()
 	listener.Close()
-	
+
 	t.Log("Listener wrapper test completed")
 }
 

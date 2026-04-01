@@ -20,9 +20,9 @@ type Pool struct {
 	closed      bool
 
 	// Metrics - atomic for lock-free updates
-	hits   atomic.Uint64 // Connection reused from pool
-	misses atomic.Uint64 // Connection created new
-	putCnt atomic.Uint64 // Connections returned to pool
+	hits    atomic.Uint64 // Connection reused from pool
+	misses  atomic.Uint64 // Connection created new
+	putCnt  atomic.Uint64 // Connections returned to pool
 	dropCnt atomic.Uint64 // Connections dropped (pool full or dead/expired)
 }
 

@@ -12,7 +12,7 @@ func TestPoolNew(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	cfg := PoolConfig{
 		Workers:   4,
 		QueueSize: 100,
@@ -35,7 +35,7 @@ func TestPoolSubmit(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	pool := NewPool(DefaultPoolConfig())
 	defer pool.Stop()
 
@@ -62,7 +62,7 @@ func TestPoolSubmitSync(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	pool := NewPool(DefaultPoolConfig())
 	defer pool.Stop()
 
@@ -82,7 +82,7 @@ func TestPoolSubmitFull(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	// Create pool with tiny queue
 	cfg := PoolConfig{
 		Workers:   1,
@@ -110,7 +110,7 @@ func TestPoolConcurrentSubmit(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	pool := NewPool(PoolConfig{
 		Workers:   runtime.NumCPU(),
 		QueueSize: 1000,
@@ -152,7 +152,7 @@ func TestPoolPacketPool(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	pool := NewPool(DefaultPoolConfig())
 	defer pool.Stop()
 
@@ -176,7 +176,7 @@ func TestPoolStop(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	pool := NewPool(DefaultPoolConfig())
 
 	// Submit some packets
@@ -196,7 +196,7 @@ func TestPoolDefaultConfig(t *testing.T) {
 	t.Cleanup(func() {
 		runtime.GC()
 	})
-	
+
 	cfg := DefaultPoolConfig()
 
 	if cfg.Workers <= 0 {

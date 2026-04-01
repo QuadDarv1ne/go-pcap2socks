@@ -12,26 +12,26 @@ func TestPool_NewPool(t *testing.T) {
 	if pool == nil {
 		t.Fatal("Expected pool to be created")
 	}
-	
+
 	if pool.maxSize != 20 {
 		t.Errorf("Expected maxSize 20, got %d", pool.maxSize)
 	}
-	
+
 	if pool.idleTimeout != 2*time.Minute {
 		t.Errorf("Expected idleTimeout 2m, got %v", pool.idleTimeout)
 	}
-	
+
 	pool.Close()
 }
 
 func TestPool_DefaultValues(t *testing.T) {
 	pool := NewPool("localhost:1080", 0, 0)
 	defer pool.Close()
-	
+
 	if pool.maxSize != 10 {
 		t.Errorf("Expected default maxSize 10, got %d", pool.maxSize)
 	}
-	
+
 	if pool.idleTimeout != 5*time.Minute {
 		t.Errorf("Expected default idleTimeout 5m, got %v", pool.idleTimeout)
 	}
@@ -64,21 +64,21 @@ func TestPool_GetPut(t *testing.T) {
 func TestPool_GetCreatesNew(t *testing.T) {
 	pool := NewPool("localhost:1080", 5, 1*time.Minute)
 	defer pool.Close()
-	
+
 	created := false
 	conn, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
 		created = true
 		return &mockConn{}, nil
 	})
-	
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-	
+
 	if !created {
 		t.Error("Expected new connection to be created")
 	}
-	
+
 	if conn == nil {
 		t.Error("Expected connection to be created")
 	}
@@ -86,18 +86,18 @@ func TestPool_GetCreatesNew(t *testing.T) {
 
 func TestPool_Close(t *testing.T) {
 	pool := NewPool("localhost:1080", 5, 1*time.Minute)
-	
+
 	// Put mock connection
 	pool.Put(&mockConn{})
-	
+
 	// Close pool
 	pool.Close()
-	
+
 	// Try to get connection after close
 	_, err := pool.Get(context.Background(), func(ctx context.Context) (net.Conn, error) {
 		return &mockConn{}, nil
 	})
-	
+
 	if err != ErrPoolClosed {
 		t.Errorf("Expected ErrPoolClosed, got %v", err)
 	}
@@ -105,15 +105,15 @@ func TestPool_Close(t *testing.T) {
 
 func TestPool_PutAfterClose(t *testing.T) {
 	pool := NewPool("localhost:1080", 5, 1*time.Minute)
-	
+
 	mockConn := &mockConn{}
-	
+
 	// Close pool
 	pool.Close()
-	
+
 	// Try to put connection after close
 	pool.Put(mockConn)
-	
+
 	if !mockConn.closed {
 		t.Error("Expected connection to be closed when pool is closed")
 	}
@@ -202,12 +202,12 @@ func TestPool_Metrics(t *testing.T) {
 func TestPool_MaxSize(t *testing.T) {
 	pool := NewPool("localhost:1080", 3, 1*time.Minute)
 	defer pool.Close()
-	
+
 	// Put more connections than max size
 	for i := 0; i < 5; i++ {
 		pool.Put(&mockConn{})
 	}
-	
+
 	stats := pool.Stats()
 	if stats.Available != 3 {
 		t.Errorf("Expected 3 available connections (max size), got %d", stats.Available)
@@ -281,10 +281,10 @@ func (m *liveMockConn) Close() error {
 	return nil
 }
 
-func (m *liveMockConn) LocalAddr() net.Addr { return nil }
-func (m *liveMockConn) RemoteAddr() net.Addr { return nil }
-func (m *liveMockConn) SetDeadline(t time.Time) error { return nil }
-func (m *liveMockConn) SetReadDeadline(t time.Time) error { return nil }
+func (m *liveMockConn) LocalAddr() net.Addr                { return nil }
+func (m *liveMockConn) RemoteAddr() net.Addr               { return nil }
+func (m *liveMockConn) SetDeadline(t time.Time) error      { return nil }
+func (m *liveMockConn) SetReadDeadline(t time.Time) error  { return nil }
 func (m *liveMockConn) SetWriteDeadline(t time.Time) error { return nil }
 
 // BenchmarkPool_GetPut benchmarks connection pool Get/Put operations

@@ -87,11 +87,18 @@ func TestPool_GetPut_RoundTrip(t *testing.T) {
 
 func TestDefaultPool(t *testing.T) {
 	// Test global functions
+	// Get(500) returns small buffer (500 <= SmallBufferSize=512)
 	buf := Get(500)
+	if cap(buf) != SmallBufferSize {
+		t.Errorf("Expected capacity %d, got %d", SmallBufferSize, cap(buf))
+	}
+	Put(buf)
+
+	// Get(1000) returns medium buffer (512 < 1000 <= MediumBufferSize=2048)
+	buf = Get(1000)
 	if cap(buf) != MediumBufferSize {
 		t.Errorf("Expected capacity %d, got %d", MediumBufferSize, cap(buf))
 	}
-
 	Put(buf)
 
 	// Test with nil

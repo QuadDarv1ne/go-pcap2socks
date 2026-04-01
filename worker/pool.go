@@ -40,13 +40,13 @@ type Pool struct {
 	maxQueue    int
 	packetPool  sync.Pool
 	initialized atomic.Bool
-	
+
 	// Advanced metrics
-	latencySumNs   atomic.Int64   // Sum of latencies for averaging
-	latencyCount   atomic.Int64   // Count for averaging
-	latencyMaxNs   atomic.Int64   // Maximum latency observed
-	lastProcessTime atomic.Int64   // Nanoseconds of last processing
-	activeWorkers   atomic.Int32   // Currently active workers
+	latencySumNs    atomic.Int64 // Sum of latencies for averaging
+	latencyCount    atomic.Int64 // Count for averaging
+	latencyMaxNs    atomic.Int64 // Maximum latency observed
+	lastProcessTime atomic.Int64 // Nanoseconds of last processing
+	activeWorkers   atomic.Int32 // Currently active workers
 }
 
 // PoolConfig holds configuration for worker pool
@@ -84,11 +84,11 @@ func NewPool(cfg PoolConfig) *Pool {
 	output := make(chan ProcessResult, cfg.QueueSize)
 
 	pool := &Pool{
-		workers:   cfg.Workers,
-		input:     input,
-		output:    output,
-		stop:      cancel,
-		maxQueue:  cfg.MaxQueue,
+		workers:  cfg.Workers,
+		input:    input,
+		output:   output,
+		stop:     cancel,
+		maxQueue: cfg.MaxQueue,
 		packetPool: sync.Pool{
 			New: func() interface{} {
 				return make([]byte, 0, 1500) // Typical MTU for Ethernet
@@ -136,11 +136,11 @@ func (p *Pool) worker(ctx context.Context, id int) {
 			// Calculate and record latency
 			latency := time.Since(startTime)
 			latencyNs := latency.Nanoseconds()
-			
+
 			// Update latency statistics atomically
 			p.latencySumNs.Add(latencyNs)
 			p.latencyCount.Add(1)
-			
+
 			// Update max latency
 			for {
 				currentMax := p.latencyMaxNs.Load()
@@ -151,7 +151,7 @@ func (p *Pool) worker(ctx context.Context, id int) {
 					break
 				}
 			}
-			
+
 			// Update last process time
 			p.lastProcessTime.Store(time.Now().UnixNano())
 
@@ -258,12 +258,12 @@ func (p *Pool) AdvancedStats() metrics.AdvancedStats {
 	count := p.latencyCount.Load()
 	sumNs := p.latencySumNs.Load()
 	maxNs := p.latencyMaxNs.Load()
-	
+
 	var avgNs int64
 	if count > 0 {
 		avgNs = sumNs / count
 	}
-	
+
 	return metrics.AdvancedStats{
 		Processed:     p.processed.Load(),
 		Dropped:       p.dropped.Load(),
@@ -294,12 +294,12 @@ func (p *Pool) GetLatencyStats() metrics.LatencyStats {
 	count := p.latencyCount.Load()
 	sumNs := p.latencySumNs.Load()
 	maxNs := p.latencyMaxNs.Load()
-	
+
 	var avgNs int64
 	if count > 0 {
 		avgNs = sumNs / count
 	}
-	
+
 	return metrics.LatencyStats{
 		Average: time.Duration(avgNs),
 		Max:     time.Duration(maxNs),

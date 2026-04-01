@@ -11,11 +11,11 @@ import (
 // Memory optimization: Reduced max size from 64KB to 16KB to prevent memory bloat.
 // Most network packets fit within 4KB (MTU), 16KB is sufficient for jumbo frames.
 const (
-	SizeSmall  = 256      // 256B - small packets, headers
-	SizeMedium = 1024     // 1KB - DNS, small payloads
-	SizeLarge  = 4096     // 4KB - typical MTU
-	SizeHuge   = 16384    // 16KB - jumbo frames
-	SizeMax    = 16384    // 16KB - max (reduced from 64KB to save memory)
+	SizeSmall  = 256   // 256B - small packets, headers
+	SizeMedium = 1024  // 1KB - DNS, small payloads
+	SizeLarge  = 4096  // 4KB - typical MTU
+	SizeHuge   = 16384 // 16KB - jumbo frames
+	SizeMax    = 16384 // 16KB - max (reduced from 64KB to save memory)
 )
 
 // PoolStats holds statistics for buffer pool
@@ -30,10 +30,10 @@ type PoolStats struct {
 
 // bufferPool is a size-class buffer pool
 type bufferPool struct {
-	pool      sync.Pool
-	size      int
-	stats     PoolStats
-	enabled   atomic.Bool
+	pool    sync.Pool
+	size    int
+	stats   PoolStats
+	enabled atomic.Bool
 }
 
 // MultiPool provides multiple size-class pools
@@ -105,7 +105,7 @@ func (bp *bufferPool) get() []byte {
 			bp.stats.MaxActive = active
 		}
 	}
-	
+
 	buf := bp.pool.Get().([]byte)
 	// Reset to full capacity
 	if cap(buf) >= bp.size {
@@ -114,7 +114,7 @@ func (bp *bufferPool) get() []byte {
 		// Fallback if capacity changed
 		buf = make([]byte, bp.size)
 	}
-	
+
 	return buf
 }
 
@@ -265,7 +265,7 @@ func (mp *MultiPool) Stats() (small, medium, large, huge, max PoolStats) {
 // TotalStats returns aggregated statistics
 func (mp *MultiPool) TotalStats() PoolStats {
 	var total PoolStats
-	
+
 	sizes := []PoolStats{
 		mp.small.stats,
 		mp.medium.stats,
@@ -273,7 +273,7 @@ func (mp *MultiPool) TotalStats() PoolStats {
 		mp.huge.stats,
 		mp.max.stats,
 	}
-	
+
 	for _, stats := range sizes {
 		total.Allocs += stats.Allocs
 		total.Frees += stats.Frees
@@ -284,18 +284,18 @@ func (mp *MultiPool) TotalStats() PoolStats {
 			total.MaxActive = stats.MaxActive
 		}
 	}
-	
+
 	return total
 }
 
 // HitRatio returns the pool hit ratio as percentage
 func (mp *MultiPool) HitRatio() float64 {
 	total := mp.TotalStats()
-	
+
 	if total.Allocs == 0 {
 		return 0
 	}
-	
+
 	return float64(total.Hits) / float64(total.Allocs) * 100
 }
 

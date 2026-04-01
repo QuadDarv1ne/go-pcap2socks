@@ -14,12 +14,12 @@ type LRUCache[K comparable, V any] struct {
 	shardMask uint64
 	maxSize   int
 	ttl       time.Duration
-	
+
 	// Statistics
 	hits   atomic.Uint64
 	misses atomic.Uint64
 	evicts atomic.Uint64
-	
+
 	// Cleanup
 	stopChan chan struct{}
 }
@@ -27,7 +27,7 @@ type LRUCache[K comparable, V any] struct {
 type cacheShard[K comparable, V any] struct {
 	mu   sync.RWMutex
 	data map[K]*cacheEntry[V]
-	lru  []K  // Simple LRU list
+	lru  []K // Simple LRU list
 }
 
 type cacheEntry[V any] struct {
@@ -101,7 +101,7 @@ func (c *LRUCache[K, V]) Set(key K, value V) {
 // Returns the value and true if found and not expired
 func (c *LRUCache[K, V]) Get(key K) (V, bool) {
 	var zero V
-	
+
 	shard := c.getShard(key)
 	shard.mu.RLock()
 	entry, exists := shard.data[key]
@@ -123,7 +123,7 @@ func (c *LRUCache[K, V]) Get(key K) (V, bool) {
 			c.evicts.Add(1)
 		}
 		shard.mu.Unlock()
-		
+
 		c.misses.Add(1)
 		return zero, false
 	}
@@ -177,11 +177,11 @@ func (c *LRUCache[K, V]) HitRatio() float64 {
 	hits := c.hits.Load()
 	misses := c.misses.Load()
 	total := hits + misses
-	
+
 	if total == 0 {
 		return 0
 	}
-	
+
 	return float64(hits) / float64(total) * 100
 }
 
@@ -193,7 +193,7 @@ func (c *LRUCache[K, V]) Cleanup() {
 	for i := range c.shards {
 		shard := &c.shards[i]
 		shard.mu.Lock()
-		
+
 		for key, entry := range shard.data {
 			if now > entry.expiresAt {
 				delete(shard.data, key)
@@ -201,7 +201,7 @@ func (c *LRUCache[K, V]) Cleanup() {
 				evicted++
 			}
 		}
-		
+
 		shard.mu.Unlock()
 	}
 
