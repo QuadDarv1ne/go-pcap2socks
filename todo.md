@@ -1,8 +1,10 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (01.04.2026, финальное обновление)
+## Статус проекта (01.04.2026, актуально)
 
-**Ветка:** `dev` (25 коммитов ahead of origin/dev) → `main` (35 коммитов ahead of origin/main)
+**Ветка:** `dev` (31 коммит ahead of origin/dev) → `main` (45 коммитов ahead of origin/main)
+
+**Синхронизация:** ✅ Все изменения из `dev` интегрированы в `main` (0 коммитов main..dev)
 
 **Реализовано модулей:** 33+ (все отмечены как ✅ ЗАВЕРШЁН)
 
@@ -29,16 +31,153 @@
 | dns hijacker | ✅ | `dns/hijacker_test.go` |
 | buffer pool | ✅ | `buffer/pool_test.go` (10 тестов, исправлены 01.04.2026) |
 | websocket proxy | ✅ | `proxy/websocket_test.go`, `transport/ws/websocket_test.go` |
+| worker pool | ✅ | `worker/pool_test.go` |
+| connpool | ✅ | `connpool/pool_test.go` |
+| api | ✅ | `api/server_test.go`, `api/websocket_test.go`, `api/auth_test.go` |
+| profiles | ✅ | `profiles/manager_test.go` |
+| upnp | ✅ | `upnp/manager_test.go` |
+| observability | ✅ | `observability/metrics_test.go` |
 
-**Всего тестов:** 86 файлов (proxy_handler_test.go удалён, websocket_test.go добавлены)
+**Всего тестов:** 84 файла (01.04.2026)
 
 **Приоритеты:**
 1. **Высокий:** ✅ ВЫПОЛНЕНО — Интеграция Buffer Pool в core/proxy_handler.go
 2. **Высокий:** ✅ ВЫПОЛНЕНО — Обновление core.ProxyHandler (buffer.Pool интегрирован)
 3. **Высокий:** ✅ ВЫПОЛНЕНО — WebSocket прокси для обфускации трафика
-4. **Средний:** ✅ ВЫПОЛНЕНО — Prometheus метрики для всех компонентов реализованы
-5. **Средний:** ✅ ВЫПОЛНЕНО — Документация проекта расширена
-6. **Низкий:** ⏳ В ОЖИДАНИИ — Профилирование, оптимизация производительности
+4. **Высокий:** ✅ ВЫПОЛНЕНО — Параллельные DNS запросы
+5. **Высокий:** ✅ ВЫПОЛНЕНО — Оптимизация памяти в conntrack
+6. **Средний:** ✅ ВЫПОЛНЕНО — Prometheus метрики для всех компонентов реализованы
+7. **Средний:** ✅ ВЫПОЛНЕНО — Документация проекта расширена
+8. **Средний:** ✅ ВЫПОЛНЕНО — PowerShell утилиты для управления проектом
+9. **Низкий:** ⏳ В ОЖИДАНИИ — Профилирование, оптимизация производительности
+10. **Низкий:** ⏳ В ОЖИДАНИИ — Benchmark для оценки производительности
+
+---
+
+## Изменения (01.04.2026, последние)
+
+### ✅ Параллельные DNS запросы — РЕАЛИЗОВАНО
+
+**Файл:** `dns/resolver.go`
+
+**Улучшения:**
+- `lookupIPUncached`: параллельные запросы ко всем DNS серверам одновременно
+- A и AAAA записи запрашиваются параллельно для каждого сервера
+- DoH серверы опрашиваются одновременно
+- Первый успешный результат возвращается немедленно (fast path)
+- Timeout защищает от зависания
+- Fallback на системный resolver
+
+**Преимущества:**
+- Значительное снижение latency DNS resolution
+- Улучшенная отказоустойчивость
+- Автоматический выбор fastest responder
+- Лучшая обработка временных failures серверов
+
+**Статус:** ✅ РЕАЛИЗОВАНО (01.04.2026), ✅ В main.go
+
+---
+
+### ✅ Оптимизация памяти в conntrack — РЕАЛИЗОВАНО
+
+**Коммит:** 4948776 perf: оптимизировать управление памятью в conntrack
+
+**Улучшения:**
+- Оптимизировано управление памятью в conntrack
+- Снижение аллокаций в hot path
+- Улучшена производительность TCP/UDP relay
+
+**Статус:** ✅ РЕАЛИЗОВАНО (01.04.2026), ✅ В main.go
+
+---
+
+### ✅ Вспомогательные модули — УЛУЧШЕНЫ
+
+**Коммиты:**
+- ff23349 refactor: улучшить вспомогательные модули
+- 435011a refactor: улучшить буферы и пулы соединений
+- ce507d2 refactor: улучшить сервисные модули
+- 298dc1a refactor: улучшить proxy и транспорт
+- 6494701 refactor: улучшить DNS resolver и метрики
+- 27600dc refactor: улучшить автонастройку и DHCP
+- c119cfa refactor: обновить ядро проекта и API
+
+**Улучшения:**
+- Улучшена работа buffer pool
+- Оптимизированы proxy и транспорт
+- Улучшен DNS resolver и метрики
+- Обновлена автонастройка и DHCP
+- Обновлено ядро проекта и API
+
+**Статус:** ✅ РЕАЛИЗОВАНО (01.04.2026), ✅ В main.go
+
+---
+
+### ✅ PowerShell утилиты — ДОБАВЛЕНЫ
+
+**Коммит:** b37aeab feat: добавить PowerShell утилиты для управления
+
+**Скрипты:**
+- `auto-start.ps1` — автозапуск проекта
+- `auto-start-ps4.ps1` — автозапуск PS4
+- `check-ps4.ps1` — проверка PS4
+- `backup-config.ps1` — резервное копирование конфигурации
+- `config-tools.ps1` — инструменты конфигурации
+- `clean-project.ps1` — очистка проекта
+- `analyse-logs.ps1` — анализ логов
+- `diagnose-network.ps1` — диагностика сети
+
+**Статус:** ✅ ДОБАВЛЕНЫ (01.04.2026), ✅ В main.go
+
+---
+
+### ✅ WebSocket прокси — ДОБАВЛЕН
+
+**Коммит:** 8474570 feat: добавить WebSocket прокси для обфускации трафика
+
+**Файлы:**
+- `proxy/websocket.go` — WebSocket прокси
+- `proxy/websocket_test.go` — тесты
+- `transport/ws/websocket.go` — WebSocket транспорт
+- `transport/ws/websocket_test.go` — тесты транспорта
+
+**Функционал:**
+- WebSocket URL конфигурация
+- Custom headers и origin
+- TLS skip verify опция
+- Handshake timeout
+- Compression support
+- Ping interval для keep-alive
+- Obfuscation с key и padding
+- Интеграция с createProxy() в main.go
+
+**Статус:** ✅ ДОБАВЛЕН (01.04.2026), ✅ В main.go
+
+---
+
+### ✅ Buffer Pool интеграция — ЗАВЕРШЕНА
+
+**Коммит:** 83eaf9b feat: интегрировать Buffer Pool в core/proxy_handler.go
+
+**Изменения:**
+- `core/proxy_handler.go` — интеграция buffer.Pool
+- TCP/UDP relay используют buffer.Get() вместо make()
+- Снижение аллокаций памяти
+
+**Статус:** ✅ ИНТЕГРИРОВАНО (01.04.2026), ✅ В main.go
+
+---
+
+### ✅ Integration тесты — ДОБАВЛЕНЫ
+
+**Коммит:** 333487b feat: добавить integration тесты для ProxyHandler и метрики Buffer Pool
+
+**Тесты:**
+- Integration тесты ProxyHandler
+- Метрики Buffer Pool
+- Тесты производительности
+
+**Статус:** ✅ ДОБАВЛЕНЫ (01.04.2026), ✅ В main.go
 
 ---
 
@@ -70,8 +209,10 @@
 
 **Дата:** 01.04.2026
 
-**Коммиты в dev:** 25 (ahead of origin/dev)
-**Коммиты в main:** 35 (ahead of origin/main)
+**Коммиты в dev:** 31 (ahead of origin/dev)
+**Коммиты в main:** 45 (ahead of origin/main)
+
+**Синхронизация:** ✅ Все изменения из dev интегрированы в main
 
 **Основные изменения:**
 
