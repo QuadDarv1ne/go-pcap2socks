@@ -287,7 +287,23 @@ func Start() {
 
 // Stop gracefully stops the tunnel processor
 func Stop() {
+	slog.Info("Stopping tunnel processor...", "active_connections", _activeConnCount.Load())
+
+	// Signal all goroutines to stop
 	close(_stopChan)
+
+	// Wait for connection pool cleanup to finish
+	_connPoolWg.Wait()
+
+	// Drain and close all connections in the pool
+	close(_connPool)
+	for pooled := range _connPool {
+		if pooled != nil && pooled.conn != nil {
+			pooled.conn.Close()
+		}
+	}
+
+	slog.Info("Tunnel processor stopped", "active_connections", _activeConnCount.Load())
 }
 
 // GetActiveConnectionCount returns the number of currently active TCP connections

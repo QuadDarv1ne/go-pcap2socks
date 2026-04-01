@@ -150,7 +150,10 @@ func Clone(src []byte) []byte {
 	}
 
 	buf := Get(len(src))
-	return append(buf, src...)
+	// Use copy instead of append to avoid potential reallocation
+	buf = buf[:len(src)]
+	copy(buf, src)
+	return buf
 }
 
 // Copy copies data from src to a pooled buffer
@@ -160,7 +163,10 @@ func Copy(src []byte) []byte {
 	}
 
 	buf := Get(len(src))
-	return append(buf, src...)
+	// Use copy instead of append to avoid potential reallocation
+	buf = buf[:len(src)]
+	copy(buf, src)
+	return buf
 }
 
 // Reset clears a buffer and returns it to the pool
