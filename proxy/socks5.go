@@ -20,11 +20,12 @@ import (
 
 // Pre-defined errors for SOCKS5 operations
 var (
-	ErrSocksConnect      = errors.New("failed to connect to SOCKS5 server")
-	ErrSocksHandshake    = errors.New("SOCKS5 handshake failed")
-	ErrSocksAuth         = errors.New("SOCKS5 authentication failed")
-	ErrSocksUDPAssociate = errors.New("SOCKS5 UDP associate failed")
-	ErrInvalidUDPBinding = errors.New("invalid UDP binding address")
+	ErrSocksConnect         = errors.New("failed to connect to SOCKS5 server")
+	ErrSocksHandshake       = errors.New("SOCKS5 handshake failed")
+	ErrSocksAuth            = errors.New("SOCKS5 authentication failed")
+	ErrSocksUDPAssociate    = errors.New("SOCKS5 UDP associate failed")
+	ErrInvalidUDPBinding    = errors.New("invalid UDP binding address")
+	ErrConnectionPoolClosed = errors.New("connection pool is closed")
 )
 
 var _ Proxy = (*Socks5)(nil)

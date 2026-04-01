@@ -42,11 +42,27 @@ type DialError struct {
 }
 
 func (e *DialError) Error() string {
-	return fmt.Sprintf("proxy %s: failed to dial %s: %v", e.ProxyAddr, e.DestAddr, e.Err)
+	return fmt.Sprintf("proxy %s: failed to dial %s (timeout=%v): %v", e.ProxyAddr, e.DestAddr, e.Timeout, e.Err)
 }
 
 func (e *DialError) Unwrap() error {
 	return e.Err
+}
+
+// IsTimeout returns true if the error was caused by a timeout
+func (e *DialError) IsTimeout() bool {
+	if netErr, ok := e.Err.(interface{ Timeout() bool }); ok {
+		return netErr.Timeout()
+	}
+	return false
+}
+
+// IsTemporary returns true if the error is temporary and may succeed on retry
+func (e *DialError) IsTemporary() bool {
+	if netErr, ok := e.Err.(interface{ Temporary() bool }); ok {
+		return netErr.Temporary()
+	}
+	return false
 }
 
 // HandshakeError wraps handshake errors with context
@@ -64,6 +80,11 @@ func (e *HandshakeError) Unwrap() error {
 	return e.Err
 }
 
+// IsAuthError returns true if the handshake failed due to authentication
+func (e *HandshakeError) IsAuthError() bool {
+	return e.Step == "AUTH" || errors.Is(e.Err, ErrSocksAuth)
+}
+
 // UDPError wraps UDP operation errors with context
 type UDPError struct {
 	ProxyAddr string // Proxy server address
@@ -77,6 +98,11 @@ func (e *UDPError) Error() string {
 
 func (e *UDPError) Unwrap() error {
 	return e.Err
+}
+
+// IsAssociateError returns true if the UDP associate failed
+func (e *UDPError) IsAssociateError() bool {
+	return e.Operation == "associate"
 }
 
 const (
