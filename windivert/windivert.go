@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/threatwinds/godivert"
 )
 
@@ -509,10 +510,10 @@ func (bp *BatchProcessor) RecvBatch(batch []*Packet) (int, error) {
 		}
 		resultChan := make(chan recvResult, 1)
 
-		go func() {
+		goroutine.SafeGo(func() {
 			pkt, err := bp.handle.Recv()
 			resultChan <- recvResult{pkt: pkt, err: err}
-		}()
+		})
 
 		select {
 		case result := <-resultChan:
@@ -566,7 +567,7 @@ func (bp *BatchProcessor) SendBatch(batch []*Packet, count int) error {
 // StartBatchReader starts a goroutine that reads packets in batches
 // and sends them to the batch channel
 func (bp *BatchProcessor) StartBatchReader() {
-	go func() {
+	goroutine.SafeGo(func() {
 		errorDelay := time.Duration(0)
 		maxDelay := time.Second
 
@@ -605,7 +606,7 @@ func (bp *BatchProcessor) StartBatchReader() {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // GetBatchChan returns the batch channel for reading

@@ -10,6 +10,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
@@ -73,14 +74,14 @@ func (e *Endpoint) Attach(dispatcher stack.NetworkDispatcher) {
 	e.once.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		e.wg.Add(2)
-		go func() {
+		goroutine.SafeGo(func() {
 			e.outboundLoop(ctx)
 			e.wg.Done()
-		}()
-		go func() {
+		})
+		goroutine.SafeGo(func() {
 			e.dispatchLoop(cancel)
 			e.wg.Done()
-		}()
+		})
 	})
 }
 

@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
@@ -462,7 +463,7 @@ type BalancerStats struct {
 // startHealthCheck starts background health checking
 func (b *Balancer) startHealthCheck() {
 	b.wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer b.wg.Done()
 		ticker := time.NewTicker(b.healthCheck.Interval)
 		defer ticker.Stop()
@@ -475,7 +476,7 @@ func (b *Balancer) startHealthCheck() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // performHealthCheck performs health checks on all uplinks
