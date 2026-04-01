@@ -15,10 +15,10 @@ import (
 // Manager handles UPnP port forwarding
 // Optimized with sync.Map for lock-free activeMaps access
 type Manager struct {
-	upnp        *UPnP
-	config      *cfg.UPnP
-	internalIP  string
-	activeMaps  sync.Map // map[string]bool ("protocol:port" -> true)
+	upnp         *UPnP
+	config       *cfg.UPnP
+	internalIP   string
+	activeMaps   sync.Map // map[string]bool ("protocol:port" -> true)
 	mappingCount atomic.Int32
 }
 
@@ -45,22 +45,22 @@ func (m *Manager) Start() error {
 	// Discover UPnP devices with retry and timeout
 	var devices []Device
 	var err error
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	for attempt := 0; attempt < 3; attempt++ {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("UPnP discovery timeout: %w", ctx.Err())
 		default:
 		}
-		
+
 		devices, err = m.upnp.Discover()
 		if err == nil && len(devices) > 0 {
 			break
 		}
-		
+
 		if attempt < 2 {
 			// Exponential backoff: 1s, 2s
 			backoff := time.Duration(1<<uint(attempt)) * time.Second
@@ -72,7 +72,7 @@ func (m *Manager) Start() error {
 			}
 		}
 	}
-	
+
 	if len(devices) == 0 {
 		return fmt.Errorf("no UPnP devices found: %w", err)
 	}
@@ -80,13 +80,13 @@ func (m *Manager) Start() error {
 	// Get external IP with timeout
 	externalIPCtx, externalIPCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer externalIPCancel()
-	
+
 	done := make(chan struct{})
 	go func() {
 		_, _ = m.upnp.GetExternalIP()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		// Completed
@@ -197,13 +197,13 @@ func (m *Manager) addPortMappingWithRetry(protocol string, externalPort, interna
 			m.mappingCount.Add(1)
 			return nil
 		}
-		
+
 		if attempt < 1 {
 			// Retry after 1 second
 			time.Sleep(1 * time.Second)
 		}
 	}
-	
+
 	return fmt.Errorf("%s port %d mapping failed after 2 attempts: %w", protocol, externalPort, err)
 }
 
@@ -284,7 +284,7 @@ func (m *Manager) RemoveDynamicMapping(protocol string, port int) error {
 	}
 
 	key := protocol + ":" + fmt.Sprint(port)
-	
+
 	// Check if mapped (lock-free)
 	if _, ok := m.activeMaps.Load(key); !ok {
 		return nil // Not mapped

@@ -40,26 +40,26 @@ func ipInt(ip net.IP) uint32 {
 
 // DHCPServer represents a DHCP server using WinDivert
 type DHCPServer struct {
-	mu            sync.RWMutex
-	config        *dhcp.ServerConfig
-	server        *dhcp.Server
-	handle        *Handle
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
-	localMAC      net.HardwareAddr
-	localIP       net.IP
-	lastRequest   sync.Map // Rate limiting per MAC: map[string]int64 (nanoseconds)
-	
+	mu          sync.RWMutex
+	config      *dhcp.ServerConfig
+	server      *dhcp.Server
+	handle      *Handle
+	stopChan    chan struct{}
+	wg          sync.WaitGroup
+	localMAC    net.HardwareAddr
+	localIP     net.IP
+	lastRequest sync.Map // Rate limiting per MAC: map[string]int64 (nanoseconds)
+
 	// Metrics for monitoring
-	metrics       struct {
-		packetsReceived  atomic.Int64
-		packetsSent      atomic.Int64
-		discoverCount    atomic.Int64
-		requestCount     atomic.Int64
-		offerCount       atomic.Int64
-		ackCount         atomic.Int64
-		errorsCount      atomic.Int64
-		activeLeases     atomic.Int32
+	metrics struct {
+		packetsReceived atomic.Int64
+		packetsSent     atomic.Int64
+		discoverCount   atomic.Int64
+		requestCount    atomic.Int64
+		offerCount      atomic.Int64
+		ackCount        atomic.Int64
+		errorsCount     atomic.Int64
+		activeLeases    atomic.Int32
 	}
 }
 
@@ -104,12 +104,12 @@ func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableS
 		"filter", DHCPFilter)
 
 	s := &DHCPServer{
-		config:      config,
-		server:      dhcpServer,
-		handle:      handle,
-		stopChan:    make(chan struct{}),
-		localMAC:    localMAC,
-		localIP:     config.ServerIP,
+		config:   config,
+		server:   dhcpServer,
+		handle:   handle,
+		stopChan: make(chan struct{}),
+		localMAC: localMAC,
+		localIP:  config.ServerIP,
 		// lastRequest is sync.Map, no initialization needed
 	}
 
@@ -428,7 +428,7 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	// Determine destination IP based on broadcast flag and client state
 	// If client set broadcast flag, we MUST use broadcast address
 	dstIP := net.IPv4(255, 255, 255, 255) // Default broadcast
-	dstMAC := broadcastMAC                 // Default broadcast MAC
+	dstMAC := broadcastMAC                // Default broadcast MAC
 
 	slog.Debug("DHCP response: determining destination",
 		"clientMAC", clientMAC.String(),
@@ -493,10 +493,10 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	// Build IP+UDP+DHCP packet (NO Ethernet header) for network layer mode
 	// WinDivert in network layer expects IP packets without Ethernet framing
 	responsePacket, err = buildIPUDPPacket(
-		s.localIP,     // Source IP (server)
-		dstIP,         // Destination IP (client or broadcast)
-		67,            // Source port (DHCP server)
-		68,            // Destination port (DHCP client)
+		s.localIP, // Source IP (server)
+		dstIP,     // Destination IP (client or broadcast)
+		67,        // Source port (DHCP server)
+		68,        // Destination port (DHCP client)
 		dhcpData,
 	)
 
@@ -643,15 +643,15 @@ func buildEthernetIPUDPPacket(dstMAC, srcMAC net.HardwareAddr, srcIP, dstIP net.
 	packet := make([]byte, totalLen)
 
 	// Build Ethernet header
-	copy(packet[0:6], dstMAC)   // Destination MAC
-	copy(packet[6:12], srcMAC)  // Source MAC
-	packet[12] = 0x08           // Ethernet type: IPv4 (0x0800)
+	copy(packet[0:6], dstMAC)  // Destination MAC
+	copy(packet[6:12], srcMAC) // Source MAC
+	packet[12] = 0x08          // Ethernet type: IPv4 (0x0800)
 	packet[13] = 0x00
 
 	// Build IP header (starts at offset 14)
 	ipStart := ethHeaderLen
-	packet[ipStart+0] = 0x45                // Version 4, IHL 5 (20 bytes)
-	packet[ipStart+1] = 0x00                // DSCP, ECN
+	packet[ipStart+0] = 0x45 // Version 4, IHL 5 (20 bytes)
+	packet[ipStart+1] = 0x00 // DSCP, ECN
 	ipTotalLen := ipHeaderLen + udpHeaderLen + len(payload)
 	packet[ipStart+2] = byte(ipTotalLen >> 8) // Total length (IP header + UDP header + payload)
 	packet[ipStart+3] = byte(ipTotalLen)

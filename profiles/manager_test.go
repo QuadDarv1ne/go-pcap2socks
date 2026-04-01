@@ -41,7 +41,7 @@ func TestListProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProfiles failed: %v", err)
 	}
-	
+
 	if len(profiles) < 3 {
 		t.Errorf("Expected at least 3 default profiles, got %d", len(profiles))
 	}
@@ -133,7 +133,7 @@ func TestSetCurrentProfile(t *testing.T) {
 	}
 
 	manager.SetCurrentProfile("direct")
-	
+
 	current := manager.GetCurrentProfile()
 	if current != "direct" {
 		t.Errorf("Expected current profile 'direct', got %s", current)

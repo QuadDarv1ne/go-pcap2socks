@@ -11,20 +11,20 @@ import (
 )
 
 type UPnP struct {
-	enabled      bool
-	externalIP   string
-	controlURL   string
-	serviceType  string
-	discovered   []Device
+	enabled     bool
+	externalIP  string
+	controlURL  string
+	serviceType string
+	discovered  []Device
 }
 
 type Device struct {
-	UDN         string
+	UDN          string
 	FriendlyName string
 	Manufacturer string
-	ModelName   string
+	ModelName    string
 	ServiceType  string
-	ControlURL  string
+	ControlURL   string
 }
 
 type root struct {
@@ -32,13 +32,13 @@ type root struct {
 }
 
 type device struct {
-	DeviceType   string   `xml:"deviceType"`
-	FriendlyName string   `xml:"friendlyName"`
-	Manufacturer string   `xml:"manufacturer"`
-	ModelName    string   `xml:"modelName"`
-	UDN          string   `xml:"UDN"`
+	DeviceType   string    `xml:"deviceType"`
+	FriendlyName string    `xml:"friendlyName"`
+	Manufacturer string    `xml:"manufacturer"`
+	ModelName    string    `xml:"modelName"`
+	UDN          string    `xml:"UDN"`
 	Services     []service `xml:"serviceList>service"`
-	Devices      []device `xml:"deviceList>device"`
+	Devices      []device  `xml:"deviceList>device"`
 }
 
 type service struct {

@@ -129,14 +129,14 @@ func TestSimpleDHCP_MACParsing(t *testing.T) {
 func TestSimpleDHCP_DHCPOptions(t *testing.T) {
 	// Test DHCP option constants
 	const (
-		OptionHostName    = 12
-		OptionMessageType = 53
-		OptionParameterList = 55
-		OptionVendorClass   = 60
-		OptionClientID      = 61
-		OptionRouter        = 3
-		OptionDNS           = 6
-		OptionVendorSpecific = 43
+		OptionHostName        = 12
+		OptionMessageType     = 53
+		OptionParameterList   = 55
+		OptionVendorClass     = 60
+		OptionClientID        = 61
+		OptionRouter          = 3
+		OptionDNS             = 6
+		OptionVendorSpecific  = 43
 		OptionClasslessRoutes = 121
 	)
 
@@ -205,7 +205,7 @@ func TestSimpleDHCP_SaveAndLoadLeases(t *testing.T) {
 	// Add some test leases manually
 	mac1, _ := net.ParseMAC("AA:BB:CC:DD:EE:01")
 	mac2, _ := net.ParseMAC("AA:BB:CC:DD:EE:02")
-	
+
 	now := time.Now()
 	server.SaveLeasesForTest(map[string]*npcap_dhcp.Lease{
 		"AA:BB:CC:DD:EE:01": {
