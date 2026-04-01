@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
@@ -19,11 +20,11 @@ import (
 // ProxyHandler implements adapter.TransportHandler for proxy routing.
 // It intercepts TCP/UDP connections from gVisor stack and routes them through SOCKS5 proxy.
 type ProxyHandler struct {
-	connTracker  *ConnTracker
-	proxyDialer  proxy.Proxy
-	router       *router.Router
-	dnsHijacker  *dns.Hijacker
-	logger       *slog.Logger
+	connTracker *ConnTracker
+	proxyDialer proxy.Proxy
+	router      *router.Router
+	dnsHijacker *dns.Hijacker
+	logger      *slog.Logger
 }
 
 // NewProxyHandler creates a new proxy handler with connection tracking.
@@ -142,7 +143,9 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 			h.connTracker.RemoveTCP(tc)
 		}()
 
-		buf := make([]byte, 32*1024) // 32KB buffer for TCP
+		buf := buffer.Get(buffer.LargeBufferSize) // 9KB buffer for TCP
+		defer buffer.Put(buf)
+
 		for {
 			// Set read deadline to prevent blocking
 			conn.SetReadDeadline(time.Now().Add(120 * time.Second))
@@ -154,13 +157,13 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 				return
 			}
 
-			// Send to proxy relay
-			data := make([]byte, n)
-			copy(data, buf[:n])
+			// Send to proxy relay using buffer.Clone for efficient memory
+			data := buffer.Clone(buf[:n])
 
 			select {
 			case tc.ToProxy <- data:
 			case <-tc.ctx.Done():
+				buffer.Put(data) // Return to pool if send failed
 				return
 			}
 		}
@@ -242,7 +245,9 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 			h.connTracker.RemoveUDP(uc)
 		}()
 
-		buf := make([]byte, 4096) // MTU-safe buffer
+		buf := buffer.Get(buffer.MediumBufferSize) // 2KB buffer for UDP
+		defer buffer.Put(buf)
+
 		for {
 			conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 			n, _, err := conn.ReadFrom(buf)
@@ -251,12 +256,13 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 				return
 			}
 
-			data := make([]byte, n)
-			copy(data, buf[:n])
+			// Send to proxy relay using buffer.Clone for efficient memory
+			data := buffer.Clone(buf[:n])
 
 			select {
 			case uc.ToProxy <- data:
 			case <-uc.ctx.Done():
+				buffer.Put(data) // Return to pool if send failed
 				return
 			}
 		}
