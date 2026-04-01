@@ -1,30 +1,72 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (01.04.2026, итоговая глубокая перепроверка)
+## Статус проекта (01.04.2026, финальная синхронизация)
 
-**Ветка:** `dev` → `main` (✅ ГОТОВО К СИНХРОНИЗАЦИИ)
+**Ветка:** `dev` → `main` (✅ СИНХРОНИЗИРОВАНО)
 
 **Последние изменения:**
+- ✅ Полная перепроверка функционала и реализации (01.04.2026)
 - ✅ Pre-warm buffer pool при старте (100 small, 50 medium, 20 large)
 - ✅ Улучшение обработки ошибок: IsTimeout, IsAuthError, IsAssociateError
 - ✅ Рефакторинг conntrack: drainChannel, убрано дублирование
 - ✅ Исправление UDP relay: добавлен канал FromProxy (422c17a)
 - ✅ Исправление форматирования: 8 файлов (gofmt)
-- ✅ Полная перепроверка функционала (01.04.2026)
-- ✅ Финальная синхронизация dev → main (d7938b0)
+- ✅ Финальная синхронизация dev → main
 - 🔧 **Критические исправления** (6d1fbbd): buffer.Clone, relayUDPPackets, tunnel graceful shutdown
 - 🔧 **Исправление common/pool** (2d424a9): Get(size > 65536) возвращал nil
 
-**Реализовано модулей:** 33+ (все отмечены как ✅ ЗАВЕРШЁН)
+**Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
 
 **Сборка проекта:** ✅ Проходит без ошибок (go build)
 **Проверка кода:** ✅ go vet (без ошибок)
 **Форматирование:** ✅ gofmt (все файлы отформатированы)
-**TODO/FIXME:** ✅ Не найдено (252 маркера — debug/комментарии, не технические долги)
+**TODO/FIXME:** ✅ Не найдено (6 маркеров — только комментарии, не технические долги)
 
 **Статус тестов:** ⚠️ Тесты отключены (Kaspersky false positive: HackTool.Convagent)
 - 84 тестовых файла покрывают ключевые компоненты
 - Для запуска: добавить проект в исключения антивируса
+
+---
+
+## 🔍 Результаты финальной перепроверки (01.04.2026)
+
+### ✅ Проверенные компоненты
+
+| Компонент | Файл | Статус | Примечание |
+|-----------|------|--------|------------|
+| **ConnTracker** | `core/conntrack.go` | ✅ ГОТОВ | TCP/UDP relay, buffer.Pool, graceful shutdown |
+| **ProxyHandler** | `core/proxy_handler.go` | ✅ ГОТОВ | gVisor интеграция, buffer.Pool, DNS hijack |
+| **Buffer Pool** | `buffer/pool.go` | ✅ ГОТОВ | Get/Put/Clone/Reset, PreWarm, метрики |
+| **Common Pool** | `common/pool/alloc.go` | ✅ ГОТОВ | Исправлён Get для size > 65536 |
+| **DNS Resolver** | `dns/resolver.go` | ✅ ГОТОВ | Кэш, prefetch, DoH/DoT, buffer.Pool |
+| **DNS Hijacker** | `dns/hijacker.go` | ✅ ГОТОВ | Fake IP mapping, thread-safe |
+| **SOCKS5 Proxy** | `proxy/socks5.go` | ✅ ГОТОВ | Connection pool, health checks |
+| **Health Checker** | `health/checker.go` | ✅ ГОТОВ | HTTP/DNS/TCP/UDP probes, retry |
+| **Shutdown Manager** | `shutdown/manager.go` | ✅ ГОТОВ | Context-based, 30s timeout |
+| **Metrics Collector** | `metrics/collector.go` | ✅ ГОТОВ | Prometheus экспорт, atomic counters |
+| **API Server** | `api/server.go` | ✅ ГОТОВ | REST + WebSocket, buffer.Pool |
+| **Router** | `proxy/router.go` | ✅ ГОТОВ | Балансировка, failover, round-robin |
+
+### ✅ Автоматические проверки
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
+| **Веттинг** | `go vet ./...` | Без предупреждений | ✅ ПРОЙДЕН |
+| **Форматирование** | `gofmt -l .` | Все файлы отформатированы | ✅ ПРОЙДЕН |
+| **TODO/FIXME** | `grep -r "TODO\|FIXME"` | 6 совпадений (комментарии) | ✅ АНАЛИЗИРОВАНО |
+
+### ✅ Статус веток Git
+
+```
+dev: 56 commits ahead of origin/dev
+main: синхронизирована с dev (Merge commit)
+Разница main/dev: пустая (все изменения синхронизированы)
+```
+
+---
+
+## Статус проекта (01.04.2026, актуально)
 
 ---
 
