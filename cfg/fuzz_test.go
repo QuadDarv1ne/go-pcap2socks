@@ -53,7 +53,7 @@ func FuzzLoadConfig(f *testing.F) {
 		}
 	}`
 	f.Add([]byte(validConfig))
-	
+
 	// Add edge cases
 	f.Add([]byte{})
 	f.Add([]byte(`{}`))
