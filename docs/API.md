@@ -12,6 +12,26 @@ REST API и WebSocket документация для go-pcap2socks.
 Authorization: Bearer YOUR_API_TOKEN
 ```
 
+### Методы запросов
+
+| Метод | Описание |
+|-------|----------|
+| `GET` | Получение данных |
+| `POST` | Создание/изменение |
+| `PUT` | Полное обновление |
+| `DELETE` | Удаление |
+
+### Коды ответов
+
+| Код | Описание |
+|-----|----------|
+| 200 | Успех |
+| 400 | Некорректный запрос |
+| 401 | Неавторизовано |
+| 403 | Доступ запрещён |
+| 404 | Не найдено |
+| 500 | Внутренняя ошибка |
+
 ---
 
 ## 🔐 Аутентификация
@@ -33,7 +53,7 @@ Authorization: Bearer YOUR_API_TOKEN
 
 ---
 
-## 📊 Endpoints
+## 📊 Public Endpoints (без авторизации)
 
 ### GET /api/status
 
@@ -46,26 +66,76 @@ Authorization: Bearer YOUR_API_TOKEN
   "data": {
     "running": true,
     "proxy_mode": "socks5",
-    "devices": [
-      {
-        "ip": "192.168.137.101",
-        "mac": "AA:BB:CC:DD:EE:01",
-        "hostname": "PS5",
-        "connected": true
-      }
-    ],
-    "traffic": {
-      "total_bytes": 1234567890,
-      "upload_bytes": 123456789,
-      "download_bytes": 1111111101,
-      "packets": 987654
-    },
+    "devices": [...],
+    "traffic": {...},
     "uptime": "2h 15m 30s",
     "start_time": "2026-03-29T10:00:00Z",
     "socks_available": true
   }
 }
 ```
+
+### GET /metrics
+
+Prometheus метрики. См. [PROMETHEUS.md](PROMETHEUS.md).
+
+### GET /ps4-setup
+
+Страница настройки PS4 (HTML).
+
+---
+
+## 🔒 Protected Endpoints (требуют авторизации)
+
+### Health Check
+
+#### GET /api/health
+
+Проверка работоспособности сервиса.
+
+**Ответ:**
+```json
+{
+  "success": true,
+  "data": {
+    "proxies": {
+      "available": true,
+      "healthy": 2,
+      "total": 3
+    },
+    "available": true
+  }
+}
+```
+
+#### GET /api/metrics/health
+
+Детальная статистика health checker.
+
+**Ответ:**
+```json
+{
+  "success": true,
+  "data": {
+    "health_checker": {
+      "total_checks": 1000,
+      "consecutive_failures": 0,
+      "total_recoveries": 5,
+      "total_probes": 2000,
+      "successful_probes": 1998,
+      "failed_probes": 2,
+      "success_rate": 0.999,
+      "probe_count": 2,
+      "current_backoff": "1s",
+      "last_check_time": "2026-04-01T12:00:00Z",
+      "last_success_time": "2026-04-01T12:00:00Z"
+    },
+    "available": true
+  }
+}
+```
+
+### Service Control
 
 **Пример:**
 ```bash
