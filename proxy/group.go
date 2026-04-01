@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
@@ -143,7 +144,7 @@ func NewProxyGroup(cfg *ProxyGroupConfig) *ProxyGroup {
 
 	// Start health check
 	g.wg.Add(1)
-	go g.healthCheckLoop()
+	goroutine.SafeGo(g.healthCheckLoop)
 
 	return g
 }
