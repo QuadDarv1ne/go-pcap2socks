@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
@@ -96,15 +97,18 @@ type Traffic struct {
 
 // generateSecureToken генерирует криптографически безопасный случайный токен
 // для аутентификации API по умолчанию
+// Optimized with buffer pool for reduced allocations
 func generateSecureToken() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	buf := buffer.Get(32)
+	defer buffer.Put(buf)
+
+	if _, err := rand.Read(buf); err != nil {
 		// Fallback на детерминированный токен если rand не работает
 		// Это может произойти только в крайне необычных обстоятельствах
 		slog.Warn("crypto/rand failed, using fallback token", "err", err)
 		return "fallback_token_" + time.Now().Format("20060102150405")
 	}
-	return base64.URLEncoding.EncodeToString(b)
+	return base64.URLEncoding.EncodeToString(buf)
 }
 
 func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *upnpmanager.Manager, hotkeyMgr *hotkey.Manager, wanBalancerDialer *wanbalancer.WANBalancerDialer) *Server {
