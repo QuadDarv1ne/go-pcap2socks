@@ -1,20 +1,16 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (01.04.2026, девятая волна проверки, все исправления, синхронизация)
+## Статус проекта (01.04.2026, десятая волна проверки, все исправления, синхронизация)
 
 **Ветка:** `dev` = `main` (✅ ПОЛНОСТЬЮ СИНХРОНИЗИРОВАНЫ)
 
 **Последние изменения:**
-- ✅ **ДЕВЯТАЯ ВОЛНА ПРОВЕРКИ ЗАВЕРШЕНА** (01.04.2026, полная перепроверка функционала)
-- ✅ **АНАЛИЗ**: 69 мест с `go func()` (41 в тестах, 28 в production коде)
-- ✅ **ИСПРАВЛЕНО**: `health/socks5_checker.go:122` — добавлен `SafeGo` для health check loop
-- ✅ **ИСПРАВЛЕНО**: `wanbalancer/balancer.go:465` — добавлен `SafeGo` для health check loop
-- ✅ **ИСПРАВЛЕНО**: `upnp/manager.go:85` — добавлен `SafeGo` для GetExternalIP
-- ✅ **ИСПРАВЛЕНО**: `tunnel/tcp.go:124,136` — добавлен `SafeGo` для TCP copy goroutines
-- ✅ **ИСПРАВЛЕНО**: `updater/updater.go:226,245` — добавлен `SafeGo` для update check и cleanup
-- ✅ **ИСПРАВЛЕНО**: `windivert/windivert.go:512,569` — добавлен `SafeGo` для batch operations
-- ✅ **ИСПРАВЛЕНО**: `core/device/iobased/endpoint.go:76,80` — добавлен `SafeGo` для packet loops
-- ✅ **СИНХРОНИЗАЦИЯ**: main merged with dev (1 коммит разницы)
+- ✅ **ДЕСЯТАЯ ВОЛНА ПРОВЕРКИ ЗАВЕРШЕНА** (01.04.2026, углублённая проверка)
+- ✅ **АНАЛИЗ**: найдены дополнительные места с `go <method>()` без защиты
+- ✅ **ИСПРАВЛЕНО**: `proxy/router.go:423` — SafeGo для cleanupLoop
+- ✅ **ИСПРАВЛЕНО**: `cfg/reload.go:49,52` — SafeGo для watchLoop и reloadLoop
+- ✅ **ИСПРАВЛЕНО**: `dns/resolver.go:263,285` — SafeGo для dnsWorker и preWarmCache
+- ✅ **СИНХРОНИЗАЦИЯ**: main merged with dev (0 коммитов разницы)
 - ✅ **СБОРКА**: `go build` — без ошибок
 - ✅ **GO VET**: `go vet ./...` — без предупреждений
 - ✅ **GO FMT**: все файлы отформатированы
