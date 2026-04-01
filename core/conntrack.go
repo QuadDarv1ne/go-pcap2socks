@@ -533,9 +533,6 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 				return
 			}
 
-			// Return buffer to pool after use
-			defer buffer.Put(payload)
-
 			uc.lastActivity.Store(time.Now().Unix())
 			uc.packetsSent.Add(1)
 			uc.bytesSent.Add(uint64(len(payload)))
@@ -543,6 +540,7 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 			if uc.ProxyConn == nil {
 				// Lazy dial UDP association
 				if err := ct.dialUDPProxy(uc); err != nil {
+					buffer.Put(payload) // Return buffer to pool on error
 					ct.logger.Warn("Dial UDP proxy failed", "err", err, "conn", uc.Meta.String())
 					return
 				}
@@ -555,9 +553,13 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 			}
 			_, err := uc.ProxyConn.WriteTo(payload, addr)
 			if err != nil {
+				buffer.Put(payload) // Return buffer to pool on error
 				ct.logger.Warn("Write UDP to proxy failed", "err", err)
 				return
 			}
+
+			// Return buffer to pool after successful use
+			buffer.Put(payload)
 		}
 	}
 }
