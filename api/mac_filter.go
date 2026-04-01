@@ -12,10 +12,10 @@ import (
 
 // MACFilterAPI manages MAC filtering via API
 type MACFilterAPI struct {
-	mu       sync.RWMutex
-	config   *cfg.MACFilter
+	mu         sync.RWMutex
+	config     *cfg.MACFilter
 	configPath string
-	onChange func(*cfg.MACFilter) error
+	onChange   func(*cfg.MACFilter) error
 }
 
 // MACFilterRequest represents a MAC filter add/remove request
@@ -25,10 +25,10 @@ type MACFilterRequest struct {
 
 // MACFilterResponse represents a MAC filter response
 type MACFilterResponse struct {
-	Mode   string   `json:"mode"`
-	List   []string `json:"list"`
-	Count  int      `json:"count"`
-	Allowed bool    `json:"allowed,omitempty"`
+	Mode    string   `json:"mode"`
+	List    []string `json:"list"`
+	Count   int      `json:"count"`
+	Allowed bool     `json:"allowed,omitempty"`
 }
 
 // NewMACFilterAPI creates a new MAC filter API handler
@@ -322,19 +322,19 @@ func (h *MACFilterAPI) saveConfig() error {
 func normalizeMAC(mac string) string {
 	// Remove separators
 	mac = strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(mac, ":", ""), "-", ""))
-	
+
 	// Validate length
 	if len(mac) != 12 {
 		return ""
 	}
-	
+
 	// Validate hex
 	for _, c := range mac {
 		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')) {
 			return ""
 		}
 	}
-	
+
 	// Add colons
 	result := ""
 	for i := 0; i < len(mac); i += 2 {
@@ -343,6 +343,6 @@ func normalizeMAC(mac string) string {
 		}
 		result += mac[i : i+2]
 	}
-	
+
 	return result
 }

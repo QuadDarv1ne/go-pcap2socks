@@ -75,10 +75,10 @@ func OpenWithDHCP(captureCfg cfg.Capture, ifce net.Interface, netConfig *Network
 	// NOTE: BPF filter disabled for DHCP support
 	// DHCP broadcast packets from devices without IP are not captured by Npcap with BPF filters
 	// We filter packets in Read() instead
-	// 
+	//
 	// Original filter (for reference):
 	// "(arp dst host %s and arp src net %s and not arp src host %s) or (src net %s and not dst net %s and not (icmp and src host %s)) or (udp port 67 or udp port 68)"
-	
+
 	// No BPF filter - capture all packets and filter in Read()
 	// This allows DHCP broadcast packets to be captured
 
@@ -303,12 +303,12 @@ func (t *PCAP) handleDHCP(data []byte) ([]byte, error) {
 	}
 
 	responsePacket, err := dhcp.BuildDHCPRequestPacket(
-		t.localMAC,           // Source MAC (server)
-		dstMAC,               // Destination MAC (client)
-		srcIP,                // Source IP (server)
-		dstIP,                // Destination IP (client or broadcast)
-		67,                   // Source port (DHCP server)
-		68,                   // Destination port (DHCP client)
+		t.localMAC, // Source MAC (server)
+		dstMAC,     // Destination MAC (client)
+		srcIP,      // Source IP (server)
+		dstIP,      // Destination IP (client or broadcast)
+		67,         // Source port (DHCP server)
+		68,         // Destination port (DHCP client)
 		responseData,
 	)
 	if err != nil {

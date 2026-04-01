@@ -285,7 +285,7 @@ func TestSetStartTime(t *testing.T) {
 	SetStartTime(testTime)
 
 	server := createTestServer()
-	
+
 	req := createAuthRequest("GET", "/api/status")
 	w := httptest.NewRecorder()
 
@@ -323,7 +323,7 @@ func TestSetIsRunningFn(t *testing.T) {
 	SetIsRunningFn(func() bool { return false })
 
 	server := createTestServer()
-	
+
 	req := createAuthRequest("GET", "/api/status")
 	w := httptest.NewRecorder()
 
@@ -353,7 +353,7 @@ func TestSetIsRunningFn(t *testing.T) {
 func TestAPIResponse(t *testing.T) {
 	// Test success response
 	successResp := SuccessResponse(map[string]string{"key": "value"})
-	
+
 	data, err := json.Marshal(successResp)
 	if err != nil {
 		t.Fatalf("Failed to marshal success response: %v", err)
@@ -375,7 +375,7 @@ func TestAPIResponse(t *testing.T) {
 
 	// Test error response
 	errorResp := ErrorResponse("test error")
-	
+
 	data, err = json.Marshal(errorResp)
 	if err != nil {
 		t.Fatalf("Failed to marshal error response: %v", err)
@@ -566,4 +566,3 @@ func TestKeyToString(t *testing.T) {
 		})
 	}
 }
-

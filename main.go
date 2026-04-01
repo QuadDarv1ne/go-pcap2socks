@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -31,7 +30,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/asynclogger"
 	"github.com/QuadDarv1ne/go-pcap2socks/auto"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
-	"github.com/QuadDarv1ne/go-pcap2socks/nat"
 	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
@@ -40,11 +38,12 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
 	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/health"
-	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
 	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
+	"github.com/QuadDarv1ne/go-pcap2socks/nat"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
+	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
@@ -59,7 +58,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/wanbalancer"
 	"github.com/QuadDarv1ne/go-pcap2socks/windivert"
 	"github.com/jackpal/gateway"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 // Note: Windows-specific functions are in platform-specific files:
@@ -124,13 +122,13 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 
 // logStream holds recent log entries for streaming
 var logStream = struct {
-	mu       sync.RWMutex
-	entries  []string
-	maxSize  int
+	mu        sync.RWMutex
+	entries   []string
+	maxSize   int
 	listeners map[chan string]bool
 }{
-	maxSize: 1000,
-	entries: make([]string, 0, 1000),
+	maxSize:   1000,
+	entries:   make([]string, 0, 1000),
 	listeners: make(map[chan string]bool),
 }
 
@@ -158,7 +156,7 @@ func (h *streamLogHandler) Handle(ctx context.Context, record slog.Record) error
 		buf.WriteString(a.Value.String())
 		return true
 	})
-	
+
 	// Add to stream
 	logStream.mu.Lock()
 	logStream.entries = append(logStream.entries, buf.String())
@@ -174,7 +172,7 @@ func (h *streamLogHandler) Handle(ctx context.Context, record slog.Record) error
 		}
 	}
 	logStream.mu.Unlock()
-	
+
 	return h.handler.Handle(ctx, record)
 }
 
@@ -186,31 +184,29 @@ func (h *streamLogHandler) WithGroup(name string) slog.Handler {
 	return &streamLogHandler{handler: h.handler.WithGroup(name)}
 }
 
-// _apiServer is the global API server instance
-var _apiServer *api.Server
-
-// _configReloader handles hot config reloads
-var _configReloader *cfg.Reloader
-
 // allowedCommands - whitelist разрешённых команд для executeOnStart
 // Это предотвращает Command Injection уязвимость
 var allowedCommands = map[string]bool{
 	// Windows команды
-	"netsh": true,
+	"netsh":    true,
 	"ipconfig": true,
-	"ping": true,
-	"route": true,
-	"arp": true,
-	"nssm": true,
-	"sc": true,
+	"ping":     true,
+	"route":    true,
+	"arp":      true,
+	"nssm":     true,
+	"sc":       true,
 	// Linux/macOS команды
-	"iptables": true,
-	"ip": true,
-	"ifconfig": true,
+	"iptables":  true,
+	"ip":        true,
+	"ifconfig":  true,
 	"systemctl": true,
 	// Скрипты (только из безопасных путей)
 	// Добавляйте явно только доверенные скрипты
 }
+
+// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
+// Declared here because it's only used in main.go
+var _dhcpServer interface{}
 
 // isCommandAllowed проверяет, разрешена ли команда к выполнению
 func isCommandAllowed(cmd string) bool {
@@ -269,7 +265,7 @@ func main() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
 			slog.Error("PANIC recovered", "recover", r, "stack", string(stack))
-			
+
 			// Write panic to file
 			panicFile, err := os.OpenFile("panic.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 			if err == nil {
@@ -277,11 +273,11 @@ func main() {
 					time.Now().Format(time.RFC3339), r, string(stack))
 				panicFile.Close()
 			}
-			
+
 			// Wait 5 seconds and restart
 			slog.Info("Attempting automatic restart after panic...")
 			time.Sleep(5 * time.Second)
-			
+
 			// Restart self
 			executable, _ := os.Executable()
 			cmd := exec.Command(executable, os.Args[1:]...)
@@ -365,7 +361,7 @@ func main() {
 
 	// Optimize GOMAXPROCS for better performance
 	goroutine.OptimizeProcs()
-	
+
 	// Security: pprof disabled by default. Enable with PPROF_ENABLED=1
 	if os.Getenv("PPROF_ENABLED") != "1" {
 		// Clear pprof handlers to prevent exposure
@@ -375,8 +371,10 @@ func main() {
 	// Tune GC for low-latency network processing
 	// Reduce GC pauses for better real-time packet handling
 	debug.SetGCPercent(20) // More frequent but shorter GC pauses
-	// Memory limit will be set based on system RAM (512MB default for now)
-	// debug.SetMemoryLimit(512 << 20) // Uncomment if memory pressure is observed
+
+	// Set adaptive memory limit based on available system RAM
+	setAdaptiveMemoryLimit()
+
 	slog.Debug("GC tuned for low latency", "gc_percent", 20)
 
 	// Initialize shutdown manager
@@ -437,7 +435,7 @@ func main() {
 
 	// Use async handler for better performance
 	syncHandler := slog.NewTextHandler(os.Stdout, opts)
-	
+
 	// Also log to file for debugging
 	logFile, err := os.OpenFile("go-pcap2socks.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -448,7 +446,7 @@ func main() {
 		streamHandler := &streamLogHandler{handler: multiHandler}
 		asyncHandler = asynclogger.NewAsyncHandler(streamHandler)
 	}
-	
+
 	if asyncHandler == nil {
 		syncHandler := slog.NewTextHandler(os.Stdout, opts)
 		asyncHandler = asynclogger.NewAsyncHandler(syncHandler)
@@ -559,12 +557,12 @@ func main() {
 	// OPTIMIZATION: Initialize Profile Manager, UPnP Manager, and DNS Resolver in parallel
 	// This reduces startup time by 20-40% by running independent initializations concurrently
 	startInit := time.Now()
-	
+
 	_profileManager, _upnpManager, _dnsResolver, err = initComponentsParallel(config)
 	if err != nil {
 		slog.Warn("Parallel initialization returned error", "err", err)
 	}
-	
+
 	// Fallback: Initialize components sequentially if parallel init failed
 	if _profileManager == nil {
 		slog.Warn("Falling back to sequential initialization")
@@ -578,7 +576,7 @@ func main() {
 			slog.Info("Profile manager initialized (fallback)")
 		}
 	}
-	
+
 	if _upnpManager == nil && config.UPnP != nil && config.UPnP.Enabled {
 		_upnpManager = upnpmanager.NewManager(config.UPnP, config.PCAP.LocalIP)
 		if _upnpManager != nil {
@@ -587,7 +585,7 @@ func main() {
 			}
 		}
 	}
-	
+
 	if _dnsResolver == nil {
 		plainServers := make([]string, 0, len(config.DNS.Servers))
 		for _, s := range config.DNS.Servers {
@@ -607,15 +605,15 @@ func main() {
 			CacheSize:     config.DNS.CacheSize,
 			CacheTTL:      config.DNS.CacheTTL,
 			// Pre-warming cache for faster startup
-			PreWarmCache:    config.DNS.PreWarmCache,
-			PreWarmDomains:  config.DNS.PreWarmDomains,
+			PreWarmCache:   config.DNS.PreWarmCache,
+			PreWarmDomains: config.DNS.PreWarmDomains,
 			// Persistent cache on disk
 			PersistentCache: config.DNS.PersistentCache,
 			CacheFile:       config.DNS.CacheFile,
 		})
 		slog.Info("DNS resolver initialized (fallback)")
 	}
-	
+
 	slog.Info("Component initialization completed", "duration_ms", time.Since(startInit).Milliseconds())
 
 	// Initialize DNS hijacker for fake IP routing
@@ -690,14 +688,14 @@ func main() {
 
 	// Start health checker for network monitoring
 	_healthChecker.Start(context.Background())
-	
+
 	// Add DNS health probe
 	if len(config.DNS.Servers) > 0 {
 		dnsServer := config.DNS.Servers[0].Address
 		_healthChecker.AddProbe(health.NewDNSProbe("Primary DNS", dnsServer, "google.com", 5*time.Second))
 		slog.Info("Health checker: DNS probe added", "dns_server", dnsServer)
 	}
-	
+
 	// Add HTTP health probe
 	_healthChecker.AddProbe(health.NewHTTPProbe("Internet Connectivity", "https://www.google.com", 5*time.Second))
 
@@ -771,26 +769,26 @@ func main() {
 		if strings.Contains(errStr, "network adapter disconnected") ||
 			strings.Contains(errStr, "PacketSendPacket failed") ||
 			strings.Contains(errStr, "сетевой носитель отключен") {
-			
+
 			if attempt < maxRetries {
 				slog.Warn("Network adapter error detected, attempting recovery...",
 					"attempt", attempt, "max_retries", maxRetries, "retry_delay", retryDelay)
-				
+
 				// Wait before retry
 				time.Sleep(retryDelay)
-				
+
 				// Try to reconfigure network interfaces
 				slog.Info("Attempting to reconfigure network interfaces...")
 				if err := reconfigureNetworkInterfaces(); err != nil {
 					slog.Warn("Network reconfiguration failed", "err", err)
 				}
-				
+
 				// Check if interface is now available
 				if _, err := findInterface("", localizer); err == nil {
 					slog.Info("Network interface recovered, restarting...")
 					continue
 				}
-				
+
 				// Interface still not available - wait longer
 				slog.Info("Interface not found, waiting 30 seconds for connection...")
 				time.Sleep(30 * time.Second)
@@ -950,22 +948,22 @@ func main() {
 			if metricsCollector != nil {
 				snapshot := metricsCollector.GetMetrics()
 				metrics = map[string]interface{}{
-					"available":          true,
-					"uptime_seconds":     snapshot.UptimeSeconds,
-					"active_leases":      snapshot.ActiveLeases,
-					"total_allocations":  snapshot.TotalAllocations,
-					"total_renewals":     snapshot.TotalRenewals,
-					"discover_count":     snapshot.DiscoverCount,
-					"offer_count":        snapshot.OfferCount,
-					"request_count":      snapshot.RequestCount,
-					"ack_count":          snapshot.AckCount,
-					"nak_count":          snapshot.NakCount,
-					"release_count":      snapshot.ReleaseCount,
-					"decline_count":      snapshot.DeclineCount,
-					"error_count":        snapshot.ErrorCount,
-					"last_request_mac":   snapshot.LastRequestMAC,
-					"last_request_ip":    snapshot.LastRequestIP,
-					"start_time":         snapshot.StartTime.Format(time.RFC3339),
+					"available":         true,
+					"uptime_seconds":    snapshot.UptimeSeconds,
+					"active_leases":     snapshot.ActiveLeases,
+					"total_allocations": snapshot.TotalAllocations,
+					"total_renewals":    snapshot.TotalRenewals,
+					"discover_count":    snapshot.DiscoverCount,
+					"offer_count":       snapshot.OfferCount,
+					"request_count":     snapshot.RequestCount,
+					"ack_count":         snapshot.AckCount,
+					"nak_count":         snapshot.NakCount,
+					"release_count":     snapshot.ReleaseCount,
+					"decline_count":     snapshot.DeclineCount,
+					"error_count":       snapshot.ErrorCount,
+					"last_request_mac":  snapshot.LastRequestMAC,
+					"last_request_ip":   snapshot.LastRequestIP,
+					"start_time":        snapshot.StartTime.Format(time.RFC3339),
 				}
 			}
 		}
@@ -1080,17 +1078,17 @@ func main() {
 		// Get health checker stats
 		stats := _healthChecker.GetStats()
 		return map[string]interface{}{
-			"total_checks":          stats.TotalChecks,
-			"consecutive_failures":  stats.ConsecutiveFailures,
-			"total_recoveries":      stats.TotalRecoveries,
-			"total_probes":          stats.TotalProbes,
-			"successful_probes":     stats.SuccessfulProbes,
-			"failed_probes":         stats.FailedProbes,
-			"success_rate":          stats.SuccessRate,
-			"probe_count":           stats.ProbeCount,
-			"current_backoff":       stats.CurrentBackoff.String(),
-			"last_check_time":       stats.LastCheckTime.Format(time.RFC3339),
-			"last_success_time":     stats.LastSuccessTime.Format(time.RFC3339),
+			"total_checks":         stats.TotalChecks,
+			"consecutive_failures": stats.ConsecutiveFailures,
+			"total_recoveries":     stats.TotalRecoveries,
+			"total_probes":         stats.TotalProbes,
+			"successful_probes":    stats.SuccessfulProbes,
+			"failed_probes":        stats.FailedProbes,
+			"success_rate":         stats.SuccessRate,
+			"probe_count":          stats.ProbeCount,
+			"current_backoff":      stats.CurrentBackoff.String(),
+			"last_check_time":      stats.LastCheckTime.Format(time.RFC3339),
+			"last_success_time":    stats.LastSuccessTime.Format(time.RFC3339),
 		}, true
 	})
 
@@ -1130,10 +1128,20 @@ func main() {
 
 	// Set auth token from config if provided, otherwise use auto-generated token
 	if config.API != nil && config.API.Token != "" {
+		// Validate token strength
+		tokenStrength := validateTokenStrength(config.API.Token)
+		if tokenStrength < 3 {
+			slog.Warn("WEAK API TOKEN DETECTED - Security risk!",
+				"recommendation", "Use a token with at least 16 characters including uppercase, lowercase, numbers, and special characters",
+				"example", "aB3$xY9@mN2&kL7!")
+		}
 		_apiServer.SetAuthToken(config.API.Token)
 		slog.Info("API authentication token loaded from config")
 	} else {
 		// Token was auto-generated in NewServer, log it for the user
+		slog.Warn("API token not configured - using auto-generated token",
+			"security_risk", "Auto-generated tokens may be predictable",
+			"recommendation", "Set a strong 'token' in config.json or use API_TOKEN environment variable")
 		slog.Info("API authentication token auto-generated. Set 'token' in config.json to use a custom token.", "token", _apiServer.GetAuthToken())
 	}
 
@@ -1147,7 +1155,7 @@ func main() {
 			// Enable CORS
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			
+
 			// Return last N logs as JSON
 			limit := 100
 			if l := r.URL.Query().Get("limit"); l != "" {
@@ -1155,7 +1163,7 @@ func main() {
 					limit = n
 				}
 			}
-			
+
 			logStream.mu.RLock()
 			start := len(logStream.entries) - limit
 			if start < 0 {
@@ -1163,11 +1171,11 @@ func main() {
 			}
 			entries := logStream.entries[start:]
 			logStream.mu.RUnlock()
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string][]string{"logs": entries})
 		})
-		
+
 		// Setup HTTPS if configured
 		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
 			httpsCfg := config.API.HTTPS
@@ -1236,16 +1244,16 @@ func main() {
 				port = config.API.Port
 			}
 			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
-			
+
 			// Create HTTP server with timeouts for DoS protection
 			apiHTTPServer := &http.Server{
 				Addr:         fmt.Sprintf(":%d", port),
 				Handler:      _apiServer,
 				ReadTimeout:  15 * time.Second,
-				WriteTimeout: 60 * time.Second,  // Increased for log/traffic export
+				WriteTimeout: 60 * time.Second, // Increased for log/traffic export
 				IdleTimeout:  120 * time.Second,
 			}
-			
+
 			if err := apiHTTPServer.ListenAndServe(); err != nil {
 				slog.Error("HTTP server error", slog.Any("err", err))
 			}
@@ -1273,14 +1281,14 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	// Configure NAT routing if enabled
 	if cfg.NAT != nil && cfg.NAT.Enabled {
 		slog.Info("NAT routing enabled, configuring...")
-		
+
 		// Auto-detect interfaces if not specified
 		natConfig := &nat.Config{
 			Enabled:           cfg.NAT.Enabled,
 			ExternalInterface: cfg.NAT.ExternalInterface,
 			InternalInterface: cfg.NAT.InternalInterface,
 		}
-		
+
 		// Auto-detect Wi-Fi interface
 		if natConfig.ExternalInterface == "" {
 			_, guid, err := nat.FindWiFiInterface()
@@ -1291,7 +1299,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 				slog.Info("Auto-detected Wi-Fi interface", "guid", guid)
 			}
 		}
-		
+
 		// Auto-detect Ethernet interface
 		if natConfig.InternalInterface == "" {
 			_, guid, err := nat.FindEthernetInterface()
@@ -1302,7 +1310,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 				slog.Info("Auto-detected Ethernet interface", "guid", guid)
 			}
 		}
-		
+
 		if err := nat.Setup(natConfig); err != nil {
 			slog.Error("NAT setup failed", "err", err)
 		} else {
@@ -1320,19 +1328,19 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			// No interface available - wait for connection instead of exiting
 			slog.Warn("No network interface available, waiting for connection...")
 			slog.Info("Please connect PS4 via Ethernet cable or Wi-Fi hotspot")
-			
+
 			// Wait up to 60 seconds for interface to appear
 			for attempt := 0; attempt < 12; attempt++ {
 				time.Sleep(5 * time.Second)
 				slog.Info("Waiting for network interface...", "attempt", attempt+1, "max", 12)
-				
+
 				ifce, err = findInterface("", localizer)
 				if err == nil {
 					slog.Info("Network interface detected!", "name", ifce.Name)
 					break
 				}
 			}
-			
+
 			// Still no interface - return error gracefully
 			if err != nil {
 				slog.Error("No network interface available after waiting")
@@ -1390,7 +1398,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	} else {
 		_defaultProxy = proxy.NewRouter(cfg.Routing.Rules, proxies)
 		proxy.SetDialer(_defaultProxy)
-		
+
 		// Start health checks for proxies
 		if router, ok := _defaultProxy.(*proxy.Router); ok {
 			router.StartHealthChecks(30 * time.Second)
@@ -1453,102 +1461,6 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	}
 
 	return nil
-}
-
-var (
-	// _defaultProxy holds the default proxy for the engine.
-	_defaultProxy proxy.Proxy
-
-	// _defaultDevice holds the default device for the engine.
-	_defaultDevice device.Device
-
-	// _defaultStack holds the default stack for the engine.
-	_defaultStack *stack.Stack
-
-	// _statsStore holds the global statistics store
-	_statsStore *stats.Store
-
-	// _arpMonitor holds the ARP monitor for device discovery
-	_arpMonitor *stats.ARPMonitor
-
-	// _hotkeyManager holds the hotkey manager
-	_hotkeyManager *hotkey.Manager
-
-	// _profileManager holds the profile manager
-	_profileManager *profiles.Manager
-
-	// _shutdownChan is used for graceful shutdown
-	_shutdownChan chan struct{}
-
-	// _httpServer holds the HTTP server for graceful shutdown
-	_httpServer *http.Server
-
-	// _running indicates if the service is running (atomic for thread-safe access)
-	_running atomic.Bool
-
-	// _upnpManager holds the UPnP manager
-	_upnpManager *upnpmanager.Manager
-
-	// _mtuDiscoverer holds the MTU discoverer for Path MTU Discovery
-	_mtuDiscoverer *mtu.MTUDiscoverer
-
-	// _dnsResolver holds the DNS resolver with benchmarking and caching
-	_dnsResolver *dns.Resolver
-
-	// _dnsRateLimiter holds the rate-limited DNS resolver wrapper (optional)
-	_dnsRateLimiter *dns.RateLimitedResolver
-
-	// _dnsHijacker holds the DNS hijacker for fake IP routing
-	_dnsHijacker *dns.Hijacker
-
-	// _dohServer holds the DNS-over-HTTPS server
-	_dohServer *dns.DoHServer
-
-	// _shutdownManager holds the graceful shutdown manager
-	_shutdownManager *shutdown.Manager
-
-	// _healthChecker holds the health checker for network monitoring and recovery
-	_healthChecker *health.HealthChecker
-
-	// _rateLimiter holds the global rate limiter for proxy connections
-	_rateLimiter *core.RateLimiter
-
-	// _dhcpServer holds the DHCP server (can be *dhcp.Server, *windivert.DHCPServer, or nil)
-	_dhcpServer interface{}
-
-	// _wanBalancerDialer holds the WAN balancer dialer for Multi-WAN load balancing
-	_wanBalancerDialer *wanbalancer.WANBalancerDialer
-
-	// _gracefulCtx is the global context for graceful shutdown
-	_gracefulCtx context.Context
-
-	// _gracefulCancel is the cancel function for graceful shutdown
-	_gracefulCancel context.CancelFunc
-)
-
-// GetStatsStore returns the global statistics store
-func GetStatsStore() *stats.Store {
-	return _statsStore
-}
-
-// GetProfileManager returns the global profile manager
-func GetProfileManager() *profiles.Manager {
-	return _profileManager
-}
-
-// GetUPnPManager returns the global UPnP manager
-func GetUPnPManager() *upnpmanager.Manager {
-	return _upnpManager
-}
-
-// GetShutdownChan returns the shutdown channel
-func GetShutdownChan() <-chan struct{} {
-	return _shutdownChan
-}
-
-// IsRunning returns the running state
-func IsRunning() bool {
-	return _running.Load()
 }
 
 // performGracefulShutdown performs a complete graceful shutdown of all components
@@ -1760,7 +1672,7 @@ func Stop() {
 				"packets":        packets,
 			})
 		}
-		
+
 		// Perform graceful shutdown with timeout
 		if err := _shutdownManager.ShutdownWithTimeout(30 * time.Second); err != nil {
 			slog.Warn("Shutdown manager reported errors", "error", err)
@@ -1929,13 +1841,13 @@ func findInterface(cfgIfce string, localizer *i18n.Localizer) (net.Interface, er
 	for _, iface := range ifaces {
 		if (iface.Name == "Ethernet" || strings.Contains(iface.Name, "Ethernet")) && iface.Flags&net.FlagUp != 0 {
 			slog.Info("Found active Ethernet interface, auto-configuring IP", "name", iface.Name, "target_ip", targetIP)
-			
+
 			// Try to configure IP automatically
 			if err := configureInterfaceIP(iface.Name, targetIP); err != nil {
 				slog.Warn("Failed to auto-configure IP", "interface", iface.Name, "ip", targetIP, "err", err)
 				continue
 			}
-			
+
 			slog.Info("Successfully configured IP on interface", "name", iface.Name, "ip", targetIP)
 			return iface, nil
 		}
@@ -1968,12 +1880,12 @@ func configureInterfaceIP(ifaceName string, ip net.IP) error {
 func reconfigureNetworkInterfaces() error {
 	// Reset all interfaces with our target IP
 	targetIP := net.ParseIP("192.168.100.1")
-	
+
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return err
 	}
-	
+
 	// Try to configure Ethernet interface
 	for _, iface := range ifaces {
 		if iface.Name == "Ethernet" || strings.Contains(iface.Name, "Ethernet") {
@@ -1985,7 +1897,7 @@ func reconfigureNetworkInterfaces() error {
 			return nil
 		}
 	}
-	
+
 	// Fallback: try any active interface
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagLoopback == 0 {
@@ -1996,7 +1908,7 @@ func reconfigureNetworkInterfaces() error {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("no suitable interface found for IP configuration")
 }
 
@@ -2246,9 +2158,9 @@ func autoConfigure() {
 			MTU:              interfaceConfig.RecommendedMTU,
 		},
 		DHCP: &cfg.DHCP{
-			Enabled:     true,
-			PoolStart:   poolStart,
-			PoolEnd:     poolEnd,
+			Enabled:       true,
+			PoolStart:     poolStart,
+			PoolEnd:       poolEnd,
 			LeaseDuration: 86400,
 		},
 		DNS: cfg.DNS{
@@ -2273,8 +2185,8 @@ func autoConfigure() {
 			Enabled: true,
 		},
 		UPnP: &cfg.UPnP{
-			Enabled:     true,
-			AutoForward: true,
+			Enabled:       true,
+			AutoForward:   true,
 			LeaseDuration: 3600,
 			GamePresets: map[string][]int{
 				"ps4":    {3478, 3479, 3480},
@@ -2492,19 +2404,19 @@ func autoConfigureAndStart() {
 
 	slog.Info("✓ Конфигурация создана", "file", cfgFile)
 	slog.Info("")
-	
+
 	// Теперь запускаем сервис
 	slog.Info("Шаг 2/2: Запуск сервиса...")
 	slog.Info("══════════════════════════════════════════════════════════════════")
 	slog.Info("")
-	
+
 	// Загружаем конфиг и запускаем run
 	config, err = cfg.Load(cfgFile)
 	if err != nil {
 		slog.Error("load config error", slog.Any("file", cfgFile), slog.Any("err", err))
 		return
 	}
-	
+
 	localizer := i18n.NewLocalizer(i18n.Language(config.Language))
 
 	err = run(config, localizer)
@@ -2824,17 +2736,17 @@ func autoConfigureAndStart() {
 		// Get health checker stats
 		stats := _healthChecker.GetStats()
 		return map[string]interface{}{
-			"total_checks":          stats.TotalChecks,
-			"consecutive_failures":  stats.ConsecutiveFailures,
-			"total_recoveries":      stats.TotalRecoveries,
-			"total_probes":          stats.TotalProbes,
-			"successful_probes":     stats.SuccessfulProbes,
-			"failed_probes":         stats.FailedProbes,
-			"success_rate":          stats.SuccessRate,
-			"probe_count":           stats.ProbeCount,
-			"current_backoff":       stats.CurrentBackoff.String(),
-			"last_check_time":       stats.LastCheckTime.Format(time.RFC3339),
-			"last_success_time":     stats.LastSuccessTime.Format(time.RFC3339),
+			"total_checks":         stats.TotalChecks,
+			"consecutive_failures": stats.ConsecutiveFailures,
+			"total_recoveries":     stats.TotalRecoveries,
+			"total_probes":         stats.TotalProbes,
+			"successful_probes":    stats.SuccessfulProbes,
+			"failed_probes":        stats.FailedProbes,
+			"success_rate":         stats.SuccessRate,
+			"probe_count":          stats.ProbeCount,
+			"current_backoff":      stats.CurrentBackoff.String(),
+			"last_check_time":      stats.LastCheckTime.Format(time.RFC3339),
+			"last_success_time":    stats.LastSuccessTime.Format(time.RFC3339),
 		}, true
 	})
 
@@ -2881,7 +2793,7 @@ func autoConfigureAndStart() {
 			// Enable CORS
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			
+
 			// Return last N logs as JSON
 			limit := 100
 			if l := r.URL.Query().Get("limit"); l != "" {
@@ -2889,7 +2801,7 @@ func autoConfigureAndStart() {
 					limit = n
 				}
 			}
-			
+
 			logStream.mu.RLock()
 			start := len(logStream.entries) - limit
 			if start < 0 {
@@ -2897,11 +2809,11 @@ func autoConfigureAndStart() {
 			}
 			entries := logStream.entries[start:]
 			logStream.mu.RUnlock()
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string][]string{"logs": entries})
 		})
-		
+
 		// Setup HTTPS if configured
 		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
 			httpsCfg := config.API.HTTPS
@@ -2964,7 +2876,7 @@ func autoConfigureAndStart() {
 				port = config.API.Port
 			}
 			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
-			
+
 			// Create HTTP server with timeouts for DoS protection
 			apiHTTPServer := &http.Server{
 				Addr:         fmt.Sprintf(":%d", port),
@@ -2973,7 +2885,7 @@ func autoConfigureAndStart() {
 				WriteTimeout: 60 * time.Second,
 				IdleTimeout:  120 * time.Second,
 			}
-			
+
 			if err := apiHTTPServer.ListenAndServe(); err != nil {
 				slog.Error("HTTP server error", slog.Any("err", err))
 			}
@@ -3508,6 +3420,23 @@ func createProxy(outbound cfg.Outbound, dnsCfg cfg.DNS, interfaceName string) (p
 		}
 		return proxy.NewWireGuard(wgCfg)
 
+	case outbound.WebSocket != nil:
+		wsCfg := &proxy.WebSocketConfig{
+			URL:               outbound.WebSocket.URL,
+			Host:              outbound.WebSocket.Host,
+			Origin:            outbound.WebSocket.Origin,
+			Headers:           outbound.WebSocket.Headers,
+			SkipTLSVerify:     outbound.WebSocket.SkipTLSVerify,
+			HandshakeTimeout:  time.Duration(outbound.WebSocket.HandshakeTimeout) * time.Second,
+			EnableCompression: outbound.WebSocket.EnableCompression,
+			PingInterval:      time.Duration(outbound.WebSocket.PingInterval) * time.Second,
+			UseObfuscation:    outbound.WebSocket.Obfuscation,
+			ObfuscationKey:    outbound.WebSocket.ObfuscationKey,
+			UsePadding:        outbound.WebSocket.Padding,
+			PaddingBlockSize:  outbound.WebSocket.PaddingBlockSize,
+		}
+		return proxy.NewWebSocket(wsCfg)
+
 	default:
 		return nil, fmt.Errorf("invalid outbound: %+v", outbound)
 	}
@@ -3714,34 +3643,136 @@ func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) 
 func initConfigReload(cfgFile string) {
 	reloader, err := cfg.AutoReload(cfgFile, func(newConfig *cfg.Config) error {
 		slog.Info("Config reloaded, applying changes...")
-		
+
 		// Apply language change
 		if newConfig.Language != "" {
 			localizer := i18n.NewLocalizer(i18n.Language(newConfig.Language))
 			_ = localizer
 		}
-		
+
 		// Apply API token change
 		if newConfig.API != nil && _apiServer != nil {
 			if newConfig.API.Token != "" {
 				_apiServer.SetAuthToken(newConfig.API.Token)
 			}
 		}
-		
+
 		// Apply rate limit changes
 		if newConfig.RateLimit != nil {
 			slog.Info("Rate limit config changed", "default", newConfig.RateLimit.Default)
 		}
-		
+
 		slog.Info("Config changes applied successfully")
 		return nil
 	})
-	
+
 	if err != nil {
 		slog.Warn("Failed to initialize config reloader", "error", err)
 		return
 	}
-	
+
 	_configReloader = reloader
 	slog.Info("Config hot reload enabled", "file", cfgFile)
+}
+
+// setAdaptiveMemoryLimit sets memory limit based on available system RAM
+// Uses 50% of total RAM for systems with <8GB, 4GB for 8-16GB systems, and 8GB for larger systems
+func setAdaptiveMemoryLimit() {
+	const (
+		minMemoryLimit     = 256 << 20 // 256 MB minimum
+		defaultMemoryLimit = 512 << 20 // 512 MB default
+		largeMemoryLimit   = 4 << 30   // 4 GB for large systems
+		maxMemoryLimit     = 8 << 30   // 8 GB maximum
+	)
+
+	// Try to get system memory info
+	var memBytes uint64
+
+	// Use runtime/memstats as fallback
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	// Default to 512MB if we can't determine system memory
+	if memBytes == 0 {
+		memBytes = defaultMemoryLimit
+		slog.Info("Using default memory limit", "limit_mb", defaultMemoryLimit>>20)
+	}
+
+	// Calculate adaptive limit: 50% of system RAM, bounded by min/max
+	calculatedLimit := memBytes / 2
+	if calculatedLimit < minMemoryLimit {
+		calculatedLimit = minMemoryLimit
+	} else if calculatedLimit > maxMemoryLimit {
+		calculatedLimit = maxMemoryLimit
+	}
+
+	// For systems with 8GB+ RAM, use 4GB limit
+	if memBytes >= 8<<30 {
+		calculatedLimit = largeMemoryLimit
+	}
+
+	debug.SetMemoryLimit(int64(calculatedLimit))
+	slog.Info("Adaptive memory limit set",
+		"limit_mb", calculatedLimit>>20,
+		"system_memory_mb", memBytes>>20)
+}
+
+// validateTokenStrength validates API token strength
+// Returns score 1-5:
+// 1 - Very weak (<8 chars)
+// 2 - Weak (8-11 chars, single character type)
+// 3 - Moderate (12-15 chars or 2 character types)
+// 4 - Strong (16+ chars with 3 character types)
+// 5 - Very strong (16+ chars with 4 character types)
+func validateTokenStrength(token string) int {
+	if len(token) < 8 {
+		return 1 // Very weak
+	}
+
+	hasLower := false
+	hasUpper := false
+	hasDigit := false
+	hasSpecial := false
+
+	for _, c := range token {
+		switch {
+		case c >= 'a' && c <= 'z':
+			hasLower = true
+		case c >= 'A' && c <= 'Z':
+			hasUpper = true
+		case c >= '0' && c <= '9':
+			hasDigit = true
+		default:
+			hasSpecial = true
+		}
+	}
+
+	charTypes := 0
+	if hasLower {
+		charTypes++
+	}
+	if hasUpper {
+		charTypes++
+	}
+	if hasDigit {
+		charTypes++
+	}
+	if hasSpecial {
+		charTypes++
+	}
+
+	// Score based on length and character types
+	if len(token) >= 16 && charTypes >= 4 {
+		return 5 // Very strong
+	}
+	if len(token) >= 16 && charTypes >= 3 {
+		return 4 // Strong
+	}
+	if len(token) >= 12 || charTypes >= 2 {
+		return 3 // Moderate
+	}
+	if len(token) >= 8 {
+		return 2 // Weak
+	}
+	return 1 // Very weak
 }

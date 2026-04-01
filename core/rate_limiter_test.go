@@ -102,7 +102,7 @@ func TestRateLimiter_GetStats(t *testing.T) {
 	})
 
 	rl.AllowN(3)
-	
+
 	// Don't test exact token count due to refill timing
 	stats := rl.GetStats()
 

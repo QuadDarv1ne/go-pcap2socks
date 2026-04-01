@@ -28,34 +28,34 @@ import (
 
 // Pre-defined errors for API operations
 var (
-	ErrMethodNotAllowed     = fmt.Errorf("method not allowed")
-	ErrUnauthorized         = fmt.Errorf("unauthorized")
-	ErrRateLimitExceeded    = fmt.Errorf("rate limit exceeded")
-	ErrServiceNotRunning    = fmt.Errorf("service not running")
-	ErrConfigNotFound       = fmt.Errorf("config not found")
-	ErrConfigLoad           = fmt.Errorf("failed to load config")
-	ErrConfigSave           = fmt.Errorf("failed to save config")
-	ErrInvalidRequest       = fmt.Errorf("invalid request")
-	ErrInternalServer       = fmt.Errorf("internal server error")
+	ErrMethodNotAllowed      = fmt.Errorf("method not allowed")
+	ErrUnauthorized          = fmt.Errorf("unauthorized")
+	ErrRateLimitExceeded     = fmt.Errorf("rate limit exceeded")
+	ErrServiceNotRunning     = fmt.Errorf("service not running")
+	ErrConfigNotFound        = fmt.Errorf("config not found")
+	ErrConfigLoad            = fmt.Errorf("failed to load config")
+	ErrConfigSave            = fmt.Errorf("failed to save config")
+	ErrInvalidRequest        = fmt.Errorf("invalid request")
+	ErrInternalServer        = fmt.Errorf("internal server error")
 	ErrMetricsNotInitialized = fmt.Errorf("metrics not initialized")
 )
 
 type Server struct {
-	mux           *http.ServeMux
-	statsStore    *stats.Store
-	profileMgr    *profiles.Manager
-	upnpMgr       *upnpmanager.Manager
-	metrics       *metrics.Collector
-	configPath    string
-	authToken     string // Optional authentication token
-	rateLimiter   *rateLimiter
-	wsHub         *WebSocketHub
-	hotkeyManager *hotkey.Manager
-	macFilterAPI  *MACFilterAPI
+	mux            *http.ServeMux
+	statsStore     *stats.Store
+	profileMgr     *profiles.Manager
+	upnpMgr        *upnpmanager.Manager
+	metrics        *metrics.Collector
+	configPath     string
+	authToken      string // Optional authentication token
+	rateLimiter    *rateLimiter
+	wsHub          *WebSocketHub
+	hotkeyManager  *hotkey.Manager
+	macFilterAPI   *MACFilterAPI
 	wanBalancerAPI *WANBalancerAPI
-	mu            sync.RWMutex
-	enabled       bool
-	stopChan      chan struct{} // For stopping background goroutines
+	mu             sync.RWMutex
+	enabled        bool
+	stopChan       chan struct{} // For stopping background goroutines
 
 	// Status cache for frequently accessed /api/status endpoint
 	statusCache     Status
@@ -114,10 +114,10 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector(metrics.CollectorConfig{
 		StatsStore:  statsStore,
-		ConnTracker: nil,      // Will be set later via SetConnTracker
-		DNSHijacker: nil,      // Will be set later via SetDNSHijacker
-		ProxyList:   nil,      // Will be set later via SetProxyList
-		Logger:      nil,      // Use default logger
+		ConnTracker: nil, // Will be set later via SetConnTracker
+		DNSHijacker: nil, // Will be set later via SetDNSHijacker
+		ProxyList:   nil, // Will be set later via SetProxyList
+		Logger:      nil, // Use default logger
 	})
 
 	// Initialize rate limiter: 100 requests per minute per IP
@@ -128,18 +128,18 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	go wsHub.Run()
 
 	s := &Server{
-		mux:           http.NewServeMux(),
-		statsStore:    statsStore,
-		profileMgr:    profileMgr,
-		upnpMgr:       upnpMgr,
-		metrics:       metricsCollector,
-		configPath:    cfgFile,
-		authToken:     generateSecureToken(), // Генерировать безопасный токен по умолчанию
-		rateLimiter:   rateLimiter,
-		wsHub:         wsHub,
-		hotkeyManager: hotkeyMgr,
-		enabled:       true,
-		stopChan:      make(chan struct{}),
+		mux:            http.NewServeMux(),
+		statsStore:     statsStore,
+		profileMgr:     profileMgr,
+		upnpMgr:        upnpMgr,
+		metrics:        metricsCollector,
+		configPath:     cfgFile,
+		authToken:      generateSecureToken(), // Генерировать безопасный токен по умолчанию
+		rateLimiter:    rateLimiter,
+		wsHub:          wsHub,
+		hotkeyManager:  hotkeyMgr,
+		enabled:        true,
+		stopChan:       make(chan struct{}),
 		statusCacheTTL: 500 * time.Millisecond, // Cache status for 500ms
 	}
 
@@ -1674,8 +1674,8 @@ func (s *Server) handleAllMetrics(w http.ResponseWriter, r *http.Request) {
 	if getProxyConnectionStatsFn != nil {
 		if success, errors, errorRate, ok := getProxyConnectionStatsFn(); ok {
 			metrics["proxy_connections"] = map[string]interface{}{
-				"success":   success,
-				"errors":    errors,
+				"success":    success,
+				"errors":     errors,
 				"error_rate": errorRate,
 			}
 		}
@@ -1897,11 +1897,11 @@ type WireGuardConfigRequest struct {
 
 // WireGuard configuration functions (to be implemented in main.go)
 var (
-	getWireGuardConfig   func() map[string]interface{}
-	saveWireGuardConfig  func(config *WireGuardConfigRequest) error
-	getWireGuardStatus   func() map[string]interface{}
-	startWireGuard       func() error
-	stopWireGuard        func() error
+	getWireGuardConfig  func() map[string]interface{}
+	saveWireGuardConfig func(config *WireGuardConfigRequest) error
+	getWireGuardStatus  func() map[string]interface{}
+	startWireGuard      func() error
+	stopWireGuard       func() error
 )
 
 // validateWireGuardConfig validates WireGuard configuration

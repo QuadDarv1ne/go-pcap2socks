@@ -83,7 +83,7 @@ func (rl *rateLimiter) allow(ip string) bool {
 		v = &visitor{}
 		v.tokens.Store(rl.rate)
 		v.lastReset.Store(time.Now())
-		
+
 		// Store and check if we won (in case of concurrent access)
 		if actual, loaded := rl.visitors.LoadOrStore(ip, v); loaded {
 			v = actual.(*visitor)
@@ -93,7 +93,7 @@ func (rl *rateLimiter) allow(ip string) bool {
 	// Check and update tokens atomically
 	now := time.Now()
 	lastReset := v.lastReset.Load().(time.Time)
-	
+
 	// Reset tokens if window has passed
 	if now.Sub(lastReset) > rl.window {
 		v.tokens.Store(rl.rate)

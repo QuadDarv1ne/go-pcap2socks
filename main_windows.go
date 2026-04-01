@@ -40,7 +40,7 @@ func isRunAsAdmin() bool {
 	// IsElevated may fail, so we check membership first
 	elevated := token.IsElevated()
 	slog.Debug("Admin check", "member", member, "elevated", elevated)
-	
+
 	return member || elevated
 }
 

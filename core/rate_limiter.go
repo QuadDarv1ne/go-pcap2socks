@@ -117,34 +117,34 @@ func (rl *RateLimiter) GetDroppedCount() uint64 {
 // GetStats returns rate limiter statistics.
 func (rl *RateLimiter) GetStats() map[string]interface{} {
 	return map[string]interface{}{
-		"tokens":          rl.tokens.Load(),
-		"max_tokens":      rl.maxTokens,
-		"refill_rate":     rl.refillRate,
-		"dropped_count":   rl.droppedCount.Load(),
-		"drop_rate":       float64(rl.droppedCount.Load()) / float64(time.Now().Unix()),
+		"tokens":        rl.tokens.Load(),
+		"max_tokens":    rl.maxTokens,
+		"refill_rate":   rl.refillRate,
+		"dropped_count": rl.droppedCount.Load(),
+		"drop_rate":     float64(rl.droppedCount.Load()) / float64(time.Now().Unix()),
 	}
 }
 
 // ExportPrometheus exports rate limiter metrics in Prometheus format
 func (rl *RateLimiter) ExportPrometheus() string {
 	var sb strings.Builder
-	
+
 	sb.WriteString("# HELP go_pcap2socks_rate_limiter_tokens Current number of available tokens\n")
 	sb.WriteString("# TYPE go_pcap2socks_rate_limiter_tokens gauge\n")
 	sb.WriteString(fmt.Sprintf("go_pcap2socks_rate_limiter_tokens %d\n", rl.tokens.Load()))
-	
+
 	sb.WriteString("# HELP go_pcap2socks_rate_limiter_max_tokens Maximum number of tokens (burst size)\n")
 	sb.WriteString("# TYPE go_pcap2socks_rate_limiter_max_tokens gauge\n")
 	sb.WriteString(fmt.Sprintf("go_pcap2socks_rate_limiter_max_tokens %d\n", rl.maxTokens))
-	
+
 	sb.WriteString("# HELP go_pcap2socks_rate_limiter_refill_rate Token refill rate (tokens per second)\n")
 	sb.WriteString("# TYPE go_pcap2socks_rate_limiter_refill_rate gauge\n")
 	sb.WriteString(fmt.Sprintf("go_pcap2socks_rate_limiter_refill_rate %d\n", rl.refillRate))
-	
+
 	sb.WriteString("# HELP go_pcap2socks_rate_limiter_dropped_total Total number of dropped requests\n")
 	sb.WriteString("# TYPE go_pcap2socks_rate_limiter_dropped_total counter\n")
 	sb.WriteString(fmt.Sprintf("go_pcap2socks_rate_limiter_dropped_total %d\n", rl.droppedCount.Load()))
-	
+
 	return sb.String()
 }
 
