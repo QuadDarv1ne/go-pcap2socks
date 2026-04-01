@@ -383,6 +383,9 @@ func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
 				return
 			}
 
+			// Return buffer to pool after use
+			defer buffer.Put(payload)
+
 			// Update activity timestamp
 			tc.lastActivity.Store(time.Now().Unix())
 
@@ -474,14 +477,15 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 		ctx, cancel := context.WithTimeout(tc.ctx, 10*time.Second)
 
 		conn, err := ct.proxyDialer.DialContext(ctx, metadata)
-		cancel()
-
+		
 		if err == nil {
+			cancel() // Success - cancel context
 			tc.ProxyConn = conn
 			ct.logger.Debug("Proxy connection established", "conn", tc.Meta.String(), "attempt", attempt+1)
 			return nil
 		}
 
+		cancel() // Error - cancel context
 		lastErr = err
 
 		// Don't retry on context cancellation
@@ -524,6 +528,9 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 			if !ok {
 				return
 			}
+
+			// Return buffer to pool after use
+			defer buffer.Put(payload)
 
 			uc.lastActivity.Store(time.Now().Unix())
 			uc.packetsSent.Add(1)
