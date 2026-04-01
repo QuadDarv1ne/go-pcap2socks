@@ -16,6 +16,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/bandwidth"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/circuitbreaker"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/armon/go-radix"
 )
@@ -420,7 +421,7 @@ func NewRouter(rules []cfg.Rule, proxies map[string]Proxy) *Router {
 	r.bandwidthLimiter, _ = bandwidth.NewBandwidthLimiter(rateLimitConfig)
 
 	// Start cleanup goroutine
-	go r.cleanupLoop()
+	goroutine.SafeGo(r.cleanupLoop)
 
 	return r
 }
