@@ -28,6 +28,63 @@
 
 ---
 
+## 🔍 Результаты глубокой проверки (01.04.2026, вторая волна)
+
+### ✅ Проверка управления памятью
+
+| Компонент | Проверка | Результат |
+|-----------|----------|-----------|
+| **buffer.Get/Put** | Ручная проверка proxy_handler.go | ✅ Корректный возврат в пул |
+| **buffer.Clone** | Проверка copy() вместо append() | ✅ Исправлено, нет reallocation |
+| **drainChannel** | Проверка conntrack.go | ✅ Возврат буферов при закрытии |
+| **common/pool.Get** | Проверка size > 65536 | ✅ Возвращает make([]byte, size) |
+| **DNS query pool** | Проверка bytes.Buffer pool | ✅ Zero-copy для DNS query |
+
+### ✅ Проверка обработки ошибок
+
+| Компонент | Методы | Статус |
+|-----------|--------|--------|
+| **DialError** | IsTimeout(), IsTemporary() | ✅ ГОТОВ |
+| **HandshakeError** | IsAuthError() | ✅ ГОТОВ |
+| **UDPError** | IsAssociateError() | ✅ ГОТОВ |
+| **TunnelError** | Контекст в ошибках | ✅ ГОТОВ |
+| **PoolError** | Контекст в ошибках | ✅ ГОТОВ |
+| **ProbeError** | Контекст в ошибках | ✅ ГОТОВ |
+| **RecoveryError** | Контекст в ошибках | ✅ ГОТОВ |
+
+### ✅ Проверка контекстов и timeout
+
+| Компонент | Проверка | Результат |
+|-----------|----------|-----------|
+| **DialContext** | context.WithTimeout | ✅ 53 места, все корректны |
+| **Read/Write** | SetReadDeadline/SetWriteDeadline | ✅ Используется везде |
+| **Health probes** | context.WithTimeout | ✅ 5s timeout для probes |
+| **Graceful shutdown** | context.WithTimeout | ✅ 30s timeout для shutdown |
+
+### ✅ Проверка потокобезопасности
+
+| Компонент | Проверка | Результат |
+|-----------|----------|-----------|
+| **ConnTracker maps** | sync.RWMutex | ✅ Защита чтения/записи |
+| **DHCP leases** | sync.Map | ✅ Lock-free доступ |
+| **Router rules** | atomic.Value + radix tree | ✅ O(log n) lookup |
+| **ProxyGroup** | atomic.Int32 для counters | ✅ Lock-free counters |
+| **CircuitBreaker** | atomic.Int32/Int64 | ✅ Lock-free state |
+| **WANBalancer** | atomic.Int32/Int64 | ✅ Lock-free stats |
+
+### ✅ Проверка graceful shutdown
+
+| Компонент | Метод | Статус |
+|-----------|-------|--------|
+| **ConnTracker** | Stop(ctx) с drainChannel | ✅ ГОТОВ |
+| **TCPConn** | closeOnce.Do() | ✅ ГОТОВ |
+| **UDPConn** | closeOnce.Do() | ✅ ГОТОВ |
+| **ProxyGroup** | stopChan + wg.Wait() | ✅ ГОТОВ |
+| **DHCP Server** | stopChan + wg.Wait() | ✅ ГОТОВ |
+| **Shutdown Manager** | ShutdownWithTimeout() | ✅ ГОТОВ |
+
+---
+
 ## 🔍 Результаты финальной перепроверки (01.04.2026)
 
 ### ✅ Проверенные компоненты
