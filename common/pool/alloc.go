@@ -44,9 +44,9 @@ func (alloc *Allocator) Get(size int) []byte {
 	if size <= 0 {
 		return make([]byte, 0)
 	}
-	// Fast path: inline bounds check
+	// Fast path: if size exceeds max pool size, allocate directly
 	if size > maxBufferSize {
-		return nil
+		return make([]byte, size)
 	}
 
 	b := msb(size)
