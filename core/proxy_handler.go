@@ -279,7 +279,7 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 			select {
 			case <-uc.ctx.Done():
 				return
-			case data, ok := <-uc.ToProxy:
+			case data, ok := <-uc.FromProxy:
 				if !ok {
 					return
 				}

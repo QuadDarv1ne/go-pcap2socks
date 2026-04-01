@@ -61,8 +61,9 @@ type UDPConn struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Канал для отправки пакетов в proxy
-	ToProxy chan []byte
+	// Каналы для обмена пакетами
+	ToProxy   chan []byte // gVisor -> proxy
+	FromProxy chan []byte // proxy -> gVisor
 
 	closeOnce sync.Once
 	closed    atomic.Bool
@@ -250,7 +251,8 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 		Meta:         meta,
 		ctx:          ctx,
 		cancel:       cancel,
-		ToProxy:      make(chan []byte, 256), // Optimized buffer: 256 packets for burst traffic
+		ToProxy:      make(chan []byte, 256), // gVisor -> proxy
+		FromProxy:    make(chan []byte, 256), // proxy -> gVisor
 		lastActivity: atomic.Int64{},
 	}
 	uc.lastActivity.Store(time.Now().Unix())
@@ -286,9 +288,11 @@ func (ct *ConnTracker) RemoveUDP(uc *UDPConn) {
 
 		// Drain buffered packets and return to pool
 		drainChannel(uc.ToProxy)
+		drainChannel(uc.FromProxy)
 
-		// Close channel
+		// Close channels
 		close(uc.ToProxy)
+		close(uc.FromProxy)
 
 		// Close proxy connection
 		if uc.ProxyConn != nil {
@@ -622,10 +626,9 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 			// Use buffer.Clone for efficient memory management
 			data := buffer.Clone(buf[:n])
 
-			// Here we would inject packet back to gVisor
-			// This requires callback to UDPForwarder
+			// Send packet to gVisor via FromProxy channel
 			select {
-			case uc.ToProxy <- data: // Reuse channel for incoming packets
+			case uc.FromProxy <- data:
 			case <-uc.ctx.Done():
 				buffer.Put(data) // Return to pool if send failed
 				return
