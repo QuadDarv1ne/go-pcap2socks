@@ -685,8 +685,10 @@ shutdown.RegisterComponents(mgr, components)
 **Задачи:**
 - [x] Buffer pool для снижения аллокаций — ✅ РЕАЛИЗОВАНО (buffer/pool.go)
 - [x] Интеграция Buffer Pool в core/proxy_handler.go — ✅ РЕАЛИЗОВАНО (01.04.2026)
+- [x] Оптимизация relayFromProxy (buffer.Get вместо make) — ✅ РЕАЛИЗОВАНО (01.04.2026)
+- [x] Оптимизация readUDPFromProxy (buffer.Get вместо make) — ✅ РЕАЛИЗОВАНО (01.04.2026)
+- [x] Оптимизация channel buffer sizes — ✅ РЕАЛИЗОВАНО (TCP: 128, UDP: 256)
 - [ ] Профилирование CPU/memory — ⏳ ТРЕБУЕТСЯ
-- [ ] Оптимизация channel buffer sizes — ⏳ ТРЕБУЕТСЯ
 - [ ] Lock-free структуры данных где возможно — ⏳ ТРЕБУЕТСЯ
 
 **Инструменты:**
@@ -701,7 +703,11 @@ go test -bench=. -benchmem ./...
 
 **Заметки (01.04.2026):**
 - Buffer pool реализован и интегрирован в core/proxy_handler.go
-- Снижение аллокаций для TCP/UDP relay
+- relayFromProxy: buffer.Get(LargeBufferSize) вместо make([]byte, 32KB)
+- readUDPFromProxy: buffer.Get(MediumBufferSize) вместо make([]byte, 4096)
+- TCP каналы: 64 → 128 пакетов
+- UDP каналы: 128 → 256 пакетов
+- Снижение аллокаций в hot path
 - Профилирование не проводилось
 - Требуется benchmark для оценки производительности
 

@@ -154,8 +154,8 @@ func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCP
 		Meta:         meta,
 		ctx:          ctx,
 		cancel:       cancel,
-		ToProxy:      make(chan []byte, 64), // 64 packets buffer
-		FromProxy:    make(chan []byte, 64),
+		ToProxy:      make(chan []byte, 128), // Optimized buffer: 128 packets
+		FromProxy:    make(chan []byte, 128), // Optimized buffer: 128 packets
 		lastActivity: atomic.Int64{},
 	}
 	tc.lastActivity.Store(time.Now().Unix())
@@ -251,7 +251,7 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 		Meta:         meta,
 		ctx:          ctx,
 		cancel:       cancel,
-		ToProxy:      make(chan []byte, 128), // Larger buffer for UDP
+		ToProxy:      make(chan []byte, 256), // Optimized buffer: 256 packets for burst traffic
 		lastActivity: atomic.Int64{},
 	}
 	uc.lastActivity.Store(time.Now().Unix())
@@ -422,7 +422,9 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 		}
 	}()
 
-	buf := make([]byte, 32*1024) // 32 KB optimal for TCP
+	// Use buffer pool for efficient memory management
+	buf := buffer.Get(buffer.LargeBufferSize)
+	defer buffer.Put(buf)
 
 	for {
 		select {
@@ -445,7 +447,7 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 			tc.lastActivity.Store(time.Now().Unix())
 			tc.bytesReceived.Add(uint64(n))
 
-			// Use buffer pool for efficient memory management
+			// Use buffer.Clone for efficient memory management
 			data := buffer.Clone(buf[:n])
 
 			select {
@@ -594,7 +596,9 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 		}
 	}()
 
-	buf := make([]byte, 4096) // MTU-safe buffer
+	// Use buffer pool for efficient memory management
+	buf := buffer.Get(buffer.MediumBufferSize)
+	defer buffer.Put(buf)
 
 	for {
 		select {
@@ -617,7 +621,7 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 			uc.packetsReceived.Add(1)
 			uc.bytesReceived.Add(uint64(n))
 
-			// Use buffer pool for efficient memory management
+			// Use buffer.Clone for efficient memory management
 			data := buffer.Clone(buf[:n])
 
 			// Here we would inject packet back to gVisor
