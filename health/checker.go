@@ -520,7 +520,10 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 				"threshold", hc.recoveryThreshold,
 				"failed_probes", len(failedProbes),
 				"backoff", time.Duration(hc.backoffInterval.Load()))
-			hc.triggerRecovery(ctx, failedProbes)
+			// Run recovery in background to not block the health check loop
+			goroutine.SafeGo(func() {
+				hc.triggerRecovery(ctx, failedProbes)
+			})
 		}
 	} else {
 		// Reset counter and backoff on success

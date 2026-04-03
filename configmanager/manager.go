@@ -69,7 +69,7 @@ func (m *ConfigManager) UpdateConfig(newConfig []byte) error {
 	}
 
 	// Create backup of current config
-	if err := m.createBackup(); err != nil {
+	if err := m.createBackupLocked(); err != nil {
 		slog.Warn("Failed to create config backup", "error", err)
 		// Continue anyway - backup is nice to have but not critical
 	}
@@ -116,11 +116,15 @@ func (m *ConfigManager) Rollback() error {
 }
 
 // createBackup creates a backup of the current configuration
-// Requires m.mu to be held by caller
 func (m *ConfigManager) createBackup() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.createBackupLocked()
+}
 
+// createBackupLocked creates a backup without acquiring the lock.
+// Requires m.mu to be held by caller.
+func (m *ConfigManager) createBackupLocked() error {
 	if m.currentConfig == nil {
 		// Load current config first
 		data, err := os.ReadFile(m.configPath)

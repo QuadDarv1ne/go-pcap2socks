@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
-	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	localdns "github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/miekg/dns"
 )

@@ -611,25 +611,17 @@ func isPrivateIP(ip string) bool {
 		return false
 	}
 
-	privateRanges := []struct {
-		start net.IP
-		end   net.IP
-	}{
-		{net.ParseIP("10.0.0.0"), net.ParseIP("10.255.255.255")},
-		{net.ParseIP("172.16.0.0"), net.ParseIP("172.31.255.255")},
-		{net.ParseIP("192.168.0.0"), net.ParseIP("192.168.255.255")},
-		{net.ParseIP("127.0.0.0"), net.ParseIP("127.255.255.255")},
+	// Use net.IP.Contains for accurate range checks
+	privateRanges := []*net.IPNet{
+		{IP: net.ParseIP("10.0.0.0"), Mask: net.CIDRMask(8, 32)},
+		{IP: net.ParseIP("172.16.0.0"), Mask: net.CIDRMask(12, 32)},
+		{IP: net.ParseIP("192.168.0.0"), Mask: net.CIDRMask(16, 32)},
+		{IP: net.ParseIP("127.0.0.0"), Mask: net.CIDRMask(8, 32)},
 	}
 
 	for _, r := range privateRanges {
-		if parsed.Equal(r.start) || parsed.Equal(r.end) {
+		if r.Contains(parsed) {
 			return true
-		}
-		if parsed.To4() != nil && r.start.To4() != nil {
-			if parsed.To4().String() >= r.start.To4().String() &&
-				parsed.To4().String() <= r.end.To4().String() {
-				return true
-			}
 		}
 	}
 
