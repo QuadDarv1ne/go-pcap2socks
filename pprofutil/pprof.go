@@ -12,6 +12,8 @@ import (
 	"runtime"
 	rpprof "runtime/pprof"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Config holds pprof configuration
@@ -91,11 +93,11 @@ func (s *Server) Start() error {
 
 	slog.Info("pprof server starting", "port", s.config.Port)
 
-	go func() {
+	goroutine.SafeGo(func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("pprof server error", "err", err)
 		}
-	}()
+	})
 
 	return nil
 }
@@ -227,7 +229,7 @@ func LogMemoryStats() {
 // StartMemoryLogging starts periodic memory logging
 func StartMemoryLogging(interval time.Duration, stopChan <-chan struct{}) {
 	ticker := time.NewTicker(interval)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -237,5 +239,5 @@ func StartMemoryLogging(interval time.Duration, stopChan <-chan struct{}) {
 				return
 			}
 		}
-	}()
+	})
 }

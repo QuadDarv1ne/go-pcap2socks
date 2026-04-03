@@ -26,6 +26,9 @@ type SmartDHCPManager struct {
 	leaseHistory   sync.Map // map[string][]time.Time
 	deviceProfiles sync.Map // map[string]DeviceProfile
 	size           atomic.Int32
+
+	// allocMu protects IP allocation check-and-set operations
+	allocMu sync.Mutex
 }
 
 // IPPool represents a pool of IP addresses
@@ -102,6 +105,10 @@ func (m *SmartDHCPManager) GetIPForDevice(mac string, profile DeviceProfile) str
 
 // allocateIPForType allocates an IP from the appropriate range for the device type
 func (m *SmartDHCPManager) allocateIPForType(mac string, profile DeviceProfile) string {
+	// Protect check-and-set with mutex
+	m.allocMu.Lock()
+	defer m.allocMu.Unlock()
+
 	// Get the IP range for this device type
 	startIP, endIP := m.getIPRangeForType(profile.Type)
 

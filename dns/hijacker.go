@@ -31,8 +31,8 @@ const (
 type Hijacker struct {
 	mu sync.RWMutex
 
-	// domainToFake maps domain -> fake IP
-	domainToFake map[string]netip.Addr
+	// domainToFake maps domain -> fake IP mapping with timestamp
+	domainToFake map[string]fakeIPMapping
 
 	// fakeToDomain maps fake IP -> domain
 	fakeToDomain map[netip.Addr]string
@@ -56,6 +56,12 @@ type Hijacker struct {
 	mappingsExpired    uint64
 }
 
+// fakeIPMapping holds a fake IP and its creation timestamp
+type fakeIPMapping struct {
+	ip        netip.Addr
+	createdAt time.Time
+}
+
 // HijackerConfig holds configuration for DNS hijacker
 type HijackerConfig struct {
 	UpstreamServers []string
@@ -76,7 +82,7 @@ func NewHijacker(cfg HijackerConfig) *Hijacker {
 	}
 
 	h := &Hijacker{
-		domainToFake:    make(map[string]netip.Addr),
+		domainToFake:    make(map[string]fakeIPMapping),
 		fakeToDomain:    make(map[netip.Addr]string),
 		timeout:         timeout,
 		upstreamServers: cfg.UpstreamServers,
@@ -131,23 +137,26 @@ func (h *Hijacker) InterceptDNS(query []byte) ([]byte, bool) {
 
 	// Check if we already have a fake IP for this domain
 	h.mu.RLock()
-	fakeIP, exists := h.domainToFake[domain]
+	mapping, exists := h.domainToFake[domain]
 	h.mu.RUnlock()
 
 	if exists {
 		h.cacheHits++
-		h.logger.Debug("DNS cache hit", "domain", domain, "fake_ip", fakeIP)
-		return h.createDNSResponse(&msg, fakeIP, qtype), true
+		h.logger.Debug("DNS cache hit", "domain", domain, "fake_ip", mapping.ip)
+		return h.createDNSResponse(&msg, mapping.ip, qtype), true
 	}
 
 	h.cacheMisses++
 
 	// Allocate new fake IP
-	fakeIP = h.allocateFakeIP()
+	fakeIP := h.allocateFakeIP()
 
-	// Store mapping
+	// Store mapping with timestamp
 	h.mu.Lock()
-	h.domainToFake[domain] = fakeIP
+	h.domainToFake[domain] = fakeIPMapping{
+		ip:        fakeIP,
+		createdAt: time.Now(),
+	}
 	h.fakeToDomain[fakeIP] = domain
 	h.mu.Unlock()
 
@@ -222,11 +231,11 @@ func (h *Hijacker) GetFakeIPByDomain(domain string) (netip.Addr, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	ip, exists := h.domainToFake[domain]
-	return ip, exists
+	mapping, exists := h.domainToFake[domain]
+	return mapping.ip, exists
 }
 
-// cleanupExpired periodically removes expired mappings
+// cleanupExpired periodically removes expired mappings based on TTL
 func (h *Hijacker) cleanupExpired() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
@@ -234,24 +243,32 @@ func (h *Hijacker) cleanupExpired() {
 	for range ticker.C {
 		h.mu.Lock()
 
-		// Check if we need to clean up old mappings
-		if len(h.domainToFake) > FakeIPRangeSize {
-			// Remove oldest mappings (simplified - in production use timestamps)
-			for domain, ip := range h.domainToFake {
-				delete(h.domainToFake, domain)
-				delete(h.fakeToDomain, ip)
-				h.mappingsExpired++
-				if len(h.domainToFake) <= FakeIPRangeSize/2 {
-					break
-				}
+		now := time.Now()
+		var toDelete []string
+
+		// Collect expired mappings
+		for domain, mapping := range h.domainToFake {
+			if now.Sub(mapping.createdAt) > h.timeout {
+				toDelete = append(toDelete, domain)
 			}
+		}
+
+		// Remove expired mappings
+		for _, domain := range toDelete {
+			mapping := h.domainToFake[domain]
+			delete(h.domainToFake, domain)
+			delete(h.fakeToDomain, mapping.ip)
+			h.mappingsExpired++
 		}
 
 		h.mu.Unlock()
 
-		h.logger.Debug("DNS hijacker cleanup",
-			"active_mappings", len(h.domainToFake),
-			"expired", h.mappingsExpired)
+		if len(toDelete) > 0 {
+			h.logger.Debug("DNS hijacker cleanup",
+				"expired_mappings", len(toDelete),
+				"remaining", len(h.domainToFake),
+				"total_expired", h.mappingsExpired)
+		}
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/tunnel"
@@ -384,11 +385,11 @@ func (c *Collector) StartHTTPServer(addr string) error {
 	}
 
 	c.logger.Info("Starting Prometheus metrics server", "addr", addr)
-	go func() {
+	goroutine.SafeGo(func() {
 		if err := c.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			c.logger.Error("Metrics server failed", "err", err)
 		}
-	}()
+	})
 
 	return nil
 }

@@ -34,6 +34,9 @@ type Server struct {
 	leaseCount     atomic.Int32
 	wg             sync.WaitGroup // WaitGroup for graceful shutdown
 
+	// allocMu protects the IP allocation check-and-set operation
+	allocMu sync.Mutex
+
 	// Rate limiting for DHCP requests (protection against flood attacks)
 	requestCount    sync.Map      // map[string]*requestCounter (MAC -> counter)
 	rateLimit       int           // max requests per minute per MAC
@@ -671,6 +674,10 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 	slog.Debug("DHCP: Falling back to legacy IP allocation",
 		"mac", macStr,
 		"pool_range", s.config.FirstIP.String()+"-"+s.config.LastIP.String())
+
+	// Protect entire allocation from race conditions
+	s.allocMu.Lock()
+	defer s.allocMu.Unlock()
 
 	startIP := s.nextIP.Load().(net.IP)
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -

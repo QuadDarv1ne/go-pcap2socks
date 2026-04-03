@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
@@ -208,11 +209,12 @@ func RunWithWebSocket() {
 
 	hotkeyMgr := hotkey.NewManager()
 
-	go func() {
+	// Run systray in a goroutine with panic protection
+	goroutine.SafeGo(func() {
 		systray.Run(func() {
 			onReadyWithWebSocket(hotkeyMgr)
 		}, onExit)
-	}()
+	})
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, windows.SIGINT, windows.SIGTERM)
@@ -288,7 +290,7 @@ func onReadyWithWebSocket(hotkeyMgr *hotkey.Manager) {
 	wsClient.Connect(ctx, mStatus, mDevices, mStart, mStop)
 
 	// Fallback to polling if WebSocket not available
-	go func() {
+	goroutine.SafeGo(func() {
 		time.Sleep(2 * time.Second)
 		wsClient.mu.Lock()
 		connected := wsClient.connected
@@ -298,7 +300,7 @@ func onReadyWithWebSocket(hotkeyMgr *hotkey.Manager) {
 			slog.Info("WebSocket not available, falling back to polling")
 			go pollStatus(ctx, mStatus, mDevices, mStart, mStop)
 		}
-	}()
+	})
 
 	proxyToggled := false
 	hotkeyMgr.RegisterDefaultHotkeys(

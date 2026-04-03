@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // ARPMonitor monitors ARP table for device discovery
@@ -49,7 +51,7 @@ func NewARPMonitor(network *net.IPNet, localIP net.IP) *ARPMonitor {
 func (m *ARPMonitor) Start(store *Store) {
 	slog.Info("Starting ARP monitor", "network", m.network.String())
 
-	go func() {
+	goroutine.SafeGo(func() {
 		ticker := time.NewTicker(m.interval)
 		defer ticker.Stop()
 
@@ -62,7 +64,7 @@ func (m *ARPMonitor) Start(store *Store) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // Stop stops the ARP monitoring

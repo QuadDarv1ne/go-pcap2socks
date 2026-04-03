@@ -515,19 +515,27 @@ func (s *ServerV6) allocateIPv6(clientID []byte, iaid uint32) (net.IP, error) {
 
 	// Find available IP in pool
 	poolEnd := s.config.PoolEnd.To16()
-	for ip := s.config.PoolStart; ip.To16() != nil; ip = s.nextIPv6(ip) {
-		if ip.To16() == nil {
-			break
-		}
-		// Compare IPv6 addresses using bytes comparison
-		if bytes.Compare(ip.To16(), poolEnd) > 0 {
+	poolStart := s.config.PoolStart.To16()
+	if poolStart == nil {
+		return nil, fmt.Errorf("invalid pool start address")
+	}
+	if poolEnd == nil {
+		return nil, fmt.Errorf("invalid pool end address")
+	}
+
+	currentIP := make(net.IP, 16)
+	copy(currentIP, poolStart)
+
+	for {
+		// Check if we've gone past the pool end
+		if bytes.Compare(currentIP, poolEnd) > 0 {
 			break
 		}
 
 		// Check if IP is already leased
 		available := true
 		for _, lease := range s.leases {
-			if lease.IPv6.Equal(ip) && time.Now().Before(lease.ExpiresAt) {
+			if lease.IPv6.Equal(currentIP) && time.Now().Before(lease.ExpiresAt) {
 				available = false
 				break
 			}
@@ -536,7 +544,7 @@ func (s *ServerV6) allocateIPv6(clientID []byte, iaid uint32) (net.IP, error) {
 		if available {
 			// Create new lease
 			lease := &DHCPv6Lease{
-				IPv6:          ip,
+				IPv6:          currentIP,
 				DUID:          clientID,
 				IAID:          iaid,
 				ExpiresAt:     time.Now().Add(s.config.LeaseDuration),
@@ -548,8 +556,11 @@ func (s *ServerV6) allocateIPv6(clientID []byte, iaid uint32) (net.IP, error) {
 			s.statsMu.Lock()
 			s.stats.ActiveLeases++
 			s.statsMu.Unlock()
-			return ip, nil
+			return currentIP, nil
 		}
+
+		// Move to next IP
+		currentIP = s.nextIPv6(currentIP)
 	}
 
 	return nil, fmt.Errorf("no available IPv6 addresses")

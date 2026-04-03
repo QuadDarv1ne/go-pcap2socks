@@ -356,11 +356,44 @@ func (r *Resolver) resolveDomain(domain string) ([]net.IP, error) {
 
 // resolveWithServer resolves a domain using a specific DNS server
 func (r *Resolver) resolveWithServer(ctx context.Context, domain, server string) ([]net.IP, error) {
-	// Implementation would go here - using existing resolve logic
-	// For now, placeholder
-	_ = ctx
-	_ = server
-	return nil, nil
+	// Query A and AAAA records in parallel
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var allIPs []net.IP
+	var firstErr error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ips, err := r.queryDNS(ctx, domain, server, 1) // A record
+		mu.Lock()
+		defer mu.Unlock()
+		if err == nil && len(ips) > 0 {
+			allIPs = append(allIPs, ips...)
+		} else if firstErr == nil {
+			firstErr = err
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		ips, err := r.queryDNS(ctx, domain, server, 28) // AAAA record
+		mu.Lock()
+		defer mu.Unlock()
+		if err == nil && len(ips) > 0 {
+			allIPs = append(allIPs, ips...)
+		} else if firstErr == nil {
+			firstErr = err
+		}
+	}()
+	wg.Wait()
+
+	if len(allIPs) > 0 {
+		return allIPs, nil
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, ErrDNSResolutionFailed
 }
 
 // LookupIP performs DNS lookup with caching (returns both IPv4 and IPv6)

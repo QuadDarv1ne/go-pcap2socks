@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Pre-defined errors for health checking
@@ -408,10 +410,10 @@ func (hc *HealthChecker) RemoveProbe(name string) {
 // Start starts the health checker
 func (hc *HealthChecker) Start(ctx context.Context) {
 	hc.wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer hc.wg.Done()
 		hc.run(ctx)
-	}()
+	})
 
 	slog.Info("Health checker started",
 		"interval", hc.checkInterval,
@@ -518,7 +520,10 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 				"threshold", hc.recoveryThreshold,
 				"failed_probes", len(failedProbes),
 				"backoff", time.Duration(hc.backoffInterval.Load()))
-			hc.triggerRecovery(ctx, failedProbes)
+			// Run recovery in background to not block the health check loop
+			goroutine.SafeGo(func() {
+				hc.triggerRecovery(ctx, failedProbes)
+			})
 		}
 	} else {
 		// Reset counter and backoff on success

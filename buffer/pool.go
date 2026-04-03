@@ -47,17 +47,17 @@ func PreWarmPool(small, medium, large int) {
 	for i := 0; i < small; i++ {
 		buf := make([]byte, 0, SmallBufferSize)
 		defaultPool.smallPool.Put(buf)
-		defaultPool.smallGets.Add(1)
+		defaultPool.smallPuts.Add(1)
 	}
 	for i := 0; i < medium; i++ {
 		buf := make([]byte, 0, MediumBufferSize)
 		defaultPool.mediumPool.Put(buf)
-		defaultPool.mediumGets.Add(1)
+		defaultPool.mediumPuts.Add(1)
 	}
 	for i := 0; i < large; i++ {
 		buf := make([]byte, 0, LargeBufferSize)
 		defaultPool.largePool.Put(buf)
-		defaultPool.largeGets.Add(1)
+		defaultPool.largePuts.Add(1)
 	}
 }
 

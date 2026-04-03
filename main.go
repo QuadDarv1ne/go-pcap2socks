@@ -1699,10 +1699,14 @@ func Stop() {
 	}
 
 	// Stop proxy groups
-	for _, p := range _defaultProxy.(*proxy.Router).Proxies {
-		if group, ok := p.(*proxy.ProxyGroup); ok {
-			group.Stop()
-			slog.Info("Proxy group stopped", "name", group.Addr())
+	if _defaultProxy != nil {
+		if router, ok := _defaultProxy.(*proxy.Router); ok {
+			for _, p := range router.Proxies {
+				if group, ok := p.(*proxy.ProxyGroup); ok {
+					group.Stop()
+					slog.Info("Proxy group stopped", "name", group.Addr())
+				}
+			}
 		}
 	}
 
@@ -2433,8 +2437,10 @@ func autoConfigureAndStart() {
 	// Mark as running
 	_running.Store(true)
 
-	// Initialize shutdown channel
-	_shutdownChan = make(chan struct{})
+	// Initialize shutdown channel (only if not already initialized)
+	if _shutdownChan == nil {
+		_shutdownChan = make(chan struct{})
+	}
 
 	// Initialize hotkey manager if enabled
 	hotkeysEnabled := config.Hotkey != nil && config.Hotkey.Enabled

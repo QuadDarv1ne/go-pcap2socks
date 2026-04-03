@@ -126,6 +126,9 @@ func (p *Pool) worker(ctx context.Context, id int) {
 				return
 			}
 
+			// Decrement queue size after packet is picked up
+			p.queueSize.Add(-1)
+
 			// Mark worker as active
 			p.activeWorkers.Add(1)
 			startTime := time.Now()
