@@ -121,15 +121,6 @@ func (s *SimpleServer) Stop() {
 
 // packetLoop captures and processes DHCP packets
 func (s *SimpleServer) packetLoop() {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("DHCP packetLoop panic", "recover", r)
-			// Restart after 1 second
-			time.Sleep(1 * time.Second)
-			go s.packetLoop()
-		}
-	}()
-
 	if s.handle == nil {
 		slog.Error("DHCP packetLoop: handle is nil")
 		return
@@ -138,10 +129,10 @@ func (s *SimpleServer) packetLoop() {
 	slog.Info("DHCP packet loop started")
 
 	packetSource := gopacket.NewPacketSource(s.handle, layers.LayerTypeEthernet)
-	// Tell gopacket that UDP port 67/68 is DHCP
+	// NoCopy: false ensures packet data is not overwritten during async processing
 	packetSource.DecodeOptions = gopacket.DecodeOptions{
 		Lazy:   false,
-		NoCopy: true,
+		NoCopy: false,
 	}
 	packets := packetSource.Packets()
 

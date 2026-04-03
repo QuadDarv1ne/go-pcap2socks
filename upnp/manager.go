@@ -215,15 +215,20 @@ func (m *Manager) Stop() error {
 		return nil
 	}
 
+	var keys []string
 	m.activeMaps.Range(func(k, v any) bool {
-		key := k.(string)
+		keys = append(keys, k.(string))
+		return true
+	})
+
+	// Remove mappings after Range completes to avoid race
+	for _, key := range keys {
 		var protocol string
 		var port int
 		fmt.Sscanf(key, "%s:%d", &protocol, &port)
 
 		_ = m.upnp.DeletePortMapping(protocol, port)
-		return true
-	})
+	}
 
 	m.activeMaps = sync.Map{}
 	m.mappingCount.Store(0)

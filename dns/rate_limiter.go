@@ -2,6 +2,7 @@
 package dns
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -42,7 +43,9 @@ func (r *RateLimiter) Allow() bool {
 
 	if tokensToAdd > 0 {
 		r.tokens = min(r.maxTokens, r.tokens+tokensToAdd)
-		r.lastRefill = now
+		// Preserve fractional time to avoid token loss
+		remainder := elapsed - time.Duration(tokensToAdd)*r.refillRate
+		r.lastRefill = now.Add(-remainder)
 	}
 
 	// Check if we have tokens available
@@ -138,7 +141,7 @@ func (r *RateLimitedResolver) Query(domain string) ([]net.IP, error) {
 	for attempt := 0; attempt < r.maxRetries; attempt++ {
 		if r.rateLimiter.WaitTimeout(5 * time.Second) {
 			// Rate limit allowed, perform query
-			return r.resolver.LookupIP(nil, domain)
+			return r.resolver.LookupIP(context.Background(), domain)
 		}
 		// Rate limit timeout, retry
 		time.Sleep(r.retryDelay * time.Duration(attempt+1))
