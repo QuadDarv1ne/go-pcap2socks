@@ -1471,6 +1471,13 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 // performGracefulShutdown performs a complete graceful shutdown of all components
 // Called on panic recovery or signal handling
 func performGracefulShutdown() {
+	_shutdownOnce.Do(func() {
+		performGracefulShutdownImpl()
+	})
+}
+
+// performGracefulShutdownImpl implements the actual shutdown logic
+func performGracefulShutdownImpl() {
 	startTime := time.Now()
 	slog.Info("Performing graceful shutdown...", "start_time", startTime.Format(time.RFC3339))
 
@@ -1660,6 +1667,13 @@ func performGracefulShutdown() {
 
 // Stop stops the service gracefully
 func Stop() {
+	_shutdownOnce.Do(func() {
+		stopImpl()
+	})
+}
+
+// stopImpl implements the actual stop logic
+func stopImpl() {
 	slog.Info("Stopping service...")
 	_running.Store(false)
 

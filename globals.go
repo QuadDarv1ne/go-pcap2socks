@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"sync"
 	"sync/atomic"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
@@ -54,6 +55,9 @@ var (
 
 	// _shutdownChan is used for graceful shutdown
 	_shutdownChan chan struct{}
+
+	// _shutdownOnce ensures shutdown runs only once
+	_shutdownOnce sync.Once
 
 	// _httpServer holds the HTTP server for graceful shutdown
 	_httpServer *http.Server

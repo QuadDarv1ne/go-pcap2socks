@@ -497,42 +497,47 @@ func calculateChecksum(data []byte) uint16 {
 }
 
 // setDFFlag sets the Don't Fragment flag on a connection (platform-specific)
+// NOTE: DF flag requires raw socket access and administrative privileges.
+// On Windows, this uses IP_DONTFRAGMENT via setsockopt (requires admin).
+// On Linux, this uses IP_MTU_DISCOVER via setsockopt.
+// On macOS, this uses IP_DONTFRAG via setsockopt.
+// Current implementation is a stub — actual DF setting requires OS-specific syscalls.
 func setDFFlag(conn net.PacketConn, df bool) error {
-	switch runtime.GOOS {
-	case "linux":
-		return setDFFlagLinux(conn, df)
-	case "windows":
-		return setDFFlagWindows(conn, df)
-	case "darwin":
-		return setDFFlagDarwin(conn, df)
-	}
+	// DF flag implementation requires platform-specific syscalls with admin privileges
+	// For now, we rely on PMTUD via ICMP feedback rather than proactive DF setting
+	slog.Debug("MTU discovery: DF flag not set (requires admin + OS-specific syscall)",
+		"os", runtime.GOOS,
+		"df_requested", df)
 	return nil
 }
 
 // setDFFlagLinux sets DF flag on Linux
 func setDFFlagLinux(conn net.PacketConn, df bool) error {
-	// Use IP_MTU_DISCOVER socket option
-	// This is a simplified version - actual implementation would use syscall
+	// Requires: syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_MTU_DISCOVER, syscall.IP_PMTUDISC_DO)
+	// Needs raw socket access and CAP_NET_ADMIN
+	slog.Debug("MTU: DF flag stub on Linux (requires CAP_NET_ADMIN)")
 	return nil
 }
 
 // setDFFlagWindows sets DF flag on Windows
 func setDFFlagWindows(conn net.PacketConn, df bool) error {
-	// Use IP_DONTFRAGMENT socket option
-	// This is a simplified version - actual implementation would use syscall
+	// Requires: WSAIoctl with SIO_UDP_CONNRESET or setsockopt with IP_DONTFRAGMENT
+	// Needs administrator privileges
+	slog.Debug("MTU: DF flag stub on Windows (requires Administrator)")
 	return nil
 }
 
 // setDFFlagDarwin sets DF flag on macOS
 func setDFFlagDarwin(conn net.PacketConn, df bool) error {
-	// Use IP_DONTFRAG socket option
-	// This is a simplified version - actual implementation would use syscall
+	// Requires: setsockopt with IP_DONTFRAG
+	slog.Debug("MTU: DF flag stub on macOS")
 	return nil
 }
 
 // setDFFlagUDP sets DF flag on UDP connection
 func setDFFlagUDP(conn *net.UDPConn, df bool) error {
 	// Platform-specific implementation
+	slog.Debug("MTU: DF flag stub on UDP (use setDFFlag with platform-specific impl)")
 	return nil
 }
 
