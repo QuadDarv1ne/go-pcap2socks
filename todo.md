@@ -1,21 +1,21 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, семнадцатая волна проверки, полный анализ)
+## Статус проекта (04.04.2026, семнадцатая волна проверки и исправлений)
 
-**Ветка:** `dev` (текущая, требует синхронизации)
+**Ветка:** `dev` (текущая, синхронизирована с main)
 
 **Последние изменения:**
-- ✅ **СЕМНАДЦАТАЯ ВОЛНА** (04.04.2026, полный глубокий анализ проекта)
+- ✅ **СЕМНАДЦАТАЯ ВОЛНА** (04.04.2026, полный глубокий анализ + исправления)
 - ✅ **ИСПРАВЛЕНО**: 11 файлов — добавлена goroutine.SafeGo защита (asynclogger, core, dns, health, netutil, service, transport)
+- ✅ **ИСПРАВЛЕНО**: 4 файла — 7 критических проблем (conntrack deadlock/double-close/spin-loop/race, dhcpv6 overflow, dns double close, hijacker race/stop)
 - ✅ **АНАЛИЗ**: полный аудит DNS, DHCP, Core, Proxy, Infra модулей тремя агентами
-- 🟡 **НАЙДЕНО**: 4 критических, 12 серьёзных, 7 средних, 10 минорных проблем
-- 🟡 **ТРЕБУЮТ ИСПРАВЛЕНИЯ**: deadlock в conntrack.CloseAll(), buffer overflow в DHCPv6, unsafe.String в router
-- ⏳ **СБОРКА**: не проверена (требуется go build)
+- 🟡 **ОСТАЛОСЬ**: 12 серьёзных, 13 средних, 10 минорных проблем (план исправлений ниже)
+- ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ❌ есть несохранённые изменения (11 файлов)
-main: ✅ синхронизирована с origin/main
+dev:  ✅ 31fb3d7 — синхронизирована с origin/dev
+main: ✅ c4537ac — синхронизирована с origin/main (merge dev)
 ```
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
@@ -359,9 +359,54 @@ main: ✅ синхронизирована с origin/main
 
 ### Коммиты (предстоящие):
 
-1. `commit` — fix: добавить goroutine.SafeGo защиту в 11 файлах (17-я волна)
-2. `commit` — fix: исправить критические проблемы (conntrack deadlock, DHCPv6 overflow, DNS double close)
-3. `merge` — синхронизация dev в main
+1. ~~`commit` — fix: добавить goroutine.SafeGo защиту в 11 файлах (17-я волна)~~ ✅ `6c21842`
+2. ~~`commit` — fix: исправить критические проблемы (conntrack deadlock, DHCPv6 overflow, DNS double close)~~ ✅ `31fb3d7`
+3. ~~`merge` — синхронизация dev в main~~ ✅ `c4537ac` (main)
+
+---
+
+## ✅ Результаты исправления (04.04.2026, семнадцатая волна, исправления)
+
+### Исправленные критические проблемы:
+
+| # | Проблема | Файл | Изменение | Статус |
+|---|----------|------|-----------|--------|
+| 1 | Deadlock в CloseAll() | `core/conntrack.go` | Копирование соединений под lock, закрытие вне lock | ✅ ИСПРАВЛЕНО |
+| 2 | Buffer overflow DHCPv6 | `dhcp/dhcpv6.go` | `make([]byte, 24)` → `make([]byte, 28)` | ✅ ИСПРАВЛЕНО |
+| 3 | Double close в resolver | `dns/resolver.go` | `sync.Once` для stopPrefetch | ✅ ИСПРАВЛЕНО |
+| 4 | Гонка allocateFakeIP | `dns/hijacker.go` | Атомарная транзакция allocation+mapping | ✅ ИСПРАВЛЕНО |
+| 5 | Spin-loop утечка | `core/conntrack.go` | `select` с `tc.ctx.Done()` вместо `time.Sleep` | ✅ ИСПРАВЛЕНО |
+| 6 | Гонка tc.ProxyConn | `core/conntrack.go` | Добавлен `proxyMu sync.Mutex` | ✅ ИСПРАВЛЕНО |
+| 7 | Hijacker нет Stop() | `dns/hijacker.go` | Добавлен `stopCh` и метод `Stop()` | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**core/conntrack.go:**
+- `CloseAll()`: копирование tcpConns/udpConns под lock, закрытие вне lock
+- `relayFromProxy()`: `select { case <-tc.ctx.Done(): return; case <-time.After(100ms): continue }`
+- `TCPConn`: добавлен `proxyMu sync.Mutex`
+- `relayToProxy()`/`relayFromProxy()`: `proxyMu.Lock()` перед проверкой/использованием ProxyConn
+- `RemoveTCP()`: `proxyMu.Lock()` при закрытии ProxyConn
+
+**dhcp/dhcpv6.go:**
+- `createAdvertise()`: `make([]byte, 28)` вместо `make([]byte, 24)`
+
+**dns/resolver.go:**
+- `Resolver`: добавлен `stopOnce sync.Once`
+- `StopPrefetch()`: `r.stopOnce.Do(func() { close(r.stopPrefetch) })`
+
+**dns/hijacker.go:**
+- `Hijacker`: добавлен `stopCh chan struct{}`
+- `allocateFakeIPLocked()`: проверка `fakeToDomain` перед возвратом IP
+- `InterceptDNS()`: атомарная транзакция allocation+mapping под одним Lock
+- `cleanupExpired()`: `select` с `h.stopCh` для graceful shutdown
+- `Stop()`: `close(h.stopCh)`
+
+### Коммиты:
+
+1. `6c21842` — fix: добавить goroutine.SafeGo защиту в 11 файлах (17-я волна, анализ)
+2. `31fb3d7` — fix: исправить 7 критических проблем в conntrack, dhcpv6, dns, hijacker
+3. `c4537ac` (main) — merge: синхронизация dev в main
 
 ---
 
