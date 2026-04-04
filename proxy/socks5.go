@@ -143,14 +143,12 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 
 	setKeepAlive(c)
 
-	defer func(c net.Conn) {
-		// Return connection to pool instead of closing
-		if err == nil {
+	// Defer ONLY for error case -- return connection to pool on handshake failure
+	defer func() {
+		if err != nil {
 			ss.connPool.Put(c)
-		} else {
-			c.Close()
 		}
-	}(c)
+	}()
 
 	var user *socks5.User
 	if ss.user != "" {
@@ -168,7 +166,23 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 			Err:       err,
 		}
 	}
-	return
+
+	// Success -- wrap connection to ensure it's returned to pool when closed
+	return &pooledConn{Conn: c, pool: ss.connPool}, nil
+}
+
+// pooledConn wraps a pooled connection to auto-return on Close
+type pooledConn struct {
+	net.Conn
+	pool *connpool.Pool
+	once sync.Once
+}
+
+func (pc *pooledConn) Close() error {
+	pc.once.Do(func() {
+		pc.pool.Put(pc.Conn)
+	})
+	return nil
 }
 
 func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
