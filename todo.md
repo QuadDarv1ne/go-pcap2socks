@@ -1,33 +1,73 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, двадцать восьмая волна)
+## Статус проекта (04.04.2026, двадцать девятая волна)
 
 **Ветка:** `main` (синхронизирована с dev и remote)
 
 **Последние изменения:**
-- ✅ **ДВАДЦАТЬ ВОСЬМАЯ ВОЛНА** (04.04.2026, глубокий аудит и исправления)
-- ✅ **Proxy Router**: исправлен routeCache.set, ограничен параллелизм health checks
-- ✅ **Proxy Group**: RoundRobin теперь проверяет healthStatus
-- ✅ **DNS Resolver**: добавлена защита от closed channel panic
-- ✅ **DHCP Server**: добавлены nil проверки для nextIP
+- ✅ **ДВАДЦАТЬ ДЕВЯТАЯ ВОЛНА** (04.04.2026, SafeGo везде + health checker fix)
+- ✅ **SafeGo**: добавлена защита во все 5 production go func() без recovery
+- ✅ **Health Checker**: triggerRecovery теперь асинхронный, не блокирует цикл
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ 0984cad — синхронизирована с origin/dev
-main: ✅ 276c71f — синхронизирована с origin/main (merge dev)
+dev:  ✅ 23c3024 — синхронизирована с origin/dev
+main: ✅ 23c3024 — синхронизирована с origin/main
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
 
 ---
 
-## ✅ Результаты двадцать восьмой волны (04.04.2026)
+## ✅ Результаты двадцать девятой волны (04.04.2026)
 
 ### Исправленные проблемы:
 
 | # | Проблема | Файл | Изменение | Статус |
 |---|----------|------|-----------|--------|
+| 1 | API server go func без SafeGo | `app/application.go` | goroutine.SafeGo | ✅ ИСПРАВЛЕНО |
+| 2 | health checker runProbes без SafeGo | `health/checker.go` | goroutine.SafeGo | ✅ ИСПРАВЛЕНО |
+| 3 | DHCPv6 handleMessage без SafeGo | `dhcp/dhcpv6.go` | goroutine.SafeGo | ✅ ИСПРАВЛЕНО |
+| 4 | tunnel worker pool без SafeGo | `tunnel/tunnel.go` | goroutine.SafeGo | ✅ ИСПРАВЛЕНО |
+| 5 | ARP callbacks без SafeGo | `stats/arp.go` | goroutine.SafeGo + fix cb bug | ✅ ИСПРАВЛЕНО |
+| 6 | triggerRecovery блокирует health loop | `health/checker.go` | Асинхронный запуск + ctx | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**app/application.go:**
+- Импорт `goroutine` пакета
+- API server start: `go func()` → `goroutine.SafeGo()`
+
+**health/checker.go:**
+- `runProbes`: `go func(p Probe)` → `goroutine.SafeGo()` + closure fix
+- `triggerRecovery`: полностью переписан — теперь асинхронный
+  - Запуск через `goroutine.SafeGo` вместо синхронного вызова
+  - `time.Sleep(5s)` → `select { case <-time.After: case <-ctx.Done: }`
+  - Поддержка graceful cancellation
+
+**dhcp/dhcpv6.go:**
+- Импорт `goroutine` пакета
+- `handleMessage` dispatch: `go func()` → `goroutine.SafeGo()`
+
+**tunnel/tunnel.go:**
+- Worker pool init: `go func(workerID int)` → `workerID := i` + `goroutine.SafeGo()`
+
+**stats/arp.go:**
+- `notifyChange`: `go func(callback)` → `goroutine.SafeGo()` + исправлен баг с `cb`
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
+
+### Коммиты:
+
+1. `9f13fd8` — fix: добавить SafeGo защиту во все production go func (29-я волна)
+2. `23c3024` — fix: исправить triggerRecovery blocking в health checker (29-я волна)
+
+---
 | 1 | routeCache.size инкремент при перезаписи | `proxy/router.go` | Проверка exists перед increment | ✅ ИСПРАВЛЕНО |
 | 2 | RoundRobin не проверял healthStatus | `proxy/group.go` | Цикл поиска здорового прокси | ✅ ИСПРАВЛЕНО |
 | 3 | Неограниченный параллелизм health checks | `proxy/router.go` | Semaphore maxParallel=10 | ✅ ИСПРАВЛЕНО |
