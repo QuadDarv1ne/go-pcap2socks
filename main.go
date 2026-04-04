@@ -739,9 +739,9 @@ func main() {
 
 		var cmd *exec.Cmd
 		if len(config.ExecuteOnStart) > 1 {
-			cmd = exec.Command(config.ExecuteOnStart[0], config.ExecuteOnStart[1:]...)
+			cmd = exec.CommandContext(_gracefulCtx, config.ExecuteOnStart[0], config.ExecuteOnStart[1:]...)
 		} else {
-			cmd = exec.Command(config.ExecuteOnStart[0])
+			cmd = exec.CommandContext(_gracefulCtx, config.ExecuteOnStart[0])
 		}
 
 		cmd.Stdout = os.Stdout
@@ -755,7 +755,11 @@ func main() {
 
 			err = cmd.Wait()
 			if err != nil {
-				slog.Debug("Command finished with error", slog.Any("err", err))
+				if _gracefulCtx.Err() != nil {
+					slog.Info("ExecuteOnStart command terminated on shutdown")
+				} else {
+					slog.Debug("Command finished with error", slog.Any("err", err))
+				}
 			}
 		})
 	}
