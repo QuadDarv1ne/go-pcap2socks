@@ -541,9 +541,8 @@ func (r *Resolver) Stop() {
 func (r *Resolver) StopWithTimeout(ctx context.Context) {
 	slog.Info("Stopping DNS resolver...")
 
-	// Use sync.Once to ensure channels are closed only once
-	var stopOnce sync.Once
-	stopOnce.Do(func() {
+	// Use struct field stopOnce to ensure channels are closed only once
+	r.stopOnce.Do(func() {
 		// Stop worker pool first
 		close(r.stopQueries)
 		close(r.queryQueue)
