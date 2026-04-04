@@ -430,8 +430,23 @@ func (r *Resolver) LookupIP(ctx context.Context, hostname string) ([]net.IP, err
 		ctx:      ctx,
 	}
 
-	select {
-	case r.queryQueue <- query:
+	// Safely enqueue with panic recovery (channel may be closed during shutdown)
+	var enqueued bool
+	func() {
+		defer func() {
+			if recover() != nil {
+				enqueued = false // Channel closed, fallback to sync
+			}
+		}()
+		select {
+		case r.queryQueue <- query:
+			enqueued = true
+		default:
+			enqueued = false // Queue full
+		}
+	}()
+
+	if enqueued {
 		// Successfully queued, wait for result
 		select {
 		case result := <-resultCh:
@@ -444,16 +459,16 @@ func (r *Resolver) LookupIP(ctx context.Context, hostname string) ([]net.IP, err
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-	default:
-		// Queue full, process synchronously as fallback
-		slog.Debug("DNS queue full, processing synchronously", "hostname", hostname)
-		ips, err := r.lookupIPUncached(ctx, hostname)
-		if err != nil {
-			return nil, err
-		}
-		r.setCached(hostname, ips)
-		return ips, nil
 	}
+
+	// Queue full or closed, process synchronously as fallback
+	slog.Debug("DNS queue unavailable, processing synchronously", "hostname", hostname)
+	ips, err := r.lookupIPUncached(ctx, hostname)
+	if err != nil {
+		return nil, err
+	}
+	r.setCached(hostname, ips)
+	return ips, nil
 }
 
 // LookupIPv4 performs DNS lookup for IPv4 addresses only (A records)

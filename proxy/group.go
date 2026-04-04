@@ -268,9 +268,17 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 		return g.proxies[idx], idx, nil
 
 	case RoundRobin:
-		// Atomic increment and get previous value
-		idx := int(atomic.AddInt32(&g.current, 1) - 1)
-		return g.proxies[idx%len(g.proxies)], idx % len(g.proxies), nil
+		// Try to find healthy proxy with round-robin
+		for attempt := 0; attempt < len(g.proxies); attempt++ {
+			// Atomic increment and get previous value
+			idx := int(atomic.AddInt32(&g.current, 1) - 1) % len(g.proxies)
+			if g.healthStatus[idx].Load() {
+				return g.proxies[idx], idx, nil
+			}
+		}
+		// All unhealthy, return first anyway
+		idx := int(atomic.LoadInt32(&g.current)) % len(g.proxies)
+		return g.proxies[idx], idx, nil
 
 	case LeastLoad:
 		// Find proxy with least active connections

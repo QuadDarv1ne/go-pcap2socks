@@ -149,7 +149,7 @@ func newRouteCache(maxSize int, ttl time.Duration) *routeCache {
 		ttl:     ttl,
 		keyPool: sync.Pool{
 			New: func() interface{} {
-				return make([]byte, 0, 64)
+				return make([]byte, 0, 128) // Increased to avoid reallocation for IPv6 keys
 			},
 		},
 	}
@@ -177,8 +177,11 @@ func (c *routeCache) get(key string) (string, bool) {
 }
 
 func (c *routeCache) set(key, outboundTag string) {
+	// Check if key already exists (don't increment size for updates)
+	_, exists := c.entries.Load(key)
+
 	// Check if we need eviction before adding
-	if c.size.Load() >= int32(c.maxSize) {
+	if !exists && c.size.Load() >= int32(c.maxSize) {
 		// Evict ~25% of entries when full
 		evicted := 0
 		target := c.maxSize / 4
@@ -197,7 +200,11 @@ func (c *routeCache) set(key, outboundTag string) {
 		outboundTag: outboundTag,
 		expiresAt:   time.Now().Add(c.ttl),
 	})
-	c.size.Add(1)
+
+	// Only increment size for new entries
+	if !exists {
+		c.size.Add(1)
+	}
 }
 
 func (c *routeCache) cleanup() {
@@ -362,12 +369,18 @@ func (r *Router) StartHealthChecks(interval time.Duration) {
 	})
 }
 
-// performHealthChecks performs health checks on all proxies
+// performHealthChecks performs health checks on all proxies with limited parallelism
 func (r *Router) performHealthChecks() {
+	// Limit parallel health checks to avoid resource exhaustion
+	const maxParallel = 10
+	sem := make(chan struct{}, maxParallel)
+
 	for tag, proxy := range r.Proxies {
 		// Check if proxy supports health checks
 		if healthChecker, ok := proxy.(interface{ CheckHealth() bool }); ok {
+			sem <- struct{}{} // Acquire semaphore
 			goroutine.SafeGo(func() {
+				defer func() { <-sem }() // Release semaphore
 				healthy := healthChecker.CheckHealth()
 				if healthy {
 					slog.Debug("Proxy health check passed", "proxy", tag)

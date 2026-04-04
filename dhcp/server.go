@@ -3,6 +3,7 @@ package dhcp
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"log/slog"
 	"net"
 	"runtime"
@@ -699,7 +700,12 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 			"old_ip", oldIPStr)
 	}
 
-	startIP := s.nextIP.Load().(net.IP)
+	startIPLoaded := s.nextIP.Load()
+	if startIPLoaded == nil {
+		s.allocMu.Unlock()
+		return nil, fmt.Errorf("DHCP nextIP not initialized")
+	}
+	startIP := startIPLoaded.(net.IP)
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -
 		binary.BigEndian.Uint32(s.config.FirstIP.To4()) + 1)
 
@@ -708,7 +714,11 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 		"max_attempts", maxAttempts)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		currentIP := s.nextIP.Load().(net.IP)
+		nextIPLoaded := s.nextIP.Load()
+		if nextIPLoaded == nil {
+			return nil, fmt.Errorf("DHCP nextIP became nil during allocation")
+		}
+		currentIP := nextIPLoaded.(net.IP)
 		ipStr := currentIP.String()
 
 		// Check if IP is reserved or already leased (O(1) with ipIndex)
