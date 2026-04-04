@@ -844,7 +844,9 @@ func (s *Server) cleanupLeases() {
 
 // cleanupRateLimitCache removes stale rate limit counters older than 5 minutes
 func (s *Server) cleanupRateLimitCache() {
-	ticker := time.NewTicker(5 * time.Minute)
+	const maxRequestCountEntries = 500 // Limit to prevent memory exhaustion
+
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -853,14 +855,42 @@ func (s *Server) cleanupRateLimitCache() {
 			now := time.Now().UnixNano()
 			windowNanos := int64(s.rateLimitWindow)
 
+			// Count and delete expired entries
+			deleted := 0
 			s.requestCount.Range(func(k, v any) bool {
 				counter := v.(*requestCounter)
 				if now-counter.resetTime.Load() > 5*windowNanos {
 					s.requestCount.Delete(k.(string))
+					deleted++
 				}
 				return true
 			})
-			slog.Debug("DHCP rate limit cache cleaned")
+
+			// If cache is still too large, delete oldest entries
+			if deleted == 0 {
+				count := 0
+				s.requestCount.Range(func(k, v any) bool {
+					count++
+					return true
+				})
+
+				if count > maxRequestCountEntries {
+					slog.Warn("DHCP requestCount cache too large, cleaning up oldest entries", "count", count)
+					// Simple cleanup: delete first N entries
+					cleaned := 0
+					s.requestCount.Range(func(k, v any) bool {
+						if cleaned < count-maxRequestCountEntries {
+							s.requestCount.Delete(k.(string))
+							cleaned++
+						}
+						return true
+					})
+				}
+			}
+
+			if deleted > 0 {
+				slog.Debug("DHCP rate limit cache cleaned", "deleted", deleted)
+			}
 		case <-s.stopChan:
 			return
 		}
