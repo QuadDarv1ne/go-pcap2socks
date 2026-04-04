@@ -44,6 +44,9 @@ type Hijacker struct {
 	// timeout for fake IP mappings
 	timeout time.Duration
 
+	// maxMappings limits the number of fake IP mappings (0 = unlimited)
+	maxMappings int
+
 	// upstream DNS servers for resolution
 	upstreamServers []string
 
@@ -70,6 +73,7 @@ type fakeIPMapping struct {
 type HijackerConfig struct {
 	UpstreamServers []string
 	Timeout         time.Duration
+	MaxMappings     int // Maximum number of fake IP mappings (0 = unlimited)
 	Logger          *slog.Logger
 }
 
@@ -89,6 +93,7 @@ func NewHijacker(cfg HijackerConfig) *Hijacker {
 		domainToFake:    make(map[string]fakeIPMapping),
 		fakeToDomain:    make(map[netip.Addr]string),
 		timeout:         timeout,
+		maxMappings:     cfg.MaxMappings,
 		upstreamServers: cfg.UpstreamServers,
 		logger:          logger,
 		stopCh:          make(chan struct{}),
@@ -128,6 +133,29 @@ func (h *Hijacker) allocateFakeIPLocked() netip.Addr {
 	ip, _ := netip.ParseAddr(ipStr)
 	h.ipCounter = (h.ipCounter + 1) % FakeIPRangeSize
 	return ip
+}
+
+// evictOldestMappingLocked removes the oldest mapping by creation time
+// Must be called with h.mu.Lock() held
+func (h *Hijacker) evictOldestMappingLocked() {
+	var oldestDomain string
+	var oldestTime time.Time
+
+	// Find oldest mapping
+	for domain, mapping := range h.domainToFake {
+		if oldestDomain == "" || mapping.createdAt.Before(oldestTime) {
+			oldestDomain = domain
+			oldestTime = mapping.createdAt
+		}
+	}
+
+	// Remove oldest mapping
+	if oldestDomain != "" {
+		mapping := h.domainToFake[oldestDomain]
+		delete(h.domainToFake, oldestDomain)
+		delete(h.fakeToDomain, mapping.ip)
+		h.mappingsExpired++
+	}
 }
 
 // InterceptDNS processes a DNS query and returns a fake IP for A/AAAA records
@@ -170,6 +198,12 @@ func (h *Hijacker) InterceptDNS(query []byte) ([]byte, bool) {
 
 	// Allocate new fake IP and store mapping atomically (prevents race)
 	h.mu.Lock()
+
+	// Evict oldest mappings if at capacity (prevent memory growth)
+	if h.maxMappings > 0 && len(h.domainToFake) >= h.maxMappings {
+		h.evictOldestMappingLocked()
+	}
+
 	fakeIP := h.allocateFakeIPLocked()
 	h.domainToFake[domain] = fakeIPMapping{
 		ip:        fakeIP,

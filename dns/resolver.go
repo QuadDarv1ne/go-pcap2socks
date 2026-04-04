@@ -1319,12 +1319,24 @@ func (r *Resolver) setCached(hostname string, ips []net.IP) {
 		Original: ips,
 		Expires:  time.Now().Add(r.cacheTTL),
 	}
+
+	// Rebuild insertOrder if it was cleared by eviction
+	if r.insertOrder == nil {
+		r.rebuildInsertOrder()
+	}
 	r.insertOrder = append(r.insertOrder, hostname)
 
 	// Bound insertOrder size to prevent memory growth
-	// Clean up entries that no longer exist in cache
 	if len(r.insertOrder) > r.cacheSize*2 {
 		r.compactInsertOrder()
+	}
+}
+
+// rebuildInsertOrder rebuilds insertOrder from current cache entries
+func (r *Resolver) rebuildInsertOrder() {
+	r.insertOrder = make([]string, 0, len(r.cache))
+	for hostname := range r.cache {
+		r.insertOrder = append(r.insertOrder, hostname)
 	}
 }
 
@@ -1339,18 +1351,19 @@ func (r *Resolver) compactInsertOrder() {
 	r.insertOrder = newOrder
 }
 
-// evictOldest evicts the oldest cache entry in O(1)
+// evictOldest evicts the oldest cache entry
+// Optimized: rebuild insertOrder lazily instead of expensive slice operations
 func (r *Resolver) evictOldest() {
 	if len(r.insertOrder) == 0 {
 		return
 	}
 
-	// Find first entry that still exists in cache
-	for i, hostname := range r.insertOrder {
+	// Find first valid entry and evict it
+	for _, hostname := range r.insertOrder {
 		if _, exists := r.cache[hostname]; exists {
 			delete(r.cache, hostname)
-			// Remove from insertOrder
-			r.insertOrder = append(r.insertOrder[:i], r.insertOrder[i+1:]...)
+			// Mark insertOrder for rebuild instead of expensive slice removal
+			r.insertOrder = nil
 			return
 		}
 	}

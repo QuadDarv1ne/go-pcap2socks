@@ -139,19 +139,12 @@ func (ct *ConnTracker) GetUDPStats() (active int32, total, dropped uint64) {
 }
 
 // CreateTCP создает новую TCP запись, устанавливает SOCKS5 соединение и запускает реле
+// Optimized: create TCPConn before lock to minimize lock hold time
 func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCPConn, error) {
 	k := ct.tcpKey(meta.SourceIP, meta.SourcePort, meta.DestIP, meta.DestPort)
 
-	ct.mu.Lock()
-	// Check if connection already exists
-	if _, exists := ct.tcpConns[k]; exists {
-		ct.mu.Unlock()
-		ct.droppedTCP.Add(1)
-		return nil, fmt.Errorf("connection already tracked")
-	}
-
+	// Create TCPConn before lock to avoid blocking other goroutines during allocation
 	ctx, cancel := context.WithCancel(parentCtx)
-
 	tc := &TCPConn{
 		Meta:         meta,
 		ctx:          ctx,
@@ -161,6 +154,21 @@ func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCP
 		lastActivity: atomic.Int64{},
 	}
 	tc.lastActivity.Store(time.Now().Unix())
+
+	ct.mu.Lock()
+	// Check if connection already exists
+	if _, exists := ct.tcpConns[k]; exists {
+		ct.mu.Unlock()
+		// Clean up the TCPConn we created
+		tc.closeOnce.Do(func() {
+			tc.closed.Store(true)
+			tc.cancel()
+			close(tc.ToProxy)
+			close(tc.FromProxy)
+		})
+		ct.droppedTCP.Add(1)
+		return nil, fmt.Errorf("connection already tracked")
+	}
 
 	ct.tcpConns[k] = tc
 	ct.activeTCP.Add(1)
@@ -238,19 +246,12 @@ func drainChannel(ch <-chan []byte) {
 }
 
 // CreateUDP создает новую UDP сессию
+// Optimized: create UDPConn before lock to minimize lock hold time
 func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDPConn, error) {
 	k := ct.udpKey(meta.SourceIP, meta.SourcePort, meta.DestIP, meta.DestPort)
 
-	ct.mu.Lock()
-	// Check if session already exists
-	if _, exists := ct.udpConns[k]; exists {
-		ct.mu.Unlock()
-		ct.droppedUDP.Add(1)
-		return nil, fmt.Errorf("UDP session already tracked")
-	}
-
+	// Create UDPConn before lock to avoid blocking other goroutines during allocation
 	ctx, cancel := context.WithCancel(parentCtx)
-
 	uc := &UDPConn{
 		Meta:         meta,
 		ctx:          ctx,
@@ -260,6 +261,21 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 		lastActivity: atomic.Int64{},
 	}
 	uc.lastActivity.Store(time.Now().Unix())
+
+	ct.mu.Lock()
+	// Check if session already exists
+	if _, exists := ct.udpConns[k]; exists {
+		ct.mu.Unlock()
+		// Clean up the UDPConn we created
+		uc.closeOnce.Do(func() {
+			uc.closed.Store(true)
+			uc.cancel()
+			close(uc.ToProxy)
+			close(uc.FromProxy)
+		})
+		ct.droppedUDP.Add(1)
+		return nil, fmt.Errorf("UDP session already tracked")
+	}
 
 	ct.udpConns[k] = uc
 	ct.activeUDP.Add(1)
