@@ -600,8 +600,8 @@ func (s *ServerV6) createAdvertise(request *DHCPv6Message, ipv6 net.IP, clientID
 		if ok {
 			iaid := binary.BigEndian.Uint32(iana[0:4])
 
-			// Build IA Address option
-			iaAddr := make([]byte, 24)
+			// Build IA Address option (4 IAID + 16 IPv6 + 4 Preferred + 4 Lease = 28 bytes)
+			iaAddr := make([]byte, 28)
 			binary.BigEndian.PutUint32(iaAddr[0:], iaid)
 			copy(iaAddr[4:20], ipv6.To16())
 			binary.BigEndian.PutUint32(iaAddr[20:], uint32(s.config.PreferredTime/time.Second))

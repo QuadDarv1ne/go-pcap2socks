@@ -138,6 +138,9 @@ type Resolver struct {
 
 	// Insert order tracking for O(1) eviction
 	insertOrder []string
+
+	// Shutdown protection
+	stopOnce sync.Once
 }
 
 // resolverMetrics holds DNS resolver metrics
@@ -520,7 +523,10 @@ func (r *Resolver) StartPrefetch() {
 
 // StopPrefetch stops the prefetch goroutine
 func (r *Resolver) StopPrefetch() {
-	close(r.stopPrefetch)
+	// Use stopOnce to prevent double-close panic
+	r.stopOnce.Do(func() {
+		close(r.stopPrefetch)
+	})
 	r.prefetchWG.Wait()
 	slog.Info("DNS prefetch stopped")
 }
@@ -559,7 +565,7 @@ func (r *Resolver) StopWithTimeout(ctx context.Context) {
 		slog.Info("DNS worker pool stopped")
 	}
 
-	// Stop prefetch
+	// Stop prefetch (safe to call multiple times due to stopOnce)
 	r.StopPrefetch()
 
 	// Save cache to disk before clearing
