@@ -649,27 +649,34 @@ func (hc *HealthChecker) triggerRecovery(ctx context.Context, failedProbes []Pro
 	slog.Info("Starting network recovery", "failed_probes", len(failedProbes))
 	hc.totalRecoveries.Add(1)
 
-	// Call recovery handler
-	hc.onRecoveryNeeded()
+	// Run recovery in background to avoid blocking health check loop
+	goroutine.SafeGo(func() {
+		// Call recovery handler
+		hc.onRecoveryNeeded()
 
-	// Wait a bit for recovery to complete
-	time.Sleep(5 * time.Second)
-
-	// Run checks again to verify recovery
-	hc.runChecks(ctx)
-
-	// Check if recovery was successful
-	if hc.consecutiveFailures.Load() == 0 {
-		if hc.onRecoveryComplete != nil {
-			hc.onRecoveryComplete(nil)
+		// Wait a bit for recovery to complete
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			return
 		}
-		slog.Info("Network recovery completed successfully")
-	} else {
-		if hc.onRecoveryComplete != nil {
-			hc.onRecoveryComplete(fmt.Errorf("recovery incomplete, probes still failing"))
+
+		// Run checks again to verify recovery
+		hc.runChecks(ctx)
+
+		// Check if recovery was successful
+		if hc.consecutiveFailures.Load() == 0 {
+			if hc.onRecoveryComplete != nil {
+				hc.onRecoveryComplete(nil)
+			}
+			slog.Info("Network recovery completed successfully")
+		} else {
+			if hc.onRecoveryComplete != nil {
+				hc.onRecoveryComplete(fmt.Errorf("recovery incomplete, probes still failing"))
+			}
+			slog.Warn("Network recovery incomplete, some probes still failing")
 		}
-		slog.Warn("Network recovery incomplete, some probes still failing")
-	}
+	})
 }
 
 // GetStats returns health checker statistics with backoff details
