@@ -1,53 +1,98 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, двадцать седьмая волна)
+## Статус проекта (04.04.2026, двадцать восьмая волна)
 
-**Ветка:** `dev` (текущая, есть несохранённые изменения)
+**Ветка:** `main` (синхронизирована с dev и remote)
 
 **Последние изменения:**
-- ✅ **ДВАДЦАТЬ СЕДЬМАЯ ВОЛНА** (04.04.2026, перепроверка и улучшения)
-- ✅ **НОВЫЙ МОДУЛЬ**: `recovery.go` — автоматическое восстановление с exponential backoff
-- ✅ **НОВЫЙ МОДУЛЬ**: `app/application.go` — lifecycle management
-- ✅ **НОВЫЙ МОДУЛЬ**: `validation/validator.go` — ValidateProfiles
-- 🔄 **main.go** — обновлён panic handler для использования recovery с backoff
-- 🔄 **Удалены** устаревшие profile файлы из `api/profiles/` и `profiles/profiles/`
+- ✅ **ДВАДЦАТЬ ВОСЬМАЯ ВОЛНА** (04.04.2026, глубокий аудит и исправления)
+- ✅ **Proxy Router**: исправлен routeCache.set, ограничен параллелизм health checks
+- ✅ **Proxy Group**: RoundRobin теперь проверяет healthStatus
+- ✅ **DNS Resolver**: добавлена защита от closed channel panic
+- ✅ **DHCP Server**: добавлены nil проверки для nextIP
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ есть несохранённые изменения (recovery.go, app/, validation/, main.go, удалены profiles)
-main: ❌ требует синхронизации
+dev:  ✅ 0984cad — синхронизирована с origin/dev
+main: ✅ 276c71f — синхронизирована с origin/main (merge dev)
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
 
 ---
 
-## 🔍 Текущие несохранённые изменения
+## ✅ Результаты двадцать восьмой волны (04.04.2026)
 
-### 1. `recovery.go` — НОВЫЙ ФАЙЛ
-**Назначение:** Автоматическое восстановление приложения после panic с exponential backoff
+### Исправленные проблемы:
 
-**Функционал:**
-- Exponential backoff: 5s → 10s → 20s → 40s → 60s (cap)
-- Лимит перезапусков: 5 попыток
-- Stability threshold: сброс счётчика после 5 минут стабильной работы
-- Сохранение состояния в `recovery_state.json`
-- Уведомление пользователя при исчерпании лимита
-- Интеграция с `_gracefulCtx` для отмены при shutdown
+| # | Проблема | Файл | Изменение | Статус |
+|---|----------|------|-----------|--------|
+| 1 | routeCache.size инкремент при перезаписи | `proxy/router.go` | Проверка exists перед increment | ✅ ИСПРАВЛЕНО |
+| 2 | RoundRobin не проверял healthStatus | `proxy/group.go` | Цикл поиска здорового прокси | ✅ ИСПРАВЛЕНО |
+| 3 | Неограниченный параллелизм health checks | `proxy/router.go` | Semaphore maxParallel=10 | ✅ ИСПРАВЛЕНО |
+| 4 | sync.Pool buffer слишком мал (64B) | `proxy/router.go` | Увеличен до 128 байт | ✅ ИСПРАВЛЕНО |
+| 5 | LookupIP panic при закрытом queryQueue | `dns/resolver.go` | Panic recovery + fallback | ✅ ИСПРАВЛЕНО |
+| 6 | DHCP allocateIP nil pointer panic | `dhcp/server.go` | Nil проверка nextIP.Load() | ✅ ИСПРАВЛЕНО |
 
-**Статус:** ✅ ГОТОВО, требует коммита
+### Детали изменений:
 
-### 2. `app/application.go` — НОВЫЙ ФАЙЛ
-**Назначение:** Управление жизненным циклом приложения
+**proxy/router.go:**
+- `routeCache.set()`: проверка `_, exists := c.entries.Load(key)` перед increment
+- `newRouteCache()`: buffer size 64 → 128 байт
+- `performHealthChecks()`: semaphore `make(chan struct{}, 10)` для ограничения параллелизма
 
-**Функционал:**
-- Инициализация всех компонентов (Config, DI, Stats, Health, UPnP, API)
-- Graceful shutdown с таймаутами
-- Context-based управление
-- Callback для network recovery
+**proxy/group.go:**
+- `selectProxy() RoundRobin`: цикл `for attempt := 0; attempt < len(g.proxies)` с проверкой healthStatus
+- Fallback на первый прокси если все нездоровы
 
-**Статус:** ✅ ГОТОВО, требует коммита
+**dns/resolver.go:**
+- `LookupIP()`: обёртка с `defer func() { if recover() != nil { enqueued = false } }()`
+- Fallback на `lookupIPUncached` при закрытом канале
+
+**dhcp/server.go:**
+- `allocateIP()`: `startIPLoaded := s.nextIP.Load()` + nil проверка перед type assertion
+- Цикл: `nextIPLoaded := s.nextIP.Load()` + nil проверка
+- Добавлен `fmt` в импорты
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
+
+### Коммиты:
+
+1. `0984cad` — fix: улучшить стабильность proxy, DNS и DHCP (28-я волна)
+2. `276c71f` (main) — merge: синхронизация dev в main
+
+---
+
+## 🔍 Полный аудит (28-я волна)
+
+### Проверенные компоненты:
+
+| Компонент | Файлы | Проблемы | Статус |
+|-----------|-------|----------|--------|
+| **Proxy Router** | `proxy/router.go` | 3 исправлено | ✅ ГОТОВ |
+| **Proxy Group** | `proxy/group.go` | 1 исправлено | ✅ ГОТОВ |
+| **DNS Resolver** | `dns/resolver.go` | 1 исправлено | ✅ ГОТОВ |
+| **DHCP Server** | `dhcp/server.go` | 1 исправлено | ✅ ГОТОВ |
+| **SOCKS5 Proxy** | `proxy/socks5.go` | 0 критичных | ✅ ГОТОВ |
+| **ConnTracker** | `core/conntrack.go` | Исправлено в 27-й | ✅ ГОТОВ |
+| **DNS Hijacker** | `dns/hijacker.go` | Исправлено в 27-й | ✅ ГОТОВ |
+| **Recovery** | `recovery.go` | 0 проблем | ✅ ГОТОВ |
+| **Validation** | `validation/validator.go` | Исправлено в 27-й | ✅ ГОТОВ |
+
+### Оставшиеся проблемы (некритичные):
+
+| # | Проблема | Файл | Приоритет | Описание |
+|---|----------|------|-----------|----------|
+| 1 | UDP association 5 min timeout | `proxy/socks5.go:216` | 🟡 Средний | Конфигурируемый таймаут |
+| 2 | sync.Pool variable sizes | `proxy/router.go:150` | 🟢 Низкий | Буферы могут быть >128B |
+| 3 | Health checks TOCTOU | `proxy/group.go` | 🟢 Низкий | Есть recovery при fail |
+
+---
 
 ### 3. `validation/validator.go` — ОБНОВЛЁН
 **Изменения:**
