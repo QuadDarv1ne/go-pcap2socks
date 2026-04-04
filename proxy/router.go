@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/bandwidth"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
@@ -256,8 +255,8 @@ func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dst
 	buf = append(buf, ':')
 	buf = strconv.AppendUint(buf, uint64(dstPort), 10)
 
-	// Convert to string using unsafe to avoid copy
-	result := unsafe.String(unsafe.SliceData(buf), len(buf))
+	// Convert to string (safe copy - buffer returned to pool)
+	result := string(buf)
 
 	// Return buffer to pool for reuse
 	// Reset length but keep capacity for next use

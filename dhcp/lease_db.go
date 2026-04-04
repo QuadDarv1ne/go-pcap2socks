@@ -106,8 +106,13 @@ func (db *LeaseDB) Load() error {
 // SetLease sets or updates a lease
 // Optimized with sync.Map Store for lock-free update
 func (db *LeaseDB) SetLease(lease *DHCPLease) {
-	db.leases.Store(lease.MAC.String(), lease)
-	db.leaseCount.Add(1)
+	macStr := lease.MAC.String()
+	// Check if lease already exists (don't increment count for updates)
+	_, exists := db.leases.Load(macStr)
+	db.leases.Store(macStr, lease)
+	if !exists {
+		db.leaseCount.Add(1)
+	}
 	db.dirty.Store(true)
 
 	// Trigger async save
