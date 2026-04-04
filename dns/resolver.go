@@ -366,7 +366,7 @@ func (r *Resolver) resolveWithServer(ctx context.Context, domain, server string)
 	var firstErr error
 
 	wg.Add(2)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer wg.Done()
 		ips, err := r.queryDNS(ctx, domain, server, 1) // A record
 		mu.Lock()
@@ -376,8 +376,8 @@ func (r *Resolver) resolveWithServer(ctx context.Context, domain, server string)
 		} else if firstErr == nil {
 			firstErr = err
 		}
-	}()
-	go func() {
+	})
+	goroutine.SafeGo(func() {
 		defer wg.Done()
 		ips, err := r.queryDNS(ctx, domain, server, 28) // AAAA record
 		mu.Lock()
@@ -387,7 +387,7 @@ func (r *Resolver) resolveWithServer(ctx context.Context, domain, server string)
 		} else if firstErr == nil {
 			firstErr = err
 		}
-	}()
+	})
 	wg.Wait()
 
 	if len(allIPs) > 0 {
@@ -547,10 +547,10 @@ func (r *Resolver) StopWithTimeout(ctx context.Context) {
 
 	// Wait for workers to finish with timeout
 	workersDone := make(chan struct{})
-	go func() {
+	goroutine.SafeGo(func() {
 		r.queryWg.Wait()
 		close(workersDone)
-	}()
+	})
 
 	select {
 	case <-ctx.Done():
@@ -763,10 +763,13 @@ func (r *Resolver) checkExpiringCache() {
 	}
 	r.cacheMu.RUnlock()
 
-	// Prefetch expiring entries
+	// Prefetch expiring entries in background
 	for _, hostname := range toPrefetch {
-		slog.Debug("DNS prefetch triggered", "hostname", hostname)
-		r.doPrefetch(hostname)
+		h := hostname // capture loop variable
+		slog.Debug("DNS prefetch triggered", "hostname", h)
+		goroutine.SafeGo(func() {
+			r.doPrefetch(h)
+		})
 	}
 }
 
@@ -818,7 +821,8 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 
 	// Query regular DNS servers in parallel
 	for _, server := range servers {
-		go func(srv string) {
+		srv := server // capture loop variable
+		goroutine.SafeGo(func() {
 			var allIPs []net.IP
 			// Query both A and AAAA records in parallel
 			var wg sync.WaitGroup
@@ -826,7 +830,7 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 			var firstErr error
 
 			wg.Add(2)
-			go func() {
+			goroutine.SafeGo(func() {
 				defer wg.Done()
 				ips, err := r.queryDNS(ctx, hostname, srv, 1) // A record
 				mu.Lock()
@@ -836,8 +840,8 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 				} else if firstErr == nil {
 					firstErr = err
 				}
-			}()
-			go func() {
+			})
+			goroutine.SafeGo(func() {
 				defer wg.Done()
 				ips, err := r.queryDNS(ctx, hostname, srv, 28) // AAAA record
 				mu.Lock()
@@ -847,19 +851,20 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 				} else if firstErr == nil {
 					firstErr = err
 				}
-			}()
+			})
 			wg.Wait()
 
 			resultCh <- serverResult{ips: allIPs, err: firstErr}
-		}(server)
+		})
 	}
 
 	// Query DoH servers in parallel
 	for _, dohServer := range r.dohServers {
-		go func(srv string) {
+		srv := dohServer // capture loop variable
+		goroutine.SafeGo(func() {
 			ips, err := r.queryDoH(ctx, hostname, srv)
 			resultCh <- serverResult{ips: ips, err: err}
-		}(dohServer)
+		})
 	}
 
 	// Collect results with timeout
@@ -1165,25 +1170,25 @@ func (r *Resolver) Benchmark(ctx context.Context) []BenchmarkResult {
 	// Test DNS servers
 	for _, server := range r.servers {
 		wg.Add(1)
-		go func(server string) {
+		goroutine.SafeGo(func() {
 			defer wg.Done()
 			result := r.benchmarkServer(ctx, server, "udp")
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
-		}(server)
+		})
 	}
 
 	// Test DoH servers
 	for _, server := range r.dohServers {
 		wg.Add(1)
-		go func(server string) {
+		goroutine.SafeGo(func() {
 			defer wg.Done()
 			result := r.benchmarkDoH(ctx, server)
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
-		}(server)
+		})
 	}
 
 	wg.Wait()
@@ -1309,6 +1314,23 @@ func (r *Resolver) setCached(hostname string, ips []net.IP) {
 		Expires:  time.Now().Add(r.cacheTTL),
 	}
 	r.insertOrder = append(r.insertOrder, hostname)
+
+	// Bound insertOrder size to prevent memory growth
+	// Clean up entries that no longer exist in cache
+	if len(r.insertOrder) > r.cacheSize*2 {
+		r.compactInsertOrder()
+	}
+}
+
+// compactInsertOrder removes entries from insertOrder that no longer exist in cache
+func (r *Resolver) compactInsertOrder() {
+	newOrder := make([]string, 0, r.cacheSize)
+	for _, hostname := range r.insertOrder {
+		if _, exists := r.cache[hostname]; exists {
+			newOrder = append(newOrder, hostname)
+		}
+	}
+	r.insertOrder = newOrder
 }
 
 // evictOldest evicts the oldest cache entry in O(1)

@@ -200,13 +200,18 @@ func (p *Pool) Submit(data []byte, result chan<- ProcessResult) bool {
 		return false
 	}
 
-	// Check queue size to prevent memory exhaustion
-	if p.queueSize.Load() >= int32(p.maxQueue) {
-		p.dropped.Add(1)
-		return false
+	// Atomically check queue size and increment to prevent race conditions
+	for {
+		current := p.queueSize.Load()
+		if current >= int32(p.maxQueue) {
+			p.dropped.Add(1)
+			return false
+		}
+		if p.queueSize.CompareAndSwap(current, current+1) {
+			break
+		}
+		// CAS failed, retry
 	}
-
-	p.queueSize.Add(1)
 
 	// Get buffer from pool for zero-copy
 	buf := p.packetPool.Get().([]byte)
