@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/miekg/dns"
 )
 
@@ -90,7 +91,7 @@ func NewHijacker(cfg HijackerConfig) *Hijacker {
 	}
 
 	// Start cleanup goroutine
-	go h.cleanupExpired()
+	goroutine.SafeGo(h.cleanupExpired)
 
 	return h
 }
