@@ -377,14 +377,32 @@ func parseDNSQueryHostname(query []byte) (string, error) {
 
 // buildDNSResponse builds a DNS response from query and IPs
 // Optimized with buffer pool for reduced allocations
+// Fixed: check query size and use appropriately sized buffer
 func buildDNSResponse(query []byte, ips []net.IP) ([]byte, error) {
 	if len(query) < 12 {
 		return nil, fmt.Errorf("query too short")
 	}
 
-	// Use buffer pool for efficient memory management
-	buf := buffer.Get(buffer.SmallBufferSize)
-	defer buffer.Put(buf)
+	// Calculate required buffer size: header + question + answers
+	// Header: 12 bytes, Question: len(query) - 12 bytes
+	// Each A record: ~16 bytes (name ptr + type + class + TTL + len + IP)
+	answerSize := len(ips) * 16
+	requiredSize := 12 + (len(query) - 12) + answerSize
+
+	// Use buffer pool if small enough, otherwise allocate directly
+	var buf []byte
+	var pooled bool
+	if requiredSize <= buffer.SmallBufferSize {
+		buf = buffer.Get(buffer.SmallBufferSize)
+		pooled = true
+	} else {
+		buf = make([]byte, 0, requiredSize)
+	}
+
+	// Use deferred put/clone based on allocation method
+	if pooled {
+		defer buffer.Put(buf)
+	}
 
 	// Copy header (12 bytes)
 	copy(buf, query[:12])
