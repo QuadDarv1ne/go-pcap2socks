@@ -1,22 +1,28 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, двадцать первая волна исправлений)
+## Статус проекта (04.04.2026, двадцать вторая волна проверок)
 
 **Ветка:** `dev` (текущая, синхронизирована с main)
 
 **Последние изменения:**
-- ✅ **ДВАДЦАТЬ ПЕРВАЯ ВОЛНА** (04.04.2026, исправление реальных багов)
-- ✅ **ИСПРАВЛЕНО**: DHCPv6 buffer race → copy data before goroutine
-- ✅ **ИСПРАВЛЕНО**: DNS resolver double close → использовать r.stopOnce field
-- ✅ **ИСПРАВЛЕНО**: DHCP ipIndex IP leak → удалять старый IP при realloc
-- ✅ **ИСПРАВЛЕНО**: Smart DHCP IP leak → cleanup старого IP
+- ✅ **ДВАДЦАТЬ ВТОРАЯ ВОЛНА** (04.04.2026, полный анализ + мелкие исправления)
+- ✅ **ИСПРАВЛЕНО**: connpool isConnectionAlive → уменьшен deadline до 1ms (minimize data consumption)
+- ✅ **ДОКУМЕНТИРОВАНО**: SafeGoWithRetry limitation (zombie goroutines при timeout)
+- ✅ **АНАЛИЗ**: полный аудит проекта, найдено 3 критических, 6 серьёзных, 9 минорных проблем
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ ecc04df — синхронизирована с origin/dev
-main: ✅ a0d5ce7 — синхронизирована с origin/main (merge dev)
+dev:  ✅ 767d488 — синхронизирована с origin/dev
+main: ✅ 726c0f2 — синхронизирована с origin/main (merge dev)
 ```
+
+**Оставшиеся проблемы (не критично для текущей работы):**
+- 🟠 proxy/socks5.go DialContext connection pool race (сложное исправление)
+- 🟠 UDP Dial без circuit breaker
+- 🟡 conntrack Stop goto forceClose leak
+- 🟡 dhcp requestCount memory leak
+- 🟡 buffer pool double-put detection
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
 
