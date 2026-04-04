@@ -261,7 +261,7 @@ func restartAsAdmin() error {
 }
 
 func main() {
-	// Recover from panics and log stack trace
+	// Setup automatic recovery with exponential backoff and restart limits
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
@@ -275,19 +275,10 @@ func main() {
 				panicFile.Close()
 			}
 
-			// Wait 5 seconds and restart
-			slog.Info("Attempting automatic restart after panic...")
-			time.Sleep(5 * time.Second)
-
-			// Restart self
-			executable, _ := os.Executable()
-			cmd := exec.Command(executable, os.Args[1:]...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Start(); err != nil {
-				slog.Error("Failed to restart after panic", "err", err)
-			} else {
-				os.Exit(0)
+			// Enhanced recovery with exponential backoff and restart limits
+			if err := handleRecoveryWithBackoff(r, stack); err != nil {
+				slog.Error("Recovery failed, giving up", "err", err)
+				os.Exit(1)
 			}
 		}
 	}()
@@ -504,6 +495,13 @@ func main() {
 		return
 	}
 	slog.Info("Config validation passed")
+
+	// Validate profiles directory
+	if err := validation.ValidateProfiles("profiles"); err != nil {
+		slog.Warn("Profiles validation warning", "err", err)
+	} else {
+		slog.Info("Profiles validation passed")
+	}
 
 	// Initialize hot config reload
 	initConfigReload(cfgFile)

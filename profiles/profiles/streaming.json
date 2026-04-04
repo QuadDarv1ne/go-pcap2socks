@@ -1,9 +1,0 @@
-{
-  "config": {
-    "pcap": {
-      "mtu": 1500
-    }
-  },
-  "description": "Optimized for streaming with high bandwidth",
-  "name": "Streaming"
-}

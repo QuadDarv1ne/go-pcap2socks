@@ -1,9 +1,0 @@
-{
-  "config": {
-    "pcap": {
-      "mtu": 1472
-    }
-  },
-  "description": "Optimized for gaming with low latency",
-  "name": "Gaming"
-}

@@ -38,6 +38,9 @@ type Hijacker struct {
 	// fakeToDomain maps fake IP -> domain
 	fakeToDomain map[netip.Addr]string
 
+	// stopOnce protects stopCh from being closed multiple times
+	stopOnce sync.Once
+
 	// ipCounter tracks the next available fake IP
 	ipCounter uint8
 
@@ -332,8 +335,10 @@ func (h *Hijacker) cleanupExpired() {
 
 // Stop gracefully stops the DNS hijacker cleanup goroutine
 func (h *Hijacker) Stop() {
-	close(h.stopCh)
-	h.logger.Info("DNS hijacker stopping")
+	h.stopOnce.Do(func() {
+		close(h.stopCh)
+		h.logger.Info("DNS hijacker stopping")
+	})
 }
 
 // GetStats returns hijacker statistics
