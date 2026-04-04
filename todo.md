@@ -1,20 +1,21 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, двадцатая волна исправлений)
+## Статус проекта (04.04.2026, двадцать первая волна исправлений)
 
 **Ветка:** `dev` (текущая, синхронизирована с main)
 
 **Последние изменения:**
-- ✅ **ДВАДЦАТАЯ ВОЛНА** (04.04.2026, исправление goroutine leaks и blocking)
-- ✅ **ИСПРАВЛЕНО**: DHCP worker blocking на shutdown → stopChan check при response
-- ✅ **ИСПРАВЛЕНО**: DNS LookupIP hardcoded 2s timeout → используем ctx.Done()
-- ✅ **ИСПРАВЛЕНО**: DNS lookupIPUncached goroutine leak → cancel() при первом результате
+- ✅ **ДВАДЦАТЬ ПЕРВАЯ ВОЛНА** (04.04.2026, исправление реальных багов)
+- ✅ **ИСПРАВЛЕНО**: DHCPv6 buffer race → copy data before goroutine
+- ✅ **ИСПРАВЛЕНО**: DNS resolver double close → использовать r.stopOnce field
+- ✅ **ИСПРАВЛЕНО**: DHCP ipIndex IP leak → удалять старый IP при realloc
+- ✅ **ИСПРАВЛЕНО**: Smart DHCP IP leak → cleanup старого IP
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ 9398723 — синхронизирована с origin/dev
-main: ✅ 7abc1d1 — синхронизирована с origin/main (merge dev)
+dev:  ✅ ecc04df — синхронизирована с origin/dev
+main: ✅ a0d5ce7 — синхронизирована с origin/main (merge dev)
 ```
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
