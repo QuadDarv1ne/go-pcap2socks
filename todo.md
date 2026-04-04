@@ -1,19 +1,18 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, двадцать третья волна исправлений)
+## Статус проекта (04.04.2026, двадцать четвёртая волна исправлений)
 
 **Ветка:** `dev` (текущая, синхронизирована с main)
 
 **Последние изменения:**
-- ✅ **ДВАДЦАТЬ ТРЕТЬЯ ВОЛНА** (04.04.2026, circuit breaker и DNS buffer fix)
-- ✅ **ИСПРАВЛЕНО**: UDP Dial без circuit breaker → добавлена защита как для TCP
-- ✅ **ИСПРАВЛЕНО**: DNS buildDNSResponse buffer overflow → dynamic buffer sizing
+- ✅ **ДВАДЦАТЬ ЧЕТВЁРТАЯ ВОЛНА** (04.04.2026, исправление SOCKS5 connection pool race)
+- ✅ **ИСПРАВЛЕНО**: SOCKS5 DialContext connection pool double-use → pooledConn wrapper с sync.Once
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ a7b5ad6 — синхронизирована с origin/dev
-main: ✅ 45b377a — синхронизирована с origin/main (merge dev)
+dev:  ✅ bc6dd55 — синхронизирована с origin/dev
+main: ✅ bd362e7 — синхронизирована с origin/main (merge dev)
 ```
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
