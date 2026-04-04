@@ -266,10 +266,10 @@ func (m *ARPMonitor) notifyChange(change DeviceChange) {
 		select {
 		case m.cbLimit <- struct{}{}:
 			// Slot acquired, run callback
-			go func(callback func(DeviceChange)) {
+			goroutine.SafeGo(func() {
 				defer func() { <-m.cbLimit }() // Release slot
-				callback(change)
-			}(cb)
+				cb(change)
+			})
 		default:
 			// Too many concurrent callbacks, skip this one
 		}

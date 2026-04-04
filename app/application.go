@@ -13,6 +13,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/di"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/health"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/i18n"
@@ -103,11 +104,11 @@ func (a *Application) Run() error {
 
 	// Start API server
 	if a.APIServer != nil {
-		go func() {
+		goroutine.SafeGo(func() {
 			if err := a.APIServer.Start(); err != nil && err != http.ErrServerClosed {
 				slog.Error("API server failed", "err", err)
 			}
-		}()
+		})
 		slog.Info("API server started")
 	}
 

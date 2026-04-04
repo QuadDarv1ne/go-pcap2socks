@@ -10,6 +10,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // DHCPv6 message types (RFC 8415)
@@ -314,10 +316,10 @@ func (s *ServerV6) serve(ctx context.Context) {
 
 		select {
 		case s.handlerSem <- struct{}{}:
-			go func() {
+			goroutine.SafeGo(func() {
 				defer func() { <-s.handlerSem }()
 				s.handleMessage(ctx, dataCopy, clientAddr)
-			}()
+			})
 		default:
 			slog.Debug("DHCPv6 handler pool full, dropping message")
 		}

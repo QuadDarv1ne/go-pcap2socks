@@ -347,11 +347,12 @@ func process() {
 	for i := 0; i < minWorkerPoolSize; i++ {
 		wg.Add(1)
 		_workerCount.Add(1)
-		go func(workerID int) {
+		workerID := i
+		goroutine.SafeGo(func() {
 			defer wg.Done()
 			defer _workerCount.Add(-1)
 			worker(ctx, workerID)
-		}(i)
+		})
 	}
 
 	<-ctx.Done()
