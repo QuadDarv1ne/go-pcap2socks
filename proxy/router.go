@@ -5,6 +5,7 @@ package proxy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"strconv"
@@ -632,7 +633,36 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, err
 	}
 
-	// Dial using selected proxy
+	// Use circuit breaker for UDP dial if available
+	if d.circuitBreaker != nil {
+		var conn net.PacketConn
+		cbErr := d.circuitBreaker.Execute(context.Background(), func() error {
+			if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
+				c, dialErr := proxy.DialUDP(metadata)
+				if dialErr == nil {
+					conn = c
+				}
+				return dialErr
+			}
+			return ErrProxyNotFound
+		})
+		if cbErr != nil {
+			if errors.Is(cbErr, circuitbreaker.ErrCircuitOpen) {
+				cbState := d.circuitBreaker.State()
+				total, _, failed, rejected, _ := d.circuitBreaker.Stats()
+				slog.Warn("UDP dial blocked by circuit breaker",
+					"state", cbState,
+					"total", total,
+					"failed", failed,
+					"rejected", rejected)
+				return nil, fmt.Errorf("udp dial blocked by circuit breaker: %s", cbState)
+			}
+			return nil, cbErr
+		}
+		return conn, nil
+	}
+
+	// Fallback: direct dial without circuit breaker
 	if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
 		return proxy.DialUDP(metadata)
 	}
