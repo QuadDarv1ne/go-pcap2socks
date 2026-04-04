@@ -136,8 +136,12 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 
 	// Start worker pool for concurrent DHCP request processing
 	for i := 0; i < s.workerCount; i++ {
+		workerID := i
 		s.processWg.Add(1)
-		go s.dhcpWorker(i)
+		goroutine.SafeGo(func() {
+			defer s.processWg.Done()
+			s.dhcpWorker(workerID)
+		})
 	}
 	slog.Info("DHCP worker pool started", "workers", s.workerCount)
 
