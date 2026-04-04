@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 )
@@ -44,19 +45,19 @@ func initComponentsParallel(config *cfg.Config) (
 
 	// 1. Profile Manager (не зависит от других компонентов)
 	wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer wg.Done()
 		pm, err := profiles.NewManager()
 		if err == nil {
 			err = pm.CreateDefaultProfiles()
 		}
 		profileCh <- profileResult{pm: pm, err: err}
-	}()
+	})
 
 	// 2. UPnP Manager (зависит только от config)
 	if config.UPnP != nil && config.UPnP.Enabled {
 		wg.Add(1)
-		go func() {
+		goroutine.SafeGo(func() {
 			defer wg.Done()
 			um := upnpmanager.NewManager(config.UPnP, config.PCAP.LocalIP)
 			if um != nil {
@@ -65,12 +66,12 @@ func initComponentsParallel(config *cfg.Config) (
 			} else {
 				upnpCh <- upnpResult{um: nil, err: nil}
 			}
-		}()
+		})
 	}
 
 	// 3. DNS Resolver (зависит только от config)
 	wg.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer wg.Done()
 		plainServers := make([]string, 0, len(config.DNS.Servers))
 		for _, s := range config.DNS.Servers {
@@ -93,15 +94,15 @@ func initComponentsParallel(config *cfg.Config) (
 
 		dr := dns.NewResolver(dnsConfig)
 		dnsCh <- dnsResult{dr: dr, err: nil}
-	}()
+	})
 
 	// Закрываем каналы после завершения всех горутин
-	go func() {
+	goroutine.SafeGo(func() {
 		wg.Wait()
 		close(profileCh)
 		close(upnpCh)
 		close(dnsCh)
-	}()
+	})
 
 	// Собираем результаты
 	for result := range profileCh {

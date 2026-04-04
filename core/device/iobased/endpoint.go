@@ -131,10 +131,10 @@ func (e *Endpoint) outboundLoop(ctx context.Context) {
 func (e *Endpoint) Stop(ctx context.Context) error {
 	// Wait for goroutines to finish with timeout
 	done := make(chan struct{})
-	go func() {
+	goroutine.SafeGo(func() {
 		e.wg.Wait()
 		close(done)
-	}()
+	})
 
 	select {
 	case <-ctx.Done():

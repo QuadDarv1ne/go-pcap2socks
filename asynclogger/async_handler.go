@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Pre-defined errors for async logger operations
@@ -196,10 +198,10 @@ func (h *AsyncHandler) Stop() error {
 
 	// Wait for goroutine to finish with timeout
 	done := make(chan struct{})
-	go func() {
+	goroutine.SafeGo(func() {
 		h.wg.Wait()
 		close(done)
-	}()
+	})
 
 	select {
 	case <-done:

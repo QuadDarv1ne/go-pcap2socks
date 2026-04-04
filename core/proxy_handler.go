@@ -12,6 +12,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/router"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -137,7 +138,7 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 	}
 
 	// Start relay: gVisor -> proxy
-	go func() {
+	goroutine.SafeGo(func() {
 		defer conn.Close()
 
 		buf := buffer.Get(buffer.LargeBufferSize) // 9KB buffer for TCP
@@ -164,10 +165,10 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 				return
 			}
 		}
-	}()
+	})
 
 	// Start relay: proxy -> gVisor (this goroutine handles cleanup)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer func() {
 			conn.Close()
 			h.connTracker.RemoveTCP(tc) // Only one goroutine should cleanup
@@ -191,7 +192,7 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // HandleUDP handles incoming UDP connections from gVisor stack.
@@ -236,7 +237,7 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 	}
 
 	// Read packets from gVisor and send to proxy
-	go func() {
+	goroutine.SafeGo(func() {
 		defer conn.Close()
 
 		buf := buffer.Get(buffer.MediumBufferSize) // 2KB buffer for UDP
@@ -260,10 +261,10 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 				return
 			}
 		}
-	}()
+	})
 
 	// Read packets from proxy and send to gVisor (this goroutine handles cleanup)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer func() {
 			conn.Close()
 			h.connTracker.RemoveUDP(uc) // Only one goroutine should cleanup
@@ -289,7 +290,7 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // GetConnTracker returns the connection tracker for monitoring.

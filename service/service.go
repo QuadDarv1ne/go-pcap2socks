@@ -10,6 +10,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc/eventlog"
@@ -201,11 +202,11 @@ func (m *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	m.elog.Info(4, "Service started, running main application")
 
 	// Start the main application in a goroutine
-	go func() {
+	goroutine.SafeGo(func() {
 		if err := runMainApp(); err != nil {
 			m.elog.Error(5, fmt.Sprintf("Main app error: %v", err))
 		}
-	}()
+	})
 
 loop:
 	for c := range r {

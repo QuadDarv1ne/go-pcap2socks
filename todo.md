@@ -1,28 +1,367 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, шестнадцатая волна проверки, исправления)
+## Статус проекта (04.04.2026, семнадцатая волна проверки, полный анализ)
 
-**Ветка:** `dev` (текущая, синхронизирована с main)
+**Ветка:** `dev` (текущая, требует синхронизации)
 
 **Последние изменения:**
-- ✅ **ШЕСТНАДЦАТАЯ ВОЛНА** (04.04.2026, исправление критических и серьёзных проблем)
-- ✅ **ИСПРАВЛЕНО**: dns/resolver.go — все `go func()` защищены через SafeGo, loop variable capture, bounded insertOrder
-- ✅ **ИСПРАВЛЕНО**: dns/hijacker.go — cleanup goroutine защищён через SafeGo
-- ✅ **ИСПРАВЛЕНО**: worker/pool.go — CAS атомарная проверка queueSize
-- ✅ **СБОРКА**: проходит без ошибок (go build)
-- 🟡 **go vet**: упал по OOM (системная память, не проблема кода)
+- ✅ **СЕМНАДЦАТАЯ ВОЛНА** (04.04.2026, полный глубокий анализ проекта)
+- ✅ **ИСПРАВЛЕНО**: 11 файлов — добавлена goroutine.SafeGo защита (asynclogger, core, dns, health, netutil, service, transport)
+- ✅ **АНАЛИЗ**: полный аудит DNS, DHCP, Core, Proxy, Infra модулей тремя агентами
+- 🟡 **НАЙДЕНО**: 4 критических, 12 серьёзных, 7 средних, 10 минорных проблем
+- 🟡 **ТРЕБУЮТ ИСПРАВЛЕНИЯ**: deadlock в conntrack.CloseAll(), buffer overflow в DHCPv6, unsafe.String в router
+- ⏳ **СБОРКА**: не проверена (требуется go build)
 
 **Статус веток:**
 ```
-dev:  ✅ синхронизирована с origin/dev
-main: ✅ синхронизирована с origin/main (merge dev)
+dev:  ❌ есть несохранённые изменения (11 файлов)
+main: ✅ синхронизирована с origin/main
 ```
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
 
-**Сборка проекта:** ✅ Проходит без ошибок (go build)
-**Проверка кода:** 🟡 go vet — OOM на системе (не ошибка кода)
-**Форматирование:** ✅ gofmt (все файлы отформатированы)
+---
+
+## ✅ Результаты полного анализа (04.04.2026, семнадцатая волна, глубокий аудит)
+
+### Итоговый отчёт о семнадцатой волне проверки
+
+**Дата проведения:** 04.04.2026
+
+**Цель:** Полный глубокий аудит всех компонентов проекта тремя независимыми агентами, поиск реальных проблем в коде.
+
+#### Статистика проверки:
+
+| Категория | Критические | Серьёзные | Средние | Минорные | Всего |
+|-----------|-------------|-----------|---------|----------|-------|
+| **DNS** | 2 | 2 | 3 | 4 | 11 |
+| **DHCP** | 2 | 3 | 3 | 2 | 10 |
+| **Core/ConnTracker** | 3 | 0 | 2 | 0 | 5 |
+| **Proxy/Transport** | 0 | 3 | 3 | 1 | 7 |
+| **Infra/Utility** | 0 | 4 | 2 | 3 | 9 |
+| **ИТОГО** | **7** | **12** | **13** | **10** | **42** |
+
+---
+
+### 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ (7)
+
+#### 1. DNS resolver.go — Stop дважды закрывает каналы
+
+**Файл:** `dns/resolver.go:538-545`
+
+**Проблема:**
+`Stop()` вызывает `StopWithTimeout()`, который закрывает `stopQueries` и `queryQueue`. Затем `Stop()` вызывает `StopPrefetch()`, который закрывает `stopPrefetch`. `sync.Once` защищает только `stopQueries/queryQueue`, но не `stopPrefetch`. Если `Stop()` вызывается дважды — panic от повторного закрытия каналов.
+
+**Влияние:** Паника при повторном вызове Stop().
+
+**Приоритет:** 🔴 КРИТИЧЕСКИЙ
+
+**Рекомендация:** Обернуть все `close()` в единый `sync.Once` или добавить atomic флаг закрытия.
+
+---
+
+#### 2. DNS hijacker.go — гонка в allocateFakeIP и InterceptDNS
+
+**Файл:** `dns/hijacker.go:92-153`
+
+**Проблема:**
+1. `allocateFakeIP()` не проверяет существование IP в `fakeToDomain` перед возвратом — два вызова могут выдать один IP.
+2. `InterceptDNS()` проверяет кэш под `RLock`, затем вызывает `allocateFakeIP()` под `Lock`, затем сохраняет mapping под `Lock`. Между `RLock` unlock и `allocateFakeIP` Lock другой запрос может создать mapping для того же домена — stale mapping в `fakeToDomain`.
+
+**Влияние:** Конфликты Fake IP, некорректные mapping.
+
+**Приоритет:** 🔴 КРИТИЧЕСКИЙ
+
+**Рекомендация:** Использовать одну транзакцию под одним `Lock`: проверить кэш, выделить IP, сохранить mapping — всё атомарно.
+
+---
+
+#### 3. Core conntrack.go — Deadlock в CloseAll()
+
+**Файл:** `core/conntrack.go:250-261`
+
+**Проблема:**
+`CloseAll()` захватывает `ct.mu.Lock()` и внутри цикла вызывает `ct.RemoveTCP(tc)` / `ct.RemoveUDP(uc)`, которые также пытаются захватить `ct.mu.Lock()`. Классический deadlock.
+
+**Влияние:** Приложение зависнет при вызове `CloseAll()`.
+
+**Приоритет:** 🔴 КРИТИЧЕСКИЙ
+
+**Рекомендация:** Скопировать все соединения из мапы под мьютексом, отпустить мьютекс, затем закрывать каждое соединение отдельно.
+
+---
+
+#### 4. Core conntrack.go — Утечка горутин (spin-loop)
+
+**Файл:** `core/conntrack.go:330-365, 470-510`
+
+**Проблема:**
+В `relayFromProxy` и `readUDPFromProxy` используется цикл с `default:` case, который при отсутствии `ProxyConn` делает `time.Sleep(10ms)` и продолжает. Если `dialProxy` никогда не будет вызван, горутина будет крутиться в холостом цикле бесконечно.
+
+**Влияние:** Утечка CPU и горутин.
+
+**Приоритет:** 🔴 КРИТИЧЕСКИЙ
+
+**Рекомендация:** Заменить polling на ожидание сигнала через канал или `context`. Использовать `select` с `tc.ctx.Done()` вместо spin-loop.
+
+---
+
+#### 5. Core conntrack.go — Гонка tc.ProxyConn
+
+**Файл:** `core/conntrack.go:380-420`
+
+**Проблема:**
+Если `relayToProxy` вызывает `dialProxy`, а `relayFromProxy` тоже попытается использовать `tc.ProxyConn` в тот же момент (до того как dial завершится), возможна гонка: один горутин пишет `tc.ProxyConn = conn`, другой читает `tc.ProxyConn == nil`. Нет синхронизации между созданием proxy-соединения и его использованием.
+
+**Влияние:** Nil pointer panic или потеря соединений.
+
+**Приоритет:** 🔴 КРИТИЧЕСКИЙ
+
+**Рекомендация:** Использовать `sync.Once` или мьютекс для защиты lazy dial, либо канал `proxyConnReady` для сигнализации.
+
+---
+
+#### 6. DHCP dhcpv6.go — Buffer overflow
+
+**Файл:** `dhcp/dhcpv6.go:431-445`
+
+**Проблема:**
+`iaAddr := make([]byte, 24)` но затем записывается 28 байт:
+- 4 байта IAID (offset 0-3)
+- 16 байт IPv6 (offset 4-19)
+- 4 байта PreferredTime (offset 20-23)
+- 4 байта LeaseDuration (offset 24-27) — **выход за пределы!**
+
+**Влияние:** Паника или memory corruption при обработке DHCPv6.
+
+**Приоритет:** 🔴 КРИТИЧЕСКИЙ
+
+**Рекомендация:** Изменить `make([]byte, 24)` на `make([]byte, 28)`.
+
+---
+
+#### 7. DNS hijacker.go — нет метода Stop()
+
+**Файл:** `dns/hijacker.go:74-77, 227-252`
+
+**Проблема:**
+`cleanupExpired()` запускается в `goroutine.SafeGo` в конструкторе, но нет метода `Stop()` для Hijacker. Тикер работает бесконечно — это утечка горутины при завершении приложения.
+
+**Влияние:** Утечка горутины при shutdown.
+
+**Приоритет:** 🔴 КРИТИЧЕСКИЙ
+
+**Рекомендация:** Добавить поле `stopCh chan struct{}` и метод `Stop()` в Hijacker.
+
+---
+
+### 🟠 СЕРЬЁЗНЫЕ ПРОБЛЕМЫ (12)
+
+#### 1. DNS server.go — CORS wildcard "*"
+
+**Файл:** `dns/server.go:332-339`
+
+**Проблема:** `Access-Control-Allow-Origin: "*"` разрешает любому сайту делать запросы к DoH серверу.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 2. DNS resolver.go — LookupIP блокируется 2s вместо ctx timeout
+
+**Файл:** `dns/resolver.go:457-485`
+
+**Проблема:** `time.After(2s)` вместо использования `ctx.Done()` как основного таймаута.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 3. DNS resolver.go — Утечка горутин в lookupIPUncached
+
+**Файл:** `dns/resolver.go:676-730`
+
+**Проблема:** При первом успешном результате `return allIPs, nil` остальные горутины продолжают работать до ctx.Deadline.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 4. DHCP server.go — Race condition в nextIP
+
+**Файл:** `dhcp/server.go:612-618`
+
+**Проблема:** `startIP := s.nextIP.Load().(net.IP)` выполняется ДО взятия `allocMu`.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 5. DHCP server.go — processWg.Wait() может заблокироваться
+
+**Файл:** `dhcp/server.go:737-740`
+
+**Проблема:** Если worker заблокирован на отправке ответа, `processWg.Done()` не вызовется.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 6. DHCP lease_db.go — leaseCount рассинхронизация
+
+**Файл:** `dhcp/lease_db.go:95-99`
+
+**Проблема:** `SetLease` всегда инкрементирует `leaseCount.Add(1)`, даже при update существующего лиза.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 7. DHCP dhcpv6.go — Утечка горутин в handleMessage
+
+**Файл:** `dhcp/dhcpv6.go:228-265`
+
+**Проблема:** Для каждого пакета запускается `go s.handleMessage(...)` без ограничений.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 8. Proxy router.go — unsafe.String с pool buffer
+
+**Файл:** `proxy/router.go:210-230`
+
+**Проблема:** `unsafe.String(unsafe.SliceData(buf), len(buf))` с буфером из sync.Pool. Буфер возвращается в pool, но строка-ключ продолжает жить в sync.Map — memory corruption.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 9. Proxy group.go — Гонка healthStatus в DialContext
+
+**Файл:** `proxy/group.go:260-295`
+
+**Проблема:** Health status может измениться между selectProxy и dial.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 10. Proxy router.go — Утечка горутин health checks
+
+**Файл:** `proxy/router.go:310-325`
+
+**Проблема:** Каждые 30 секунд запускается по горутине НА КАЖДЫЙ прокси без ограничения.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 11. Proxy socks5.go — Утечка UDP association горутины
+
+**Файл:** `proxy/socks5.go:175-200`
+
+**Проблема:** Горутина ждёт TCP соединение 5 минут, даже если `socksPacketConn.Close()` вызван раньше.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+#### 12. Auto smart_dhcp.go — GetIPForDevice создаёт lease дважды
+
+**Файл:** `auto/smart_dhcp.go:75-98`
+
+**Проблема:** IP выделяется дважды — один в `AllocateAny`, второй новый при LoadOrStore.
+
+**Приоритет:** 🟠 ВЫСОКИЙ
+
+---
+
+### 🟡 СРЕДНИЕ ПРОБЛЕМЫ (13)
+
+1. **DNS server.go** — avgLatencyMs не обновляется (🟡)
+2. **DNS resolver.go** — dnsQueryPool bytes.Buffer race (🟡)
+3. **DNS resolver.go** — preWarmCache блокируется если workers не запущены (🟡)
+4. **DNS hijacker.go** — ResolveFakeIP возвращает nil вместо ошибки (🟡)
+5. **DHCP server.go** — cleanupLeases leaseCount рассинхрон (🟡)
+6. **DHCP server.go** — dhcpWorker goroutine leak при Stop (🟡)
+7. **DHCP lease_db.go** — saveChan триггеры теряются (🟡)
+8. **Auto smart_dhcp.go** — RecordConnection race при замене slice (🟡)
+9. **Core rate_limiter.go** — Race condition в Allow() (🟡)
+10. **Tunnel tunnel.go** — _scaleChan переполнение (🟡)
+11. **Tunnel tunnel.go** — Двойное close _connPool (🟡)
+12. **Proxy group.go** — randInt ненадёжный (🟡)
+13. **Auto smart_dhcp.go** — allocateIPForType бесконечный цикл (🟡)
+
+---
+
+### 🟢 МИНОРНЫЕ ПРОБЛЕМЫ (10)
+
+1. **DNS server.go** — StartTime race (🟢)
+2. **DNS resolver.go** — insertOrder bounded (🟢)
+3. **DHCP server.go** — slog.Info спам (🟢)
+4. **DHCP lease_db.go** — saveChan буфер (🟢)
+5. **Auto smart_dhcp.go** — initializeDefaultLeases пустая (🟢)
+6. **Tunnel tcp.go** — copyBuffer обёрка (🟢)
+7. **Core proxy_handler.go** — мёртвое поле proxyDialer (🟢)
+8. **Configmanager** — мёртвый код LogConfigChange (🟢)
+9. **Proxy router.go** — placeholder bandwidth функции (🟢)
+10. **Tunnel tunnel.go** — init() auto-start (🟢)
+
+---
+
+### 📊 Сводка изменений (несохранённые)
+
+**11 файлов изменено, все добавляют goroutine.SafeGo защиту:**
+
+| Файл | Изменения | Описание |
+|------|-----------|----------|
+| `asynclogger/async_handler.go` | +2/-2 | Stop() wait goroutine SafeGo |
+| `core/device/ethsniffer.go` | +2/-2 | Stop() wait goroutine SafeGo |
+| `core/device/iobased/endpoint.go` | +2/-2 | Stop() wait goroutine SafeGo |
+| `core/proxy_handler.go` | +5/-5 | HandleTCP/HandleUDP goroutines SafeGo |
+| `dns/resolver.go` | +2/-2 | StartPrefetch goroutine SafeGo |
+| `health/socks5_checker.go` | +2/-2 | checkProxy goroutine SafeGo |
+| `init_parallel.go` | +5/-5 | Параллельная инициализация SafeGo |
+| `netutil/ip.go` | +2/-2 | GenerateIPsInCIDR goroutine SafeGo |
+| `service/service.go` | +2/-2 | runMainApp goroutine SafeGo |
+| `transport/ws/websocket.go` | +2/-2 | startPingLoop goroutine SafeGo |
+| `shutdown/test_state.json` | minor | Тестовый файл |
+
+---
+
+### 📋 ПЛАН ИСПРАВЛЕНИЙ (приоритетный порядок)
+
+| # | Проблема | Файл | Приоритет | Статус |
+|---|----------|------|-----------|--------|
+| 1 | Deadlock в CloseAll() | `core/conntrack.go` | 🔴 | ⏳ |
+| 2 | Buffer overflow DHCPv6 | `dhcp/dhcpv6.go` | 🔴 | ⏳ |
+| 3 | Stop двойной close | `dns/resolver.go` | 🔴 | ⏳ |
+| 4 | Гонка allocateFakeIP | `dns/hijacker.go` | 🔴 | ⏳ |
+| 5 | Spin-loop в conntrack | `core/conntrack.go` | 🔴 | ⏳ |
+| 6 | Гонка tc.ProxyConn | `core/conntrack.go` | 🔴 | ⏳ |
+| 7 | Hijacker нет Stop() | `dns/hijacker.go` | 🔴 | ⏳ |
+| 8 | CORS wildcard | `dns/server.go` | 🟠 | ⏳ |
+| 9 | unsafe.String router | `proxy/router.go` | 🟠 | ⏳ |
+| 10 | DHCP nextIP race | `dhcp/server.go` | 🟠 | ⏳ |
+| 11 | DHCPv6 goroutine flood | `dhcp/dhcpv6.go` | 🟠 | ⏳ |
+| 12 | leaseCount рассинхрон | `dhcp/lease_db.go` | 🟠 | ⏳ |
+| 13 | Smart DHCP double alloc | `auto/smart_dhcp.go` | 🟠 | ⏳ |
+| 14 | Health checks утечка | `proxy/router.go` | 🟠 | ⏳ |
+| 15 | UDP association leak | `proxy/socks5.go` | 🟠 | ⏳ |
+| 16 | Rate limiter race | `core/rate_limiter.go` | 🟠 | ⏳ |
+| 17 | LookupIP 2s timeout | `dns/resolver.go` | 🟡 | ⏳ |
+| 18 | lookupIPUncached leak | `dns/resolver.go` | 🟡 | ⏳ |
+| 19 | processWg.Wait block | `dhcp/server.go` | 🟡 | ⏳ |
+| 20 | _scaleChan overflow | `tunnel/tunnel.go` | 🟡 | ⏳ |
+
+---
+
+### Коммиты (предстоящие):
+
+1. `commit` — fix: добавить goroutine.SafeGo защиту в 11 файлах (17-я волна)
+2. `commit` — fix: исправить критические проблемы (conntrack deadlock, DHCPv6 overflow, DNS double close)
+3. `merge` — синхронизация dev в main
 
 ---
 
