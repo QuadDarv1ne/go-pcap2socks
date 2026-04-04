@@ -141,6 +141,9 @@ type Resolver struct {
 
 	// Shutdown protection
 	stopOnce sync.Once
+
+	// Semaphore to limit concurrent DNS queries (prevent goroutine explosion)
+	querySem chan struct{}
 }
 
 // resolverMetrics holds DNS resolver metrics
@@ -206,6 +209,8 @@ func NewResolver(config *ResolverConfig) *Resolver {
 		queryWorkers: queryWorkers,
 		queryQueue:   make(chan *dnsQuery, 64), // Reduced from 256 to save memory
 		stopQueries:  make(chan struct{}),
+		// Semaphore to limit concurrent DNS queries (prevent goroutine explosion)
+		querySem: make(chan struct{}, 20), // Max 20 concurrent lookupIPUncached calls
 	}
 
 	if config != nil {
@@ -803,6 +808,14 @@ func (r *Resolver) RequestPrefetch(hostname string) {
 
 // lookupIPUncached performs DNS lookup without caching
 func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net.IP, error) {
+	// Acquire semaphore to limit concurrent DNS queries
+	select {
+	case r.querySem <- struct{}{}:
+		defer func() { <-r.querySem }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
 	// Use best servers if available
 	r.mu.RLock()
 	servers := r.bestServers
