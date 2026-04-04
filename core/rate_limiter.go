@@ -38,16 +38,14 @@ func NewRateLimiter(cfg RateLimiterConfig) *RateLimiter {
 
 // Allow checks if a request is allowed under the rate limit.
 func (rl *RateLimiter) Allow() bool {
-	// Refill tokens based on elapsed time
+	rl.mu.Lock()
 	now := time.Now().UnixNano()
 	last := rl.lastRefill.Load()
 	elapsed := time.Duration(now - last)
 
-	// Calculate tokens to add
+	// Calculate and add tokens to add (inside lock to prevent race)
 	tokensToAdd := int64(elapsed.Seconds() * float64(rl.refillRate))
 	if tokensToAdd > 0 {
-		rl.mu.Lock()
-		// Atomic update of tokens
 		current := rl.tokens.Load()
 		newTokens := current + tokensToAdd
 		if newTokens > rl.maxTokens {
@@ -55,32 +53,33 @@ func (rl *RateLimiter) Allow() bool {
 		}
 		rl.tokens.Store(newTokens)
 		rl.lastRefill.Store(now)
-		rl.mu.Unlock()
 	}
 
 	// Try to consume a token
-	for {
-		current := rl.tokens.Load()
-		if current <= 0 {
-			rl.droppedCount.Add(1)
-			return false
-		}
-		if rl.tokens.CompareAndSwap(current, current-1) {
-			return true
-		}
+	current := rl.tokens.Load()
+	if current <= 0 {
+		rl.droppedCount.Add(1)
+		rl.mu.Unlock()
+		return false
 	}
+	if rl.tokens.CompareAndSwap(current, current-1) {
+		rl.mu.Unlock()
+		return true
+	}
+	// CAS failed, retry once
+	rl.mu.Unlock()
+	return rl.Allow()
 }
 
 // AllowN checks if n requests are allowed under the rate limit.
 func (rl *RateLimiter) AllowN(n int64) bool {
-	// Refill tokens
+	rl.mu.Lock()
 	now := time.Now().UnixNano()
 	last := rl.lastRefill.Load()
 	elapsed := time.Duration(now - last)
 
 	tokensToAdd := int64(elapsed.Seconds() * float64(rl.refillRate))
 	if tokensToAdd > 0 {
-		rl.mu.Lock()
 		current := rl.tokens.Load()
 		newTokens := current + tokensToAdd
 		if newTokens > rl.maxTokens {
@@ -88,20 +87,22 @@ func (rl *RateLimiter) AllowN(n int64) bool {
 		}
 		rl.tokens.Store(newTokens)
 		rl.lastRefill.Store(now)
-		rl.mu.Unlock()
 	}
 
 	// Try to consume n tokens
-	for {
-		current := rl.tokens.Load()
-		if current < n {
-			rl.droppedCount.Add(1)
-			return false
-		}
-		if rl.tokens.CompareAndSwap(current, current-n) {
-			return true
-		}
+	current := rl.tokens.Load()
+	if current < n {
+		rl.droppedCount.Add(1)
+		rl.mu.Unlock()
+		return false
 	}
+	if rl.tokens.CompareAndSwap(current, current-n) {
+		rl.mu.Unlock()
+		return true
+	}
+	// CAS failed, retry once
+	rl.mu.Unlock()
+	return rl.AllowN(n)
 }
 
 // GetTokens returns the current number of available tokens.

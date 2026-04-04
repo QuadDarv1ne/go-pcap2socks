@@ -199,6 +199,9 @@ type ServerV6 struct {
 	stopChan chan struct{}
 	conn     *net.UDPConn
 
+	// Worker pool for message handling
+	handlerSem chan struct{} // Semaphore to limit concurrent handlers
+
 	// Statistics
 	statsMu sync.RWMutex
 	stats   DHCPv6Stats
@@ -224,9 +227,10 @@ func NewServerV6(config *ServerV6Config) (*ServerV6, error) {
 	}
 
 	return &ServerV6{
-		config:   config,
-		leases:   make(map[string]*DHCPv6Lease),
-		stopChan: make(chan struct{}),
+		config:     config,
+		leases:     make(map[string]*DHCPv6Lease),
+		stopChan:   make(chan struct{}),
+		handlerSem: make(chan struct{}, 16), // Limit to 16 concurrent handlers
 		stats: DHCPv6Stats{
 			ActiveLeases: 0,
 		},
@@ -302,8 +306,16 @@ func (s *ServerV6) serve(ctx context.Context) {
 			continue
 		}
 
-		// Process DHCPv6 message
-		go s.handleMessage(ctx, buf[:n], clientAddr)
+		// Process DHCPv6 message with semaphore to prevent goroutine flood
+		select {
+		case s.handlerSem <- struct{}{}:
+			go func() {
+				defer func() { <-s.handlerSem }()
+				s.handleMessage(ctx, buf[:n], clientAddr)
+			}()
+		default:
+			slog.Debug("DHCPv6 handler pool full, dropping message")
+		}
 	}
 }
 
