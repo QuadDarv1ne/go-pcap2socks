@@ -1,28 +1,20 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, двадцать вторая волна проверок)
+## Статус проекта (04.04.2026, двадцать третья волна исправлений)
 
 **Ветка:** `dev` (текущая, синхронизирована с main)
 
 **Последние изменения:**
-- ✅ **ДВАДЦАТЬ ВТОРАЯ ВОЛНА** (04.04.2026, полный анализ + мелкие исправления)
-- ✅ **ИСПРАВЛЕНО**: connpool isConnectionAlive → уменьшен deadline до 1ms (minimize data consumption)
-- ✅ **ДОКУМЕНТИРОВАНО**: SafeGoWithRetry limitation (zombie goroutines при timeout)
-- ✅ **АНАЛИЗ**: полный аудит проекта, найдено 3 критических, 6 серьёзных, 9 минорных проблем
+- ✅ **ДВАДЦАТЬ ТРЕТЬЯ ВОЛНА** (04.04.2026, circuit breaker и DNS buffer fix)
+- ✅ **ИСПРАВЛЕНО**: UDP Dial без circuit breaker → добавлена защита как для TCP
+- ✅ **ИСПРАВЛЕНО**: DNS buildDNSResponse buffer overflow → dynamic buffer sizing
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ 767d488 — синхронизирована с origin/dev
-main: ✅ 726c0f2 — синхронизирована с origin/main (merge dev)
+dev:  ✅ a7b5ad6 — синхронизирована с origin/dev
+main: ✅ 45b377a — синхронизирована с origin/main (merge dev)
 ```
-
-**Оставшиеся проблемы (не критично для текущей работы):**
-- 🟠 proxy/socks5.go DialContext connection pool race (сложное исправление)
-- 🟠 UDP Dial без circuit breaker
-- 🟡 conntrack Stop goto forceClose leak
-- 🟡 dhcp requestCount memory leak
-- 🟡 buffer pool double-put detection
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
 
