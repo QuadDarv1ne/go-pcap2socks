@@ -568,7 +568,13 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 				"max_retries", maxRetries,
 				"delay", delay,
 				"err", err)
-			time.Sleep(delay)
+			// Use select to allow context cancellation during backoff
+			select {
+			case <-tc.ctx.Done():
+				return fmt.Errorf("proxy dial cancelled during backoff: %w", tc.ctx.Err())
+			case <-time.After(delay):
+				// Continue to next retry attempt
+			}
 		}
 	}
 

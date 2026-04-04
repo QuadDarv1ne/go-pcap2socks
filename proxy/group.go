@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -157,8 +158,14 @@ func (g *ProxyGroup) healthCheckLoop() {
 	defer ticker.Stop()
 
 	// Initial check with minimal jitter (100ms max) to avoid thundering herd
-	time.Sleep(time.Duration(randInt(0, 100)) * time.Millisecond)
-	g.checkAllProxies()
+	jitter := time.Duration(rand.Intn(100)) * time.Millisecond
+	select {
+	case <-time.After(jitter):
+		g.checkAllProxies()
+	case <-g.stopChan:
+		slog.Debug("Proxy group health check stopped before first check", "group", g.name)
+		return
+	}
 
 	for {
 		select {
@@ -169,11 +176,6 @@ func (g *ProxyGroup) healthCheckLoop() {
 			return
 		}
 	}
-}
-
-// randInt returns a random int in [min, max)
-func randInt(min, max int) int {
-	return min + int(time.Now().UnixNano()%int64(max-min))
 }
 
 // checkAllProxies checks health of all proxies in the group
