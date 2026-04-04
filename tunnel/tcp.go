@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
@@ -108,51 +107,53 @@ func pipe(origin, remote net.Conn) {
 	// Get separate buffers for each direction to avoid contention
 	bufOR := pool.Get(tcpRelayBufferSize) // origin->remote
 	bufRO := pool.Get(tcpRelayBufferSize) // remote->origin
-	defer func() {
-		pool.Put(bufOR)
-		pool.Put(bufRO)
-	}()
 
-	// Use atomic counters for error tracking (avoid channel allocation)
-	var errorsCount atomic.Int32
-	var bytesCopied atomic.Int64
+	// Track copy completion for half-close
+	done := make(chan struct{}, 2)
 
-	slog.Info("TCP pipe started",
-		"origin", origin.RemoteAddr(),
-		"remote", remote.RemoteAddr())
-
-	// Start both copy operations in separate goroutines
 	goroutine.SafeGo(func() {
 		defer wg.Done()
+		defer func() { done <- struct{}{} }()
+		defer pool.Put(bufOR)
 		result := copyBuffer(remote, origin, "o->r", bufOR)
-		bytesCopied.Add(result.bytes)
 		if result.err != nil && !errors.Is(result.err, io.EOF) {
-			errorsCount.Add(1)
 			slog.Debug("TCP stream copy error", "direction", result.dir, "bytes", result.bytes, "err", result.err)
 		} else {
-			slog.Info("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
+			slog.Debug("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
 		}
 	})
 
 	goroutine.SafeGo(func() {
 		defer wg.Done()
+		defer func() { done <- struct{}{} }()
+		defer pool.Put(bufRO)
 		result := copyBuffer(origin, remote, "r->o", bufRO)
-		bytesCopied.Add(result.bytes)
 		if result.err != nil && !errors.Is(result.err, io.EOF) {
-			errorsCount.Add(1)
 			slog.Debug("TCP stream copy error", "direction", result.dir, "bytes", result.bytes, "err", result.err)
 		} else {
-			slog.Info("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
+			slog.Debug("TCP copy completed", "direction", result.dir, "bytes", result.bytes)
 		}
 	})
 
-	// Wait for both copies to complete
-	wg.Wait()
-
-	// Log total bytes copied
-	if totalBytes := bytesCopied.Load(); totalBytes > 0 {
-		slog.Info("TCP session completed", "total_bytes", totalBytes, "errors", errorsCount.Load())
-	} else {
-		slog.Warn("TCP session completed with NO DATA transferred", "errors", errorsCount.Load())
+	// Wait for first direction to complete, then half-close the other
+	select {
+	case <-done:
+		// One direction finished, close write side of other connection
+		if c, ok := origin.(*net.TCPConn); ok {
+			c.CloseWrite()
+		}
+		if c, ok := remote.(*net.TCPConn); ok {
+			c.CloseWrite()
+		}
+		// Wait for second direction with timeout
+		select {
+		case <-done:
+		case <-time.After(TCPWaitTimeout):
+			slog.Warn("TCP pipe timeout waiting for second direction")
+		}
+	case <-time.After(TCPWaitTimeout):
+		slog.Warn("TCP pipe timeout waiting for first direction")
 	}
+
+	wg.Wait()
 }

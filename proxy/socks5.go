@@ -261,7 +261,8 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 		}()
 
 		// Set read deadline to prevent indefinite blocking
-		c.SetReadDeadline(time.Now().Add(5 * time.Minute))
+		// 2 minutes is enough for most UDP sessions, prevents goroutine leaks
+		c.SetReadDeadline(time.Now().Add(2 * time.Minute))
 
 		// Use buffer pool for efficient memory usage
 		buf := pool.Get(32 * 1024)
