@@ -220,10 +220,12 @@ func (s *Server) dhcpWorker(id int) {
 				s.metrics.RecordError()
 			}
 
-			// Send response back
+			// Send response back (with stop check to prevent blocking on shutdown)
 			if req.responseCh != nil {
 				select {
 				case req.responseCh <- response:
+				case <-s.stopChan:
+					return
 				default:
 					// Response channel blocked, drop response
 				}

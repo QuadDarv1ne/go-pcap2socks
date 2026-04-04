@@ -438,8 +438,6 @@ func (r *Resolver) LookupIP(ctx context.Context, hostname string) ([]net.IP, err
 			return result.IPs, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(DefaultDNSTimeout):
-			return nil, context.DeadlineExceeded
 		}
 	default:
 		// Queue full, process synchronously as fallback
@@ -823,7 +821,7 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	// Launch parallel queries to all servers
 	resultCh := make(chan serverResult, len(servers)+len(r.dohServers))
 	ctx, cancel := context.WithTimeout(ctx, DefaultDNSTimeout)
-	defer cancel()
+	defer cancel() // Cancel will stop all goroutines when we return
 
 	// Query regular DNS servers in parallel
 	for _, server := range servers {
@@ -886,8 +884,9 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 			} else if result.err != nil {
 				lastErr = result.err
 			}
-			// Return immediately if we have results
+			// Return immediately if we have results (cancel stops remaining goroutines)
 			if len(allIPs) > 0 {
+				cancel()
 				return allIPs, nil
 			}
 		case <-ctx.Done():
