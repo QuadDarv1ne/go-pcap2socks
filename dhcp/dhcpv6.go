@@ -307,11 +307,16 @@ func (s *ServerV6) serve(ctx context.Context) {
 		}
 
 		// Process DHCPv6 message with semaphore to prevent goroutine flood
+		// IMPORTANT: Copy data to new buffer before passing to goroutine
+		// to avoid race with the shared read buffer
+		dataCopy := make([]byte, n)
+		copy(dataCopy, buf[:n])
+
 		select {
 		case s.handlerSem <- struct{}{}:
 			go func() {
 				defer func() { <-s.handlerSem }()
-				s.handleMessage(ctx, buf[:n], clientAddr)
+				s.handleMessage(ctx, dataCopy, clientAddr)
 			}()
 		default:
 			slog.Debug("DHCPv6 handler pool full, dropping message")

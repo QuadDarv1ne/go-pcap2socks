@@ -643,6 +643,13 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 					"mac", macStr,
 					"ip", ipStr,
 					"device_type", profile.Type)
+
+				// If MAC already has a lease, remove old IP from index
+				if val, ok := s.leases.Load(macStr); ok {
+					oldLease := val.(*DHCPLease)
+					s.ipIndex.Delete(oldLease.IP.String())
+				}
+
 				// Create lease
 				lease := &DHCPLease{
 					IP:          ip,
@@ -680,6 +687,17 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 	// Protect entire allocation from race conditions
 	s.allocMu.Lock()
 	defer s.allocMu.Unlock()
+
+	// If MAC already has a lease with different IP, remove old IP from index
+	if val, ok := s.leases.Load(macStr); ok {
+		oldLease := val.(*DHCPLease)
+		oldIPStr := oldLease.IP.String()
+		// Remove old IP from index to prevent IP leak
+		s.ipIndex.Delete(oldIPStr)
+		slog.Debug("DHCP: Removing old IP from index",
+			"mac", macStr,
+			"old_ip", oldIPStr)
+	}
 
 	startIP := s.nextIP.Load().(net.IP)
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -
