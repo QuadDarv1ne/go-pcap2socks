@@ -1,31 +1,59 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, тридцать вторая волна)
+## Статус проекта (04.04.2026, тридцать третья волна)
 
 **Ветка:** `main` (синхронизирована с dev и remote)
 
 **Последние изменения:**
-- ✅ **ТРИДЦАТЬ ВТОРАЯ ВОЛНА** (04.04.2026, nil проверка gracefulCtx)
-- ✅ **_gracefulCtx**: добавлена nil проверка перед вызовом Err()
+- ✅ **ТРИДЦАТЬ ТРЕТЬЯ ВОЛНА** (04.04.2026, DHCP + Router closure fixes)
+- ✅ **DHCP workers**: SafeGo + capture workerID для избежания closure bug
+- ✅ **Router health checks**: capture tag и healthChecker для избежания race
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ 5b635a4 — синхронизирована с origin/dev
-main: ✅ 5b635a4 — синхронизирована с origin/main
+dev:  ✅ 6b5587c — синхронизирована с origin/dev
+main: ✅ 6b5587c — синхронизирована с origin/main
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
 
 ---
 
-## ✅ Результаты тридцать второй волны (04.04.2026)
+## ✅ Результаты тридцать третьей волны (04.04.2026)
 
 ### Исправленные проблемы:
 
 | # | Проблема | Файл | Изменение | Статус |
 |---|----------|------|-----------|--------|
-| 1 | _gracefulCtx.Err() без nil проверки | `main.go:756` | Добавлена `_gracefulCtx != nil &&` | ✅ ИСПРАВЛЕНО |
+| 1 | DHCP workers без SafeGo | `dhcp/server.go` | goroutine.SafeGo + workerID capture | ✅ ИСПРАВЛЕНО |
+| 2 | Router health checks closure bug | `proxy/router.go` | proxyTag/proxyChecker capture | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**dhcp/server.go:**
+- `dhcpWorker` теперь запускается через `goroutine.SafeGo` вместо `go`
+- Добавлена `workerID := i` для избежания closure bug в цикле
+- Предотвращает panic при ошибке worker без recovery
+- Обеспечивает корректный workerID для каждого воркера
+
+**proxy/router.go:**
+- `performHealthChecks`: добавлены `proxyTag := tag` и `proxyChecker := healthChecker`
+- Предотвращает race condition когда переменные цикла меняются до запуска горутины
+- Критично при большом количестве прокси в роутере
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
+
+### Коммиты:
+
+1. `2ef6e9f` — fix: добавить SafeGo для DHCP worker pool (33-я волна)
+2. `6b5587c` — fix: исправить closure bug в performHealthChecks (33-я волна)
+
+---
 
 ### Детали изменений:
 
