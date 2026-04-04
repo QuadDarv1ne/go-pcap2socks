@@ -753,7 +753,7 @@ func main() {
 
 			err = cmd.Wait()
 			if err != nil {
-				if _gracefulCtx.Err() != nil {
+				if _gracefulCtx != nil && _gracefulCtx.Err() != nil {
 					slog.Info("ExecuteOnStart command terminated on shutdown")
 				} else {
 					slog.Debug("Command finished with error", slog.Any("err", err))
