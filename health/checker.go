@@ -471,10 +471,10 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 
 	for _, probe := range probes {
 		wg.Add(1)
-		go func(p Probe) {
+		goroutine.SafeGo(func() {
 			defer wg.Done()
-			results <- hc.runProbeWithRetry(ctx, p)
-		}(probe)
+			results <- hc.runProbeWithRetry(ctx, probe)
+		})
 	}
 
 	wg.Wait()
