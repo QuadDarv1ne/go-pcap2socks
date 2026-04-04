@@ -1,20 +1,20 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, девятнадцатая волна оптимизаций)
+## Статус проекта (04.04.2026, двадцатая волна исправлений)
 
 **Ветка:** `dev` (текущая, синхронизирована с main)
 
 **Последние изменения:**
-- ✅ **ДЕВЯТНАДЦАТАЯ ВОЛНА** (04.04.2026, оптимизации производительности)
-- ✅ **ИСПРАВЛЕНО**: O(n²) eviction в DNS кэше → rebuildInsertOrder
-- ✅ **ИСПРАВЛЕНО**: Утечка памяти hijacker → MaxMappings + LRU eviction
-- ✅ **ИСПРАВЛЕНО**: Lock contention в conntrack → CreateConn до lock
+- ✅ **ДВАДЦАТАЯ ВОЛНА** (04.04.2026, исправление goroutine leaks и blocking)
+- ✅ **ИСПРАВЛЕНО**: DHCP worker blocking на shutdown → stopChan check при response
+- ✅ **ИСПРАВЛЕНО**: DNS LookupIP hardcoded 2s timeout → используем ctx.Done()
+- ✅ **ИСПРАВЛЕНО**: DNS lookupIPUncached goroutine leak → cancel() при первом результате
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ 7f31472 — синхронизирована с origin/dev
-main: ✅ 1c1d32d — синхронизирована с origin/main (merge dev)
+dev:  ✅ 9398723 — синхронизирована с origin/dev
+main: ✅ 7abc1d1 — синхронизирована с origin/main (merge dev)
 ```
 
 **Реализовано модулей:** 36+ (все отмечены как ✅ ЗАВЕРШЁН)
