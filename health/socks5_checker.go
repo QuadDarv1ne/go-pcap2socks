@@ -234,9 +234,9 @@ func (c *Checker) checkProxy(p proxy.Proxy) {
 	defer cancel()
 
 	done := make(chan bool, 1)
-	go func() {
+	goroutine.SafeGo(func() {
 		done <- hc.CheckHealth()
-	}()
+	})
 
 	var healthy bool
 	select {

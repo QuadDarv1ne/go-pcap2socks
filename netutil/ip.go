@@ -7,6 +7,8 @@ import (
 	"net"
 	"regexp"
 	"strings"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // MAC constants
@@ -317,7 +319,7 @@ func ParseCIDRRange(cidr string) (IPRange, error) {
 func GenerateIPsInCIDR(cidr string) <-chan net.IP {
 	ch := make(chan net.IP)
 
-	go func() {
+	goroutine.SafeGo(func() {
 		defer close(ch)
 
 		ipRange, err := ParseCIDRRange(cidr)
@@ -335,7 +337,7 @@ func GenerateIPsInCIDR(cidr string) <-chan net.IP {
 			}
 			current = NextIP(current)
 		}
-	}()
+	})
 
 	return ch
 }

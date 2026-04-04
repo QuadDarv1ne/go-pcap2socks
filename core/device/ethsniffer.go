@@ -16,6 +16,8 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/link/nested"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // pcapPacket represents a packet to be written to the PCAP file
@@ -186,10 +188,10 @@ func (e *Endpoint) Stop(ctx context.Context) error {
 
 	// Wait for writer to finish with timeout
 	done := make(chan struct{})
-	go func() {
+	goroutine.SafeGo(func() {
 		e.wg.Wait()
 		close(done)
-	}()
+	})
 
 	select {
 	case <-ctx.Done():

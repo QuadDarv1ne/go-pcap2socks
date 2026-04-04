@@ -511,10 +511,10 @@ func (r *Resolver) LookupIPv6(ctx context.Context, hostname string) ([]net.IP, e
 // StartPrefetch starts the background prefetch goroutine
 func (r *Resolver) StartPrefetch() {
 	r.prefetchWG.Add(1)
-	go func() {
+	goroutine.SafeGo(func() {
 		defer r.prefetchWG.Done()
 		r.prefetchLoop()
-	}()
+	})
 	slog.Info("DNS prefetch started")
 }
 

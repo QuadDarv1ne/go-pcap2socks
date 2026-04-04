@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/gorilla/websocket"
 )
 
@@ -227,7 +228,7 @@ func (t *WebSocketTransport) Close() error {
 func (t *WebSocketTransport) startPingLoop() {
 	t.pingTicker = time.NewTicker(t.config.PingInterval)
 
-	go func() {
+	goroutine.SafeGo(func() {
 		for {
 			select {
 			case <-t.pingTicker.C:
@@ -243,7 +244,7 @@ func (t *WebSocketTransport) startPingLoop() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // Read implements io.Reader for wsConn
