@@ -1,33 +1,60 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, тридцатая волна)
+## Статус проекта (04.04.2026, тридцать первая волна)
 
 **Ветка:** `main` (синхронизирована с dev и remote)
 
 **Последние изменения:**
-- ✅ **ТРИДЦАТАЯ ВОЛНА** (04.04.2026, TCP pipe + UDP association)
-- ✅ **TCP Pipe**: half-close механизм + timeout 60s для graceful shutdown
-- ✅ **UDP Association**: timeout уменьшен с 5 до 2 минут
+- ✅ **ТРИДЦАТЬ ПЕРВАЯ ВОЛНА** (04.04.2026, retry stability + random fix)
+- ✅ **dialProxy retry**: проверка контекста во время backoff sleep
+- ✅ **randInt**: заменён на math/rand.Intn (настоящий random)
+- ✅ **Health check jitter**: теперь с поддержкой отмены через stopChan
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ d7b8c5b — синхронизирована с origin/dev
-main: ✅ d7b8c5b — синхронизирована с origin/main
+dev:  ✅ 4ec89be — синхронизирована с origin/dev
+main: ✅ 4ec89be — синхронизирована с origin/main
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
 
 ---
 
-## ✅ Результаты тридцатой волны (04.04.2026)
+## ✅ Результаты тридцать первой волны (04.04.2026)
 
 ### Исправленные проблемы:
 
 | # | Проблема | Файл | Изменение | Статус |
 |---|----------|------|-----------|--------|
-| 1 | TCP pipe без half-close | `tunnel/tcp.go` | done channel + CloseWrite | ✅ ИСПРАВЛЕНО |
-| 2 | TCP pipe без timeout | `tunnel/tcp.go` | TCPWaitTimeout 60s | ✅ ИСПРАВЛЕНО |
+| 1 | dialProxy retry без ctx проверки | `core/conntrack.go` | select с tc.ctx.Done() | ✅ ИСПРАВЛЕНО |
+| 2 | randInt не настоящий random | `proxy/group.go` | math/rand.Intn | ✅ ИСПРАВЛЕНО |
+| 3 | Health check jitter без отмены | `proxy/group.go` | select с stopChan | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**core/conntrack.go:**
+- `dialProxy()`: retry backoff теперь проверяет `tc.ctx.Done()` через `select`
+- При отмене контекта во время sleep - немедленный выход
+- Предотвращает лишние retry попытки при shutdown
+
+**proxy/group.go:**
+- Импорт `math/rand` вместо кастомной `randInt`
+- `randInt(0, 100)` → `rand.Intn(100)` - настоящий pseudo-random
+- Initial jitter теперь с `select { case <-time.After: case <-stopChan: }`
+- Удалена функция `randInt()` которая использовала `time.Now().UnixNano()`
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
+
+### Коммиты:
+
+1. `4ec89be` — fix: улучшить стабильность retry и random (31-я волна)
+
+---
 | 3 | UDP association 5 min hang | `proxy/socks5.go` | Timeout 5→2 минуты | ✅ ИСПРАВЛЕНО |
 
 ### Детали изменений:
