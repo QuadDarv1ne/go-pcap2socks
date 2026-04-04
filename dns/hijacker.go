@@ -55,6 +55,9 @@ type Hijacker struct {
 	cacheHits          uint64
 	cacheMisses        uint64
 	mappingsExpired    uint64
+
+	// Shutdown
+	stopCh chan struct{}
 }
 
 // fakeIPMapping holds a fake IP and its creation timestamp
@@ -88,6 +91,7 @@ func NewHijacker(cfg HijackerConfig) *Hijacker {
 		timeout:         timeout,
 		upstreamServers: cfg.UpstreamServers,
 		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
@@ -97,17 +101,32 @@ func NewHijacker(cfg HijackerConfig) *Hijacker {
 }
 
 // allocateFakeIP allocates the next available fake IP address
-func (h *Hijacker) allocateFakeIP() netip.Addr {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+// Must be called with h.mu.Lock() held
+func (h *Hijacker) allocateFakeIPLocked() netip.Addr {
+	// Find an unused IP by scanning from current counter
+	for i := 0; i < FakeIPRangeSize; i++ {
+		ipStr := fmt.Sprintf("%s%d", FakeIPBase, h.ipCounter+1)
+		ip, err := netip.ParseAddr(ipStr)
+		if err != nil {
+			h.ipCounter = (h.ipCounter + 1) % FakeIPRangeSize
+			continue
+		}
 
-	// Allocate next IP in range
+		// Check if this IP is already in use
+		if _, exists := h.fakeToDomain[ip]; !exists {
+			// Found a free IP, increment counter for next time
+			h.ipCounter = (h.ipCounter + 1) % FakeIPRangeSize
+			return ip
+		}
+
+		h.ipCounter = (h.ipCounter + 1) % FakeIPRangeSize
+	}
+
+	// All IPs in use, wrap around and return first available
+	h.logger.Warn("Fake IP pool exhausted, reusing address")
 	ipStr := fmt.Sprintf("%s%d", FakeIPBase, h.ipCounter+1)
 	ip, _ := netip.ParseAddr(ipStr)
-
-	// Increment counter with wrap-around
 	h.ipCounter = (h.ipCounter + 1) % FakeIPRangeSize
-
 	return ip
 }
 
@@ -149,11 +168,9 @@ func (h *Hijacker) InterceptDNS(query []byte) ([]byte, bool) {
 
 	h.cacheMisses++
 
-	// Allocate new fake IP
-	fakeIP := h.allocateFakeIP()
-
-	// Store mapping with timestamp
+	// Allocate new fake IP and store mapping atomically (prevents race)
 	h.mu.Lock()
+	fakeIP := h.allocateFakeIPLocked()
 	h.domainToFake[domain] = fakeIPMapping{
 		ip:        fakeIP,
 		createdAt: time.Now(),
@@ -241,36 +258,48 @@ func (h *Hijacker) cleanupExpired() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		h.mu.Lock()
+	for {
+		select {
+		case <-h.stopCh:
+			h.logger.Info("DNS hijacker cleanup stopped")
+			return
+		case <-ticker.C:
+			h.mu.Lock()
 
-		now := time.Now()
-		var toDelete []string
+			now := time.Now()
+			var toDelete []string
 
-		// Collect expired mappings
-		for domain, mapping := range h.domainToFake {
-			if now.Sub(mapping.createdAt) > h.timeout {
-				toDelete = append(toDelete, domain)
+			// Collect expired mappings
+			for domain, mapping := range h.domainToFake {
+				if now.Sub(mapping.createdAt) > h.timeout {
+					toDelete = append(toDelete, domain)
+				}
+			}
+
+			// Remove expired mappings
+			for _, domain := range toDelete {
+				mapping := h.domainToFake[domain]
+				delete(h.domainToFake, domain)
+				delete(h.fakeToDomain, mapping.ip)
+				h.mappingsExpired++
+			}
+
+			h.mu.Unlock()
+
+			if len(toDelete) > 0 {
+				h.logger.Debug("DNS hijacker cleanup",
+					"expired_mappings", len(toDelete),
+					"remaining", len(h.domainToFake),
+					"total_expired", h.mappingsExpired)
 			}
 		}
-
-		// Remove expired mappings
-		for _, domain := range toDelete {
-			mapping := h.domainToFake[domain]
-			delete(h.domainToFake, domain)
-			delete(h.fakeToDomain, mapping.ip)
-			h.mappingsExpired++
-		}
-
-		h.mu.Unlock()
-
-		if len(toDelete) > 0 {
-			h.logger.Debug("DNS hijacker cleanup",
-				"expired_mappings", len(toDelete),
-				"remaining", len(h.domainToFake),
-				"total_expired", h.mappingsExpired)
-		}
 	}
+}
+
+// Stop gracefully stops the DNS hijacker cleanup goroutine
+func (h *Hijacker) Stop() {
+	close(h.stopCh)
+	h.logger.Info("DNS hijacker stopping")
 }
 
 // GetStats returns hijacker statistics

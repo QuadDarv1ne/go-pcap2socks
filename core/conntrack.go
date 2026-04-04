@@ -34,6 +34,7 @@ func (m ConnMeta) String() string {
 type TCPConn struct {
 	Meta      ConnMeta
 	ProxyConn net.Conn // Реальное соединение с SOCKS5 сервером
+	proxyMu   sync.Mutex
 
 	// Управление жизненным циклом горутин
 	ctx    context.Context
@@ -196,10 +197,13 @@ func (ct *ConnTracker) RemoveTCP(tc *TCPConn) {
 		tc.closed.Store(true)
 		tc.cancel() // Останавливаем все горутины этого соединения
 
-		// Close proxy connection first
+		// Close proxy connection first (with mutex protection)
+		tc.proxyMu.Lock()
 		if tc.ProxyConn != nil {
 			tc.ProxyConn.Close()
+			tc.ProxyConn = nil
 		}
+		tc.proxyMu.Unlock()
 
 		// Drain buffered packets and return to pool
 		drainChannel(tc.ToProxy)
@@ -314,13 +318,23 @@ func (ct *ConnTracker) RemoveUDP(uc *UDPConn) {
 
 // CloseAll вызывается при выключении программы (Ctrl+C)
 func (ct *ConnTracker) CloseAll() {
+	// Copy all connections under lock to avoid deadlock
 	ct.mu.Lock()
-	defer ct.mu.Unlock()
-
+	tcpConns := make([]*TCPConn, 0, len(ct.tcpConns))
 	for _, tc := range ct.tcpConns {
+		tcpConns = append(tcpConns, tc)
+	}
+	udpConns := make([]*UDPConn, 0, len(ct.udpConns))
+	for _, uc := range ct.udpConns {
+		udpConns = append(udpConns, uc)
+	}
+	ct.mu.Unlock()
+
+	// Close all connections outside the lock
+	for _, tc := range tcpConns {
 		ct.RemoveTCP(tc)
 	}
-	for _, uc := range ct.udpConns {
+	for _, uc := range udpConns {
 		ct.RemoveUDP(uc)
 	}
 
@@ -390,17 +404,22 @@ func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
 			// Update activity timestamp
 			tc.lastActivity.Store(time.Now().Unix())
 
+			tc.proxyMu.Lock()
 			if tc.ProxyConn == nil {
 				// Lazy dial on first packet
+				tc.proxyMu.Unlock()
 				if err := ct.dialProxy(tc); err != nil {
 					buffer.Put(payload) // Return buffer to pool on error
 					ct.logger.Warn("Dial proxy failed", "err", err, "conn", tc.Meta.String())
 					return
 				}
+				tc.proxyMu.Lock()
 			}
+			proxyConn := tc.ProxyConn
+			tc.proxyMu.Unlock()
 
-			tc.ProxyConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			n, err := tc.ProxyConn.Write(payload)
+			proxyConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			n, err := proxyConn.Write(payload)
 			if err != nil {
 				buffer.Put(payload) // Return buffer to pool on error
 				ct.logger.Debug("Write to proxy failed", "err", err)
@@ -431,14 +450,22 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 		case <-tc.ctx.Done():
 			return
 		default:
-			if tc.ProxyConn == nil {
-				// Wait for proxy connection
-				time.Sleep(10 * time.Millisecond)
-				continue
+			tc.proxyMu.Lock()
+			proxyConn := tc.ProxyConn
+			tc.proxyMu.Unlock()
+
+			if proxyConn == nil {
+				// Wait for proxy connection with context-aware sleep
+				select {
+				case <-tc.ctx.Done():
+					return
+				case <-time.After(100 * time.Millisecond):
+					continue
+				}
 			}
 
-			tc.ProxyConn.SetReadDeadline(time.Now().Add(30 * time.Second))
-			n, err := tc.ProxyConn.Read(buf)
+			proxyConn.SetReadDeadline(time.Now().Add(30 * time.Second))
+			n, err := proxyConn.Read(buf)
 			if err != nil {
 				ct.logger.Debug("Read from proxy failed", "err", err)
 				return
@@ -461,6 +488,7 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 }
 
 // dialProxy establishes connection to proxy server with retry and exponential backoff
+// Caller must hold tc.proxyMu lock
 func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 	if tc.ProxyConn != nil {
 		return nil
