@@ -378,14 +378,16 @@ func (r *Router) performHealthChecks() {
 	for tag, proxy := range r.Proxies {
 		// Check if proxy supports health checks
 		if healthChecker, ok := proxy.(interface{ CheckHealth() bool }); ok {
+			proxyTag := tag
+			proxyChecker := healthChecker
 			sem <- struct{}{} // Acquire semaphore
 			goroutine.SafeGo(func() {
 				defer func() { <-sem }() // Release semaphore
-				healthy := healthChecker.CheckHealth()
+				healthy := proxyChecker.CheckHealth()
 				if healthy {
-					slog.Debug("Proxy health check passed", "proxy", tag)
+					slog.Debug("Proxy health check passed", "proxy", proxyTag)
 				} else {
-					slog.Warn("Proxy health check failed", "proxy", tag)
+					slog.Warn("Proxy health check failed", "proxy", proxyTag)
 				}
 			})
 		}
