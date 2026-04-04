@@ -1,31 +1,60 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (04.04.2026, двадцать девятая волна)
+## Статус проекта (04.04.2026, тридцатая волна)
 
 **Ветка:** `main` (синхронизирована с dev и remote)
 
 **Последние изменения:**
-- ✅ **ДВАДЦАТЬ ДЕВЯТАЯ ВОЛНА** (04.04.2026, SafeGo везде + health checker fix)
-- ✅ **SafeGo**: добавлена защита во все 5 production go func() без recovery
-- ✅ **Health Checker**: triggerRecovery теперь асинхронный, не блокирует цикл
+- ✅ **ТРИДЦАТАЯ ВОЛНА** (04.04.2026, TCP pipe + UDP association)
+- ✅ **TCP Pipe**: half-close механизм + timeout 60s для graceful shutdown
+- ✅ **UDP Association**: timeout уменьшен с 5 до 2 минут
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
-dev:  ✅ 23c3024 — синхронизирована с origin/dev
-main: ✅ 23c3024 — синхронизирована с origin/main
+dev:  ✅ d7b8c5b — синхронизирована с origin/dev
+main: ✅ d7b8c5b — синхронизирована с origin/main
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
 
 ---
 
-## ✅ Результаты двадцать девятой волны (04.04.2026)
+## ✅ Результаты тридцатой волны (04.04.2026)
 
 ### Исправленные проблемы:
 
 | # | Проблема | Файл | Изменение | Статус |
 |---|----------|------|-----------|--------|
+| 1 | TCP pipe без half-close | `tunnel/tcp.go` | done channel + CloseWrite | ✅ ИСПРАВЛЕНО |
+| 2 | TCP pipe без timeout | `tunnel/tcp.go` | TCPWaitTimeout 60s | ✅ ИСПРАВЛЕНО |
+| 3 | UDP association 5 min hang | `proxy/socks5.go` | Timeout 5→2 минуты | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**tunnel/tcp.go:**
+- `pipe()`: добавлен `done := make(chan struct{}, 2)` для отслеживания завершения
+- `pipe()`: half-close через `CloseWrite()` когда одно направление завершилось
+- `pipe()`: timeout 60s через `select { case <-done: case <-time.After(TCPWaitTimeout): }`
+- Удалены неиспользуемые импорты (`sync/atomic`)
+- Убраны atomic counters (bytesCopied, errorsCount) — не использовались вне pipe
+
+**proxy/socks5.go:**
+- UDP association monitoring: `5 * time.Minute` → `2 * time.Minute`
+- Предотвращает goroutine leak при зависших UDP сессиях
+- 2 минуты достаточно для gaming/streaming sessions
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
+
+### Коммиты:
+
+1. `d7b8c5b` — fix: улучшить TCP pipe и UDP association (30-я волна)
+
+---
 | 1 | API server go func без SafeGo | `app/application.go` | goroutine.SafeGo | ✅ ИСПРАВЛЕНО |
 | 2 | health checker runProbes без SafeGo | `health/checker.go` | goroutine.SafeGo | ✅ ИСПРАВЛЕНО |
 | 3 | DHCPv6 handleMessage без SafeGo | `dhcp/dhcpv6.go` | goroutine.SafeGo | ✅ ИСПРАВЛЕНО |
