@@ -58,6 +58,9 @@ type UDPConn struct {
 	Meta      ConnMeta
 	ProxyConn net.PacketConn // UDP association с SOCKS5
 
+	// Protection for ProxyConn access
+	proxyMu sync.Mutex
+
 	// Управление жизненным циклом
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -314,10 +317,13 @@ func (ct *ConnTracker) RemoveUDP(uc *UDPConn) {
 		close(uc.ToProxy)
 		close(uc.FromProxy)
 
-		// Close proxy connection
+		// Close proxy connection with mutex protection
+		uc.proxyMu.Lock()
 		if uc.ProxyConn != nil {
 			uc.ProxyConn.Close()
+			uc.ProxyConn = nil
 		}
+		uc.proxyMu.Unlock()
 
 		ct.mu.Lock()
 		delete(ct.udpConns, k)
@@ -364,11 +370,20 @@ func (ct *ConnTracker) CloseAll() {
 func (ct *ConnTracker) Stop(ctx context.Context) error {
 	ct.logger.Info("Stopping connection tracker...", "active_tcp", ct.activeTCP.Load(), "active_udp", ct.activeUDP.Load())
 
+	// Copy all connections under lock to avoid deadlock
 	ct.mu.Lock()
-	defer ct.mu.Unlock()
-
-	// Close all TCP connections gracefully
+	tcpConns := make([]*TCPConn, 0, len(ct.tcpConns))
 	for _, tc := range ct.tcpConns {
+		tcpConns = append(tcpConns, tc)
+	}
+	udpConns := make([]*UDPConn, 0, len(ct.udpConns))
+	for _, uc := range ct.udpConns {
+		udpConns = append(udpConns, uc)
+	}
+	ct.mu.Unlock()
+
+	// Close all TCP connections gracefully outside the lock
+	for _, tc := range tcpConns {
 		select {
 		case <-ctx.Done():
 			ct.logger.Warn("Connection tracker stop timeout, forcing close")
@@ -378,8 +393,8 @@ func (ct *ConnTracker) Stop(ctx context.Context) error {
 		ct.RemoveTCP(tc)
 	}
 
-	// Close all UDP connections gracefully
-	for _, uc := range ct.udpConns {
+	// Close all UDP connections gracefully outside the lock
+	for _, uc := range udpConns {
 		select {
 		case <-ctx.Done():
 			ct.logger.Warn("Connection tracker stop timeout, forcing close")
@@ -504,8 +519,9 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 }
 
 // dialProxy establishes connection to proxy server with retry and exponential backoff
-// Caller must hold tc.proxyMu lock
+// dialProxy устанавливает соединение с прокси с retry логикой
 func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
+	// Check if already connected (caller should hold tc.proxyMu, but double-check)
 	if tc.ProxyConn != nil {
 		return nil
 	}
@@ -583,13 +599,16 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 			uc.packetsSent.Add(1)
 			uc.bytesSent.Add(uint64(len(payload)))
 
+			uc.proxyMu.Lock()
 			if uc.ProxyConn == nil {
 				// Lazy dial UDP association
+				uc.proxyMu.Unlock()
 				if err := ct.dialUDPProxy(uc); err != nil {
 					buffer.Put(payload) // Return buffer to pool on error
 					ct.logger.Warn("Dial UDP proxy failed", "err", err, "conn", uc.Meta.String())
 					return
 				}
+				uc.proxyMu.Lock()
 			}
 
 			// Send packet to proxy
@@ -597,7 +616,10 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 				IP:   uc.Meta.DestIP.AsSlice(),
 				Port: int(uc.Meta.DestPort),
 			}
-			_, err := uc.ProxyConn.WriteTo(payload, addr)
+			proxyConn := uc.ProxyConn
+			uc.proxyMu.Unlock()
+			
+			_, err := proxyConn.WriteTo(payload, addr)
 			if err != nil {
 				buffer.Put(payload) // Return buffer to pool on error
 				ct.logger.Warn("Write UDP to proxy failed", "err", err)
@@ -612,6 +634,7 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 
 // dialUDPProxy establishes UDP association with proxy
 func (ct *ConnTracker) dialUDPProxy(uc *UDPConn) error {
+	// Check if already connected (caller should hold uc.proxyMu, but double-check)
 	if uc.ProxyConn != nil {
 		return nil
 	}
@@ -629,7 +652,9 @@ func (ct *ConnTracker) dialUDPProxy(uc *UDPConn) error {
 		return fmt.Errorf("proxy UDP dial: %w", err)
 	}
 
+	uc.proxyMu.Lock()
 	uc.ProxyConn = pc
+	uc.proxyMu.Unlock()
 
 	// Start reading from proxy
 	go ct.readUDPFromProxy(uc)
@@ -655,13 +680,22 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 		case <-uc.ctx.Done():
 			return
 		default:
-			if uc.ProxyConn == nil {
-				time.Sleep(10 * time.Millisecond)
-				continue
+			uc.proxyMu.Lock()
+			proxyConn := uc.ProxyConn
+			uc.proxyMu.Unlock()
+
+			if proxyConn == nil {
+				// Wait for proxy connection with context-aware sleep
+				select {
+				case <-uc.ctx.Done():
+					return
+				case <-time.After(100 * time.Millisecond):
+					continue
+				}
 			}
 
-			uc.ProxyConn.SetReadDeadline(time.Now().Add(120 * time.Second))
-			n, _, err := uc.ProxyConn.ReadFrom(buf)
+			proxyConn.SetReadDeadline(time.Now().Add(120 * time.Second))
+			n, _, err := proxyConn.ReadFrom(buf)
 			if err != nil {
 				ct.logger.Debug("Read UDP from proxy failed", "err", err)
 				return

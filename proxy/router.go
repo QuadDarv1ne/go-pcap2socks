@@ -304,6 +304,7 @@ type Router struct {
 	healthCheckTicker   *time.Ticker
 	healthCheckStop     chan struct{}
 	healthCheckWg       sync.WaitGroup
+	stopHealthOnce      sync.Once // Protects healthCheckStop from double close
 
 	// Circuit breaker for proxy protection
 	circuitBreaker *circuitbreaker.CircuitBreaker
@@ -366,25 +367,27 @@ func (r *Router) performHealthChecks() {
 	for tag, proxy := range r.Proxies {
 		// Check if proxy supports health checks
 		if healthChecker, ok := proxy.(interface{ CheckHealth() bool }); ok {
-			go func(t string, p interface{ CheckHealth() bool }) {
-				healthy := p.CheckHealth()
+			goroutine.SafeGo(func() {
+				healthy := healthChecker.CheckHealth()
 				if healthy {
-					slog.Debug("Proxy health check passed", "proxy", t)
+					slog.Debug("Proxy health check passed", "proxy", tag)
 				} else {
-					slog.Warn("Proxy health check failed", "proxy", t)
+					slog.Warn("Proxy health check failed", "proxy", tag)
 				}
-			}(tag, healthChecker)
+			})
 		}
 	}
 }
 
 // StopHealthChecks stops periodic health checks
 func (r *Router) StopHealthChecks() {
-	if r.healthCheckTicker != nil {
-		r.healthCheckTicker.Stop()
-		close(r.healthCheckStop)
-		r.healthCheckWg.Wait()
-	}
+	r.stopHealthOnce.Do(func() {
+		if r.healthCheckTicker != nil {
+			r.healthCheckTicker.Stop()
+			close(r.healthCheckStop)
+			r.healthCheckWg.Wait()
+		}
+	})
 }
 
 // NewRouter creates a new Router with the given rules and proxies.

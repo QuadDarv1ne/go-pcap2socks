@@ -3,11 +3,13 @@ package validation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
@@ -57,13 +59,14 @@ func (v *ConfigValidator) Validate() error {
 		return fmt.Errorf("dns config: %w", err)
 	}
 
-	// Validate outbounds (proxies)
-	if err := v.validateOutbounds(); err != nil {
+	// Validate outbounds (proxies) and collect valid tags
+	validTags, err := v.validateOutbounds()
+	if err != nil {
 		return fmt.Errorf("outbound config: %w", err)
 	}
 
-	// Validate routing rules
-	if err := v.validateRoutingRules(); err != nil {
+	// Validate routing rules with valid tags
+	if err := v.validateRoutingRules(validTags); err != nil {
 		return fmt.Errorf("routing rules: %w", err)
 	}
 
@@ -98,6 +101,14 @@ func (v *ConfigValidator) validatePCAP() error {
 func (v *ConfigValidator) validateDHCP() error {
 	if v.config.DHCP == nil || !v.config.DHCP.Enabled {
 		return nil // DHCP is optional
+	}
+
+	// Validate pool start and end must be set together
+	if v.config.DHCP.PoolStart != "" && v.config.DHCP.PoolEnd == "" {
+		return fmt.Errorf("%w: poolEnd is required when poolStart is set", ErrInvalidDHCPPool)
+	}
+	if v.config.DHCP.PoolEnd != "" && v.config.DHCP.PoolStart == "" {
+		return fmt.Errorf("%w: poolStart is required when poolEnd is set", ErrInvalidDHCPPool)
 	}
 
 	// Validate pool start
@@ -152,7 +163,8 @@ func (v *ConfigValidator) validateDNS() error {
 
 		// Validate port
 		if port != "" {
-			if _, err := net.LookupPort("udp", port); err != nil {
+			portNum, err := strconv.Atoi(port)
+			if err != nil || portNum < 1 || portNum > 65535 {
 				return fmt.Errorf("invalid DNS server %d port: %s", i, port)
 			}
 		}
@@ -167,94 +179,125 @@ func (v *ConfigValidator) validateDNS() error {
 }
 
 // validateOutbounds validates outbound proxy configuration
-func (v *ConfigValidator) validateOutbounds() error {
+func (v *ConfigValidator) validateOutbounds() (map[string]bool, error) {
 	if v.config.Outbounds == nil || len(v.config.Outbounds) == 0 {
-		return nil // Outbounds are optional
+		return nil, nil // Outbounds are optional
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Collect all valid tags for later validation
+	validTags := make(map[string]bool, len(v.config.Outbounds))
+
 	for i, outbound := range v.config.Outbounds {
 		// Validate tag
 		if outbound.Tag == "" {
-			return fmt.Errorf("outbound %d: tag is required", i)
+			return nil, fmt.Errorf("outbound %d: tag is required", i)
 		}
+		validTags[outbound.Tag] = true
 
 		// Validate SOCKS proxy
 		if outbound.Socks != nil {
 			if outbound.Socks.Address == "" {
-				return fmt.Errorf("outbound %d: socks address is required", i)
+				return nil, fmt.Errorf("outbound %d: socks address is required", i)
 			}
 			if _, _, err := net.SplitHostPort(outbound.Socks.Address); err != nil {
-				return fmt.Errorf("outbound %d: invalid socks address %s: %w", i, outbound.Socks.Address, err)
+				return nil, fmt.Errorf("outbound %d: invalid socks address %s: %w", i, outbound.Socks.Address, err)
 			}
 		}
 
 		// Validate HTTP/3 proxy
 		if outbound.HTTP3 != nil {
 			if outbound.HTTP3.Address == "" {
-				return fmt.Errorf("outbound %d: http3 address is required", i)
+				return nil, fmt.Errorf("outbound %d: http3 address is required", i)
 			}
 			u, err := url.Parse(outbound.HTTP3.Address)
 			if err != nil {
-				return fmt.Errorf("outbound %d: invalid http3 address: %w", i, err)
+				return nil, fmt.Errorf("outbound %d: invalid http3 address: %w", i, err)
 			}
 			if u.Scheme != "https" {
-				return fmt.Errorf("outbound %d: http3 scheme must be https", i)
+				return nil, fmt.Errorf("outbound %d: http3 scheme must be https", i)
 			}
 		}
 
 		// Validate WireGuard
 		if outbound.WireGuard != nil {
 			if outbound.WireGuard.PrivateKey == "" {
-				return fmt.Errorf("outbound %d: wireguard private_key is required", i)
+				return nil, fmt.Errorf("outbound %d: wireguard private_key is required", i)
 			}
 			if outbound.WireGuard.PublicKey == "" {
-				return fmt.Errorf("outbound %d: wireguard public_key is required", i)
+				return nil, fmt.Errorf("outbound %d: wireguard public_key is required", i)
 			}
 			if outbound.WireGuard.Endpoint == "" {
-				return fmt.Errorf("outbound %d: wireguard endpoint is required", i)
+				return nil, fmt.Errorf("outbound %d: wireguard endpoint is required", i)
+			}
+			// Validate endpoint формат host:port
+			if _, _, err := net.SplitHostPort(outbound.WireGuard.Endpoint); err != nil {
+				return nil, fmt.Errorf("outbound %d: invalid wireguard endpoint %s: %w", i, outbound.WireGuard.Endpoint, err)
+			}
+		}
+
+		// Validate WebSocket
+		if outbound.WebSocket != nil {
+			if outbound.WebSocket.URL == "" {
+				return nil, fmt.Errorf("outbound %d: websocket url is required", i)
+			}
+			u, err := url.Parse(outbound.WebSocket.URL)
+			if err != nil {
+				return nil, fmt.Errorf("outbound %d: invalid websocket url: %w", i, err)
+			}
+			if u.Scheme != "ws" && u.Scheme != "wss" {
+				return nil, fmt.Errorf("outbound %d: websocket scheme must be ws or wss", i)
+			}
+			if u.Host == "" {
+				return nil, fmt.Errorf("outbound %d: websocket url has no host", i)
 			}
 		}
 
 		// Validate group
 		if outbound.Group != nil {
 			if len(outbound.Group.Proxies) == 0 {
-				return fmt.Errorf("outbound %d: group must have at least one proxy", i)
+				return nil, fmt.Errorf("outbound %d: group must have at least one proxy", i)
 			}
 			if outbound.Group.Policy != "" && outbound.Group.Policy != "failover" &&
 				outbound.Group.Policy != "round-robin" && outbound.Group.Policy != "least-load" {
-				return fmt.Errorf("outbound %d: invalid group policy '%s'", i, outbound.Group.Policy)
+				return nil, fmt.Errorf("outbound %d: invalid group policy '%s'", i, outbound.Group.Policy)
 			}
 			// Check availability if check_url is provided
 			if outbound.Group.CheckURL != "" {
 				u, err := url.Parse(outbound.Group.CheckURL)
 				if err != nil {
-					return fmt.Errorf("outbound %d: invalid check_url: %w", i, err)
+					return nil, fmt.Errorf("outbound %d: invalid check_url: %w", i, err)
+				}
+				if u.Host == "" {
+					return nil, fmt.Errorf("outbound %d: check_url has no host", i)
 				}
 				if outbound.Group.CheckInterval > 0 {
 					if err := v.checkProxyAvailability(ctx, u.Host); err != nil {
-						return fmt.Errorf("outbound %d check_url failed: %w", i, err)
+						return nil, fmt.Errorf("outbound %d check_url failed: %w", i, err)
 					}
 				}
 			}
 		}
 	}
 
-	return nil
+	return validTags, nil
 }
 
 // validateRoutingRules validates routing rules
-func (v *ConfigValidator) validateRoutingRules() error {
+func (v *ConfigValidator) validateRoutingRules(validTags map[string]bool) error {
 	if v.config.Routing.Rules == nil || len(v.config.Routing.Rules) == 0 {
 		return nil // Routing is optional
 	}
 
 	for i, rule := range v.config.Routing.Rules {
-		// Validate outbound tag
+		// Validate outbound tag exists
 		if rule.OutboundTag == "" {
 			return fmt.Errorf("rule %d: outboundTag is required", i)
+		}
+		if !validTags[rule.OutboundTag] {
+			return fmt.Errorf("rule %d: outboundTag '%s' not found in outbounds", i, rule.OutboundTag)
 		}
 
 		// Validate source IPs
@@ -364,6 +407,56 @@ func ValidateConfigDir(dir string) error {
 
 	if len(errors) > 0 {
 		return fmt.Errorf("validation failed for %d files", len(errors))
+	}
+
+	return nil
+}
+
+// ValidateProfiles checks profile files for consistency
+func ValidateProfiles(profilesDir string) error {
+	// Check if directory exists
+	if _, err := os.Stat(profilesDir); os.IsNotExist(err) {
+		return fmt.Errorf("profiles directory not found: %s", profilesDir)
+	}
+
+	// Check for common mistakes
+	if _, err := os.Stat(filepath.Join(profilesDir, "profiles")); err == nil {
+		return fmt.Errorf("found nested profiles directory - move profiles to %s", profilesDir)
+	}
+
+	// Validate each profile
+	files, err := filepath.Glob(filepath.Join(profilesDir, "*.json"))
+	if err != nil {
+		return fmt.Errorf("failed to glob profiles: %w", err)
+	}
+
+	for _, file := range files {
+		if err := validateProfileFile(file); err != nil {
+			return fmt.Errorf("invalid profile %s: %w", file, err)
+		}
+	}
+
+	return nil
+}
+
+func validateProfileFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var profile struct {
+		Name        string      `json:"name"`
+		Description string      `json:"description"`
+		Config      interface{} `json:"config"`
+	}
+
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	if profile.Name == "" {
+		return fmt.Errorf("missing profile name")
 	}
 
 	return nil
