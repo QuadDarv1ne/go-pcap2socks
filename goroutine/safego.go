@@ -56,6 +56,8 @@ func SafeGoNamed(name string, fn GoFunc) {
 // SafeGoWithRetry starts a goroutine with automatic retry on panic.
 // The goroutine will be restarted up to maxRetries times with exponential backoff.
 // Includes a timeout mechanism to detect hanging functions.
+// IMPORTANT: On timeout, the original goroutine continues running in background
+// (cannot be cancelled). Consider using context-aware functions instead.
 func SafeGoWithRetry(name string, maxRetries int, baseDelay time.Duration, fn GoFunc) {
 	go func() {
 		retries := 0
@@ -88,6 +90,8 @@ func SafeGoWithRetry(name string, maxRetries int, baseDelay time.Duration, fn Go
 				slog.Error("Goroutine timeout, treating as failure",
 					"name", name,
 					"timeout", "5m")
+				// NOTE: Original goroutine continues running in background
+				// We cannot cancel it. This is a limitation.
 				// Fall through to retry logic
 			}
 
