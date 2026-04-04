@@ -306,8 +306,9 @@ func (b *Balancer) selectRoundRobin(uplinks []*Uplink) *Uplink {
 		return uplinks[0]
 	}
 
-	idx := b.currentIndex.Add(1) % uint32(len(uplinks))
-	return uplinks[idx]
+	// Load current, then increment for next selection
+	idx := b.currentIndex.Add(1) - 1
+	return uplinks[idx%uint32(len(uplinks))]
 }
 
 // selectWeighted selects uplink based on weights using weighted round-robin
@@ -327,7 +328,7 @@ func (b *Balancer) selectWeighted(uplinks []*Uplink) *Uplink {
 	}
 
 	// Use current index modulo total weight for smooth distribution
-	idx := b.currentIndex.Add(1)
+	idx := b.currentIndex.Add(1) - 1
 	weightedIdx := int(idx) % totalWeight
 
 	// Find uplink based on weighted index

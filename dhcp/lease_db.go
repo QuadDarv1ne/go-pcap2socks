@@ -23,6 +23,7 @@ type LeaseDB struct {
 	saveChan   chan struct{}
 	stopChan   chan struct{}
 	leaseCount atomic.Int32
+	saveMu     sync.Mutex // Protects concurrent save() calls
 }
 
 // serializedLease is used for JSON serialization
@@ -201,6 +202,10 @@ func (db *LeaseDB) saveLoop() {
 
 // save saves the database to disk
 func (db *LeaseDB) save() {
+	// Prevent concurrent saves
+	db.saveMu.Lock()
+	defer db.saveMu.Unlock()
+
 	if !db.dirty.Load() {
 		return
 	}

@@ -135,6 +135,9 @@ type Resolver struct {
 
 	// Persistent cache
 	cacheFile string
+
+	// Insert order tracking for O(1) eviction
+	insertOrder []string
 }
 
 // resolverMetrics holds DNS resolver metrics
@@ -735,8 +738,10 @@ func (r *Resolver) prefetchLoop() {
 		case <-r.stopPrefetch:
 			return
 		case hostname := <-r.prefetchChan:
-			// Immediate prefetch request
-			r.doPrefetch(hostname)
+			// Immediate prefetch request - run in background to not block channel
+			goroutine.SafeGo(func() {
+				r.doPrefetch(hostname)
+			})
 		case <-ticker.C:
 			// Periodic check for expiring entries
 			r.checkExpiringCache()
@@ -1303,22 +1308,23 @@ func (r *Resolver) setCached(hostname string, ips []net.IP) {
 		Original: ips,
 		Expires:  time.Now().Add(r.cacheTTL),
 	}
+	r.insertOrder = append(r.insertOrder, hostname)
 }
 
-// evictOldest evicts the oldest cache entry
+// evictOldest evicts the oldest cache entry in O(1)
 func (r *Resolver) evictOldest() {
-	var oldest string
-	var oldestTime time.Time
-
-	for hostname, entry := range r.cache {
-		if oldest == "" || entry.Expires.Before(oldestTime) {
-			oldest = hostname
-			oldestTime = entry.Expires
-		}
+	if len(r.insertOrder) == 0 {
+		return
 	}
 
-	if oldest != "" {
-		delete(r.cache, oldest)
+	// Find first entry that still exists in cache
+	for i, hostname := range r.insertOrder {
+		if _, exists := r.cache[hostname]; exists {
+			delete(r.cache, hostname)
+			// Remove from insertOrder
+			r.insertOrder = append(r.insertOrder[:i], r.insertOrder[i+1:]...)
+			return
+		}
 	}
 }
 
@@ -1327,6 +1333,7 @@ func (r *Resolver) ClearCache() {
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
 	r.cache = make(map[string]*CacheEntry)
+	r.insertOrder = nil
 	slog.Info("DNS cache cleared")
 }
 

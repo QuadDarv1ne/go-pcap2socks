@@ -2,6 +2,7 @@
 package cache
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -269,19 +270,11 @@ func (c *LRUCache[K, V]) evictOldest(shard *cacheShard[K, V]) {
 	c.evicts.Add(1)
 }
 
-// simpleHash is a simple hash function for keys
+// simpleHash is a hash function for comparable keys
 func simpleHash[K comparable](key K) uint64 {
-	// Convert key to bytes and hash
-	// This is a simplified hash - for production use hash/maphash
-	switch v := any(key).(type) {
-	case string:
-		return hashString(v)
-	case []byte:
-		return hashBytes(v)
-	default:
-		// Fallback for other types
-		return uint64(len(v.(string)))
-	}
+	// Use fmt.Sprintf for universal key serialization
+	s := fmt.Sprintf("%v", key)
+	return hashString(s)
 }
 
 func hashString(s string) uint64 {
