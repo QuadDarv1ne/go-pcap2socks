@@ -328,7 +328,8 @@ func (a *Application) initHealthChecker() *health.HealthChecker {
 	checker.AddProbe(health.NewDNSProbe("Primary DNS", dnsServer, "google.com", 5*time.Second))
 
 	// Add HTTP probe for internet connectivity
-	checker.AddProbe(health.NewHTTPProbe("Internet Connectivity", "https://www.google.com", 5*time.Second))
+	// Use reliable captive portal endpoints to avoid 429 rate limiting
+	checker.AddProbe(health.NewHTTPProbe("Internet Connectivity", "http://connect.rom.miui.com/generate_204", 5*time.Second))
 
 	return checker
 }

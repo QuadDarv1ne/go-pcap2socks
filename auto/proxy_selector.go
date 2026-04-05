@@ -60,7 +60,7 @@ func NewProxySelector(config *cfg.Config) *ProxySelector {
 		config:          config,
 		cache:           make(map[ProxyMode]*ProxyRecommendation),
 		checkInterval:   30 * time.Second,
-		speedTestURL:    "https://www.google.com",
+		speedTestURL:    "http://clients3.google.com/generate_204",
 		connectTimeout:  2 * time.Second,
 		speedTestResult: make(map[string]int64),
 	}

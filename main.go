@@ -700,8 +700,8 @@ func main() {
 		slog.Info("Health checker: DNS probe added", "dns_server", dnsServer)
 	}
 
-	// Add HTTP health probe
-	_healthChecker.AddProbe(health.NewHTTPProbe("Internet Connectivity", "https://www.google.com", 5*time.Second))
+	// Add HTTP health probe - use reliable captive portal to avoid 429 rate limiting
+	_healthChecker.AddProbe(health.NewHTTPProbe("Internet Connectivity", "http://connect.rom.miui.com/generate_204", 5*time.Second))
 
 	// Initialize DNS-over-HTTPS server
 	if config.DNS.Server != nil && config.DNS.Server.Enabled {
