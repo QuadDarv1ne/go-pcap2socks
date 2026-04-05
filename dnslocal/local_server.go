@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync/atomic"
 
+	localdns "github.com/QuadDarv1ne/go-pcap2socks/dns"
 	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/miekg/dns"
@@ -21,16 +22,18 @@ type DNSDialer interface {
 type LocalServer struct {
 	addr      string
 	conn      *net.UDPConn
-	dnsDialer DNSDialer // DNS outbound for resolution
+	dnsDialer DNSDialer             // DNS outbound for resolution
+	hijacker  *localdns.Hijacker    // DNS hijacker for fake IP routing
 	stopCh    chan struct{}
 	stopped   atomic.Bool
 }
 
 // NewLocalServer creates a new local DNS server
-func NewLocalServer(addr string, dnsDialer DNSDialer) *LocalServer {
+func NewLocalServer(addr string, dnsDialer DNSDialer, hijacker *localdns.Hijacker) *LocalServer {
 	return &LocalServer{
 		addr:      addr,
 		dnsDialer: dnsDialer,
+		hijacker:  hijacker,
 		stopCh:    make(chan struct{}),
 	}
 }
@@ -98,6 +101,24 @@ func (s *LocalServer) handleDNSQuery(data []byte, remoteAddr *net.UDPAddr) {
 	}
 
 	slog.Debug("Local DNS query received", "domain", msg.Question[0].Name, "from", remoteAddr.String())
+
+	// Try DNS hijacker first - check if this query should return a fake IP
+	if s.hijacker != nil {
+		response, hijacked := s.hijacker.InterceptDNS(data)
+		if hijacked {
+			slog.Info("DNS hijacked by local server",
+				"domain", msg.Question[0].Name,
+				"from", remoteAddr.String(),
+				"response_len", len(response))
+
+			// Send fake response back to client
+			_, err := s.conn.WriteTo(response, remoteAddr)
+			if err != nil {
+				slog.Error("DNS hijack response write error", "err", err)
+			}
+			return
+		}
+	}
 
 	// Use DNS outbound to resolve
 	conn, err := s.dnsDialer.DialUDP(nil)

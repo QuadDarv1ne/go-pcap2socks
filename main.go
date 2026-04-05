@@ -636,7 +636,7 @@ func main() {
 
 	// Initialize local DNS server to accept client DNS queries on 192.168.100.1:53
 	// This is required because clients send DNS to this IP, but gvisor doesn't capture it
-	_localDNSServer = createLocalDNSServer(config)
+	_localDNSServer = createLocalDNSServer(config, _dnsHijacker)
 
 	// Wrap DNS resolver with rate limiter if enabled
 	if config.DNS.RateLimiter != nil && config.DNS.RateLimiter.Enabled {
@@ -3744,7 +3744,7 @@ func initConfigReload(cfgFile string) {
 // createLocalDNSServer creates a local DNS server that listens on 192.168.100.1:53
 // This is required because clients send DNS queries to the gateway IP,
 // but gvisor doesn't capture packets destined to the gateway itself
-func createLocalDNSServer(config *cfg.Config) *dnslocal.LocalServer {
+func createLocalDNSServer(config *cfg.Config, hijacker *dns.Hijacker) *dnslocal.LocalServer {
 	if config.DHCP == nil || !config.DHCP.Enabled {
 		slog.Info("DHCP disabled, skipping local DNS server")
 		return nil
@@ -3755,14 +3755,14 @@ func createLocalDNSServer(config *cfg.Config) *dnslocal.LocalServer {
 
 	// Create local DNS server listening on gateway IP:53
 	listenAddr := config.PCAP.LocalIP + ":53"
-	localServer := dnslocal.NewLocalServer(listenAddr, dnsOutbound)
+	localServer := dnslocal.NewLocalServer(listenAddr, dnsOutbound, hijacker)
 
 	if err := localServer.Start(); err != nil {
 		slog.Error("Failed to start local DNS server", "addr", listenAddr, "err", err)
 		return nil
 	}
 
-	slog.Info("Local DNS server started", "addr", listenAddr)
+	slog.Info("Local DNS server started with hijacker", "addr", listenAddr)
 	return localServer
 }
 
