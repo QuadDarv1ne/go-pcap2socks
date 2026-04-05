@@ -434,6 +434,34 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 		"clientMAC", clientMAC.String(),
 		"broadcastFlag", broadcastFlag)
 
+	// Check DHCP message type to determine response type
+	// DHCP message type is at offset 240 + 2 (option code + length) = 242
+	dhcpMsgType := uint8(0)
+	if len(dhcpData) > 242 {
+		// Look for DHCP Message Type option (code 53)
+		for i := 240; i+1 < len(dhcpData); {
+			optCode := dhcpData[i]
+			if optCode == 255 { // End option
+				break
+			}
+			if optCode == 0 { // Pad option
+				i++
+				continue
+			}
+			optLen := int(dhcpData[i+1])
+			if i+2+optLen > len(dhcpData) {
+				break
+			}
+			if optCode == 53 && optLen == 1 { // DHCP Message Type
+				dhcpMsgType = dhcpData[i+2]
+				break
+			}
+			i += 2 + optLen
+		}
+	}
+
+	isOfferOrAck := dhcpMsgType == 2 || dhcpMsgType == 5 // DHCPOffer or DHCPACK
+
 	// Check DHCP message type and client IP
 	// DHCP message starts at dhcpData[0]
 	// YourIP (yiaddr) is at offset 16-19 in DHCP message
@@ -444,7 +472,8 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 
 		slog.Debug("DHCP response: IP addresses from DHCP message",
 			"clientIP", clientIP.String(),
-			"yourIP", yourIP.String())
+			"yourIP", yourIP.String(),
+			"dhcpMsgType", dhcpMsgType)
 
 		// If client already has an IP (ciaddr != 0), use unicast
 		if !clientIP.Equal(net.IPv4zero) {
@@ -460,14 +489,18 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 			slog.Debug("DHCP response: Using broadcast (flag set)",
 				"dstIP", dstIP.String(),
 				"dstMAC", dstMAC.String())
-		} else if !yourIP.Equal(net.IPv4zero) {
-			// For OFFER/ACK to clients without IP and no broadcast flag
-			// Use unicast to client MAC - critical for PS4 and other devices
-			dstIP = yourIP
-			dstMAC = clientMAC // Use client's MAC from DHCP payload
-			slog.Debug("DHCP response: Using unicast (yourIP set)",
+		} else if isOfferOrAck && !yourIP.Equal(net.IPv4zero) {
+			// CRITICAL FIX: For DHCP OFFER/ACK when client has no IP,
+			// ALWAYS use broadcast. The client doesn't have the IP yet,
+			// so unicast delivery will fail (no ARP entry).
+			// This fixes PS4 and other devices that don't receive OFFER.
+			dstIP = net.IPv4(255, 255, 255, 255)
+			dstMAC = broadcastMAC
+			slog.Info("DHCP response: Using broadcast for OFFER/ACK (client has no IP yet)",
 				"dstIP", dstIP.String(),
-				"dstMAC", dstMAC.String())
+				"dstMAC", dstMAC.String(),
+				"yourIP", yourIP.String(),
+				"msgType", dhcpMsgType)
 		} else {
 			slog.Debug("DHCP response: Using broadcast (fallback)",
 				"dstIP", dstIP.String(),

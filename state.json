@@ -1,12 +1,12 @@
 {
-  "start_time": "2026-03-29T20:48:49.7883078+03:00",
-  "uptime": "55.5449539s",
+  "start_time": "2026-04-04T23:09:41.6291918+03:00",
+  "uptime": "1m39.6151096s",
   "statistics": {
-    "download_bytes": 135193,
-    "packets": 347,
-    "total_bytes": 234772,
-    "upload_bytes": 99579
+    "download_bytes": 57356,
+    "packets": 133,
+    "total_bytes": 66146,
+    "upload_bytes": 8790
   },
   "active_connections": 0,
-  "last_modified": "2026-03-29T20:49:45.3361557+03:00"
+  "last_modified": "2026-04-04T23:11:21.2477282+03:00"
 }

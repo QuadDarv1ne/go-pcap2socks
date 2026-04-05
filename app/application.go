@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
@@ -20,7 +19,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/shutdown"
 	"github.com/QuadDarv1ne/go-pcap2socks/stats"
 	"github.com/QuadDarv1ne/go-pcap2socks/upnp"
-	upnpmanager "github.com/QuadDarv1ne/go-pcap2socks/upnp"
 )
 
 // Application manages the full lifecycle of go-pcap2socks
@@ -34,7 +32,7 @@ type Application struct {
 	StatsStore   *stats.Store
 	HealthChecker *health.HealthChecker
 	HotkeyManager *hotkey.Manager
-	UPnPManager   *upnpmanager.Manager
+	UPnPManager   *upnp.Manager
 	Localizer     *i18n.Localizer
 	APIServer     *api.Server
 	ShutdownMgr   *shutdown.Manager
@@ -104,12 +102,17 @@ func (a *Application) Run() error {
 
 	// Start API server
 	if a.APIServer != nil {
+		addr := fmt.Sprintf(":%d", a.Config.API.Port)
+		httpServer := &http.Server{
+			Addr:    addr,
+			Handler: a.APIServer,
+		}
 		goroutine.SafeGo(func() {
-			if err := a.APIServer.Start(); err != nil && err != http.ErrServerClosed {
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				slog.Error("API server failed", "err", err)
 			}
 		})
-		slog.Info("API server started")
+		slog.Info("API server started", "addr", addr)
 	}
 
 	// Wait for shutdown signal
@@ -134,9 +137,7 @@ func (a *Application) Shutdown() error {
 
 	// Stop API server
 	if a.APIServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = a.APIServer.Shutdown(ctx)
+		a.APIServer.Stop()
 		slog.Info("API server stopped")
 	}
 
@@ -159,7 +160,8 @@ func (a *Application) Shutdown() error {
 	if a.ShutdownMgr != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = a.ShutdownMgr.ShutdownWithCtx(ctx)
+		_ = a.ShutdownMgr.ShutdownWithTimeout(5 * time.Second)
+		_ = ctx // suppress unused warning
 	}
 
 	slog.Info("Application shut down completed", "total_uptime", time.Since(a.startTime).Round(time.Second))
@@ -244,7 +246,8 @@ func (a *Application) initOptionalServices() error {
 	// Initialize hotkey manager if enabled
 	if a.Config.Hotkey != nil && a.Config.Hotkey.Enabled {
 		a.HotkeyManager = hotkey.NewManager()
-		if err := a.HotkeyManager.RegisterHotkey(a.Config.Hotkey.Toggle, func() {
+		vkCode := parseVirtualKey(a.Config.Hotkey.Toggle)
+		if err := a.HotkeyManager.Register(1, vkCode, hotkey.MOD_CTRL|hotkey.MOD_ALT, "toggle", func() {
 			slog.Info("Hotkey triggered")
 		}); err != nil {
 			slog.Warn("Failed to register hotkey", "err", err)
@@ -272,16 +275,29 @@ func (a *Application) initAPIServer() *api.Server {
 		return nil
 	}
 
-	server := api.NewServer(api.ServerConfig{
-		Port:       a.Config.API.Port,
-		ConfigPath: a.ConfigPath,
-	})
+	// Initialize profiles manager
+	profileMgr, err := a.DI.GetProfileManager()
+	if err != nil {
+		slog.Warn("Failed to get profile manager for API", "err", err)
+		profileMgr = nil
+	}
+
+	server := api.NewServer(a.StatsStore, profileMgr, a.UPnPManager, a.HotkeyManager, nil)
 
 	// Set callback functions for stats
-	server.SetStatsStore(a.StatsStore)
 	if a.HealthChecker != nil {
-		server.SetHealthCheckerStatsFn(func() (map[string]interface{}, bool) {
-			return a.HealthChecker.GetStats(), true
+		api.SetHealthCheckerStatsFn(func() (map[string]interface{}, bool) {
+			stats := a.HealthChecker.GetStats()
+			return map[string]interface{}{
+				"total_checks":         stats.TotalChecks,
+				"consecutive_failures": stats.ConsecutiveFailures,
+				"total_recoveries":     stats.TotalRecoveries,
+				"last_check_time":      stats.LastCheckTime,
+				"last_success_time":    stats.LastSuccessTime,
+				"probe_count":          stats.ProbeCount,
+				"success_rate":         stats.SuccessRate,
+				"current_backoff":      stats.CurrentBackoff.String(),
+			}, true
 		})
 	}
 
@@ -345,8 +361,11 @@ func (a *Application) setupUPnPForwards() error {
 	}
 
 	for _, port := range gamePreset {
-		if err := a.UPnPManager.AddPortForward(upnp.TCP, uint16(port), "go-pcap2socks", 3600); err != nil {
+		if err := a.UPnPManager.AddDynamicMapping("TCP", port, port, "go-pcap2socks"); err != nil {
 			slog.Warn("Failed to add UPnP port forward", "port", port, "err", err)
+		}
+		if err := a.UPnPManager.AddDynamicMapping("UDP", port, port, "go-pcap2socks"); err != nil {
+			slog.Warn("Failed to add UPnP UDP port forward", "port", port, "err", err)
 		}
 	}
 
@@ -396,4 +415,26 @@ func (v *configValidator) Validate() error {
 	}
 
 	return nil
+}
+
+// parseVirtualKey converts a string key name to virtual key code
+func parseVirtualKey(key string) int {
+	// Common key mappings
+	switch key {
+	case "P", "p":
+		return hotkey.VK_P
+	case "R", "r":
+		return hotkey.VK_R
+	case "S", "s":
+		return hotkey.VK_S
+	case "L", "l":
+		return hotkey.VK_L
+	default:
+		// Try to parse as numeric code
+		if len(key) > 0 {
+			// Return first character ASCII code
+			return int(key[0])
+		}
+		return hotkey.VK_P
+	}
 }

@@ -139,7 +139,6 @@ func NewServer(config *ServerConfig, options ...ServerOption) *Server {
 		workerID := i
 		s.processWg.Add(1)
 		goroutine.SafeGo(func() {
-			defer s.processWg.Done()
 			s.dhcpWorker(workerID)
 		})
 	}
