@@ -693,46 +693,45 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 	buf := buffer.Get(buffer.MediumBufferSize)
 	defer buffer.Put(buf)
 
+	// Reusable timer to avoid allocation in polling loop
+	waitTimer := time.NewTimer(100 * time.Millisecond)
+	defer waitTimer.Stop()
+
 	for {
-		select {
-		case <-uc.ctx.Done():
-			return
-		default:
-			uc.proxyMu.Lock()
-			proxyConn := uc.ProxyConn
-			uc.proxyMu.Unlock()
+		uc.proxyMu.Lock()
+		proxyConn := uc.ProxyConn
+		uc.proxyMu.Unlock()
 
-			if proxyConn == nil {
-				// Wait for proxy connection with context-aware sleep
-				select {
-				case <-uc.ctx.Done():
-					return
-				case <-time.After(100 * time.Millisecond):
-					continue
-				}
-			}
-
-			proxyConn.SetReadDeadline(time.Now().Add(120 * time.Second))
-			n, _, err := proxyConn.ReadFrom(buf)
-			if err != nil {
-				ct.logger.Debug("Read UDP from proxy failed", "err", err)
-				return
-			}
-
-			uc.lastActivity.Store(time.Now().Unix())
-			uc.packetsReceived.Add(1)
-			uc.bytesReceived.Add(uint64(n))
-
-			// Use buffer.Clone for efficient memory management
-			data := buffer.Clone(buf[:n])
-
-			// Send packet to gVisor via FromProxy channel
+		if proxyConn == nil {
+			// Wait for proxy connection with reusable timer
 			select {
-			case uc.FromProxy <- data:
 			case <-uc.ctx.Done():
-				buffer.Put(data) // Return to pool if send failed
 				return
+			case <-waitTimer.C:
+				continue
 			}
+		}
+
+		proxyConn.SetReadDeadline(time.Now().Add(120 * time.Second))
+		n, _, err := proxyConn.ReadFrom(buf)
+		if err != nil {
+			ct.logger.Debug("Read UDP from proxy failed", "err", err)
+			return
+		}
+
+		uc.lastActivity.Store(time.Now().Unix())
+		uc.packetsReceived.Add(1)
+		uc.bytesReceived.Add(uint64(n))
+
+		// Use buffer.Clone for efficient memory management
+		data := buffer.Clone(buf[:n])
+
+		// Send packet to gVisor via FromProxy channel
+		select {
+		case uc.FromProxy <- data:
+		case <-uc.ctx.Done():
+			buffer.Put(data) // Return to pool if send failed
+			return
 		}
 	}
 }

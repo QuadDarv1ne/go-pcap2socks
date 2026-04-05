@@ -541,7 +541,10 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var config interface{}
-	json.Unmarshal(data, &config)
+	if err := json.Unmarshal(data, &config); err != nil {
+		s.sendError(w, fmt.Sprintf("failed to parse config: %v", err), http.StatusInternalServerError)
+		return
+	}
 	s.sendSuccess(w, config)
 }
 

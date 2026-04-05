@@ -66,6 +66,7 @@ var (
 	// Connection pool with semaphore for better resource management
 	_connPool         = make(chan *pooledConn, connectionPoolSize)
 	_connPoolWg       sync.WaitGroup
+	_poolCloseOnce    sync.Once // Prevent double-close panic
 	_poolActiveCount  atomic.Int32
 	_poolCreatedCount atomic.Int32
 	_poolReusedCount  atomic.Int32
@@ -440,9 +441,11 @@ func scaleWorkers(ctx context.Context) {
 	}
 }
 
-// closePool closes all pooled connections
+// closePool closes all pooled connections (safe to call multiple times)
 func closePool() {
-	close(_connPool)
+	_poolCloseOnce.Do(func() {
+		close(_connPool)
+	})
 
 	// Close remaining pooled connections
 	for pooled := range _connPool {

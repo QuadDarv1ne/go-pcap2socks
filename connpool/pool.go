@@ -89,11 +89,12 @@ func (p *Pool) Get(ctx context.Context, dialer func(context.Context) (net.Conn, 
 			return dialer(ctx)
 		}
 		// Check if connection is alive and not expired
-		if wrapped.conn != nil && p.isConnectionAlive(wrapped.conn) && !p.isConnectionExpired(wrapped.createdAt) {
+		alive, hasData := p.isConnectionAlive(wrapped.conn)
+		if alive && !hasData && !p.isConnectionExpired(wrapped.createdAt) {
 			p.hits.Add(1)
 			return wrapped.conn, nil
 		}
-		// Connection is dead or expired, close it
+		// Connection is dead, has pending data, or expired - close it
 		if wrapped.conn != nil {
 			wrapped.conn.Close()
 			p.dropCnt.Add(1)
@@ -162,42 +163,35 @@ func (p *Pool) Close() {
 	}
 }
 
-// isConnectionAlive checks if connection is still alive
-// IMPORTANT: This function must NOT consume data from the connection.
-// It uses Peek (if available) or checks for errors without consuming data.
-func (p *Pool) isConnectionAlive(conn net.Conn) bool {
+// isConnectionAlive checks if connection is still alive.
+// Returns (alive, hasData) - if hasData is true, connection has pending data
+// and should NOT be returned to pool (data would be lost).
+func (p *Pool) isConnectionAlive(conn net.Conn) (alive bool, hasData bool) {
 	if conn == nil {
-		return false
+		return false, false
 	}
 
-	// Use TCP keepalive or check connection state
-	// For generic net.Conn, we can only check if Read returns immediately
-	// with error (connection closed) vs blocking (connection alive)
-
-	// Set very short read deadline to avoid blocking
+	// Set very short read deadline to detect dead connections
 	conn.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
 	defer conn.SetReadDeadline(time.Time{})
 
-	// Try to read 1 byte - if connection is closed, we'll get an error
-	// If connection is alive but no data, we'll get timeout
+	// Try to read 1 byte
 	buf := make([]byte, 1)
 	_, err := conn.Read(buf)
 
 	if err == nil {
-		// We read data - this means data was pending.
-		// Connection is alive but we consumed 1 byte.
-		// This is a limitation - we can't put it back.
-		// Mark connection as requiring re-sync by caller.
-		return true
+		// We read data - connection is alive but has pending data.
+		// Caller must NOT return this connection to pool.
+		return true, true
 	}
 
-	// Check for timeout error (connection is alive, no data)
+	// Check for timeout error (connection is alive, no data waiting)
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-		return true
+		return true, false
 	}
 
 	// Connection is dead (EOF or other error)
-	return false
+	return false, false
 }
 
 // isConnectionExpired checks if connection has exceeded maxLifetime

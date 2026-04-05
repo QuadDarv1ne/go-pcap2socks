@@ -22,6 +22,12 @@ const (
 	// Reduced to 90 seconds for faster resource cleanup and gaming responsiveness
 	UdpSessionTimeout = 90 * time.Second
 
+	// udpMaxSessionLifetime is the maximum lifetime for any UDP session
+	udpMaxSessionLifetime = 10 * time.Minute
+
+	// udpMaxIdleResets is the maximum number of idle timeout resets before session ends
+	udpMaxIdleResets = 5
+
 	// udpRelayBufferSize increased to support larger UDP packets (PS4, gaming, etc.)
 	udpRelayBufferSize = 65535
 
@@ -196,18 +202,31 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 	// Set deadlines ONCE at session start to avoid syscall overhead
 	// Updating deadline on every packet is expensive (2000+ syscalls/sec for gaming traffic)
 	deadline := time.Now().Add(UdpSessionTimeout)
+	sessionStart := time.Now()
+	idleResets := 0
 	from.SetReadDeadline(deadline)
 	to.SetWriteDeadline(deadline)
 
 	for {
+		// Check max session lifetime
+		if time.Since(sessionStart) > udpMaxSessionLifetime {
+			slog.Debug("UDP session max lifetime exceeded, closing")
+			return
+		}
+
 		n, dest, err := from.ReadFrom(buf)
 		if err != nil {
 			if errors.Is(err, io.ErrClosedPipe) {
 				return
 			}
 			if errors.Is(err, os.ErrDeadlineExceeded) {
-				// Session timeout - extend deadline and continue
-				// This handles idle gaming sessions that resume after timeout
+				// Session timeout - extend deadline with limits
+				// Prevent infinite session by capping idle resets
+				idleResets++
+				if idleResets >= udpMaxIdleResets {
+					slog.Debug("UDP session idle timeout limit reached, closing")
+					return
+				}
 				deadline := time.Now().Add(UdpSessionTimeout)
 				from.SetReadDeadline(deadline)
 				to.SetWriteDeadline(deadline)

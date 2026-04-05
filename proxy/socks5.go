@@ -152,10 +152,10 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 
 	setKeepAlive(c)
 
-	// Defer ONLY for error case -- return connection to pool on handshake failure
+	// Defer ONLY for error case -- close broken connection (do NOT return to pool)
 	defer func() {
 		if err != nil {
-			ss.connPool.Put(c)
+			c.Close() // Close broken connection, don't return to pool
 		}
 	}()
 

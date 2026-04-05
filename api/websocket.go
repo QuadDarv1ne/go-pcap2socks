@@ -200,6 +200,7 @@ func (h *WebSocketHub) runPingPong(client *WebSocketClient) {
 
 func (h *WebSocketHub) writePump(client *WebSocketClient) {
 	defer func() {
+		h.unregister <- client
 		h.wg.Done()
 		client.conn.Close()
 	}()
