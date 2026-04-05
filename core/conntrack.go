@@ -3,16 +3,20 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net"
 	"net/netip"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 )
@@ -84,8 +88,8 @@ type UDPConn struct {
 // ConnTracker управляет всеми активными соединениями
 type ConnTracker struct {
 	mu       sync.RWMutex
-	tcpConns map[string]*TCPConn
-	udpConns map[string]*UDPConn
+	tcpConns map[connKey]*TCPConn
+	udpConns map[connKey]*UDPConn
 
 	// Proxy dialer
 	proxyDialer proxy.Proxy
@@ -117,19 +121,41 @@ func NewConnTracker(cfg ConnTrackerConfig) *ConnTracker {
 	}
 
 	return &ConnTracker{
-		tcpConns:    make(map[string]*TCPConn),
-		udpConns:    make(map[string]*UDPConn),
+		tcpConns:    make(map[connKey]*TCPConn),
+		udpConns:    make(map[connKey]*UDPConn),
 		proxyDialer: cfg.ProxyDialer,
 		logger:      logger,
 	}
 }
 
-func (ct *ConnTracker) tcpKey(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16) string {
-	return fmt.Sprintf("%s:%d-%s:%d", srcIP, srcPort, dstIP, dstPort)
+// connKey is a zero-allocation connection identifier for map lookups
+type connKey struct {
+	srcIP  [16]byte // IPv6 bytes (also holds IPv4 in first 12 bytes)
+	dstIP  [16]byte
+	srcPort uint16
+	dstPort uint16
+	proto   uint8 // 6 = TCP, 17 = UDP
 }
 
-func (ct *ConnTracker) udpKey(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16) string {
-	return fmt.Sprintf("udp:%s:%d-%s:%d", srcIP, srcPort, dstIP, dstPort)
+// newConnKey creates a key from connection parameters
+func newConnKey(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16, proto uint8) connKey {
+	return connKey{
+		srcIP:   srcIP.As16(),
+		dstIP:   dstIP.As16(),
+		srcPort: srcPort,
+		dstPort: dstPort,
+		proto:   proto,
+	}
+}
+
+// tcpKey creates a TCP connection key
+func tcpKey(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16) connKey {
+	return newConnKey(srcIP, srcPort, dstIP, dstPort, 6)
+}
+
+// udpKey creates a UDP session key
+func udpKey(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16) connKey {
+	return newConnKey(srcIP, srcPort, dstIP, dstPort, 17)
 }
 
 // GetTCPStats returns TCP connection statistics
@@ -145,7 +171,7 @@ func (ct *ConnTracker) GetUDPStats() (active int32, total, dropped uint64) {
 // CreateTCP создает новую TCP запись, устанавливает SOCKS5 соединение и запускает реле
 // Optimized: create TCPConn before lock to minimize lock hold time
 func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCPConn, error) {
-	k := ct.tcpKey(meta.SourceIP, meta.SourcePort, meta.DestIP, meta.DestPort)
+	k := tcpKey(meta.SourceIP, meta.SourcePort, meta.DestIP, meta.DestPort)
 
 	// Create TCPConn before lock to avoid blocking other goroutines during allocation
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -171,7 +197,7 @@ func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCP
 			close(tc.FromProxy)
 		})
 		ct.droppedTCP.Add(1)
-		return nil, fmt.Errorf("connection already tracked")
+		return nil, fmt.Errorf("соединение уже отслеживается")
 	}
 
 	ct.tcpConns[k] = tc
@@ -181,9 +207,13 @@ func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCP
 
 	ct.logger.Info("TCP connection created", "conn", meta.String())
 
-	// Запускаем worker'ов в фоне
-	go ct.relayToProxy(tc)
-	go ct.relayFromProxy(tc)
+	// Запускаем worker'ов в фоне с защитой от паники
+	goroutine.SafeGo(func() {
+		ct.relayToProxy(tc)
+	})
+	goroutine.SafeGo(func() {
+		ct.relayFromProxy(tc)
+	})
 
 	return tc, nil
 }
@@ -192,7 +222,7 @@ func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCP
 func (ct *ConnTracker) GetTCP(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16) (*TCPConn, bool) {
 	ct.mu.RLock()
 	defer ct.mu.RUnlock()
-	tc, ok := ct.tcpConns[ct.tcpKey(srcIP, srcPort, dstIP, dstPort)]
+	tc, ok := ct.tcpConns[tcpKey(srcIP, srcPort, dstIP, dstPort)]
 	return tc, ok
 }
 
@@ -203,13 +233,13 @@ func (ct *ConnTracker) RemoveTCP(tc *TCPConn) {
 		return
 	}
 
-	k := ct.tcpKey(tc.Meta.SourceIP, tc.Meta.SourcePort, tc.Meta.DestIP, tc.Meta.DestPort)
+	k := tcpKey(tc.Meta.SourceIP, tc.Meta.SourcePort, tc.Meta.DestIP, tc.Meta.DestPort)
 
 	tc.closeOnce.Do(func() {
 		tc.closed.Store(true)
 		tc.cancel() // Останавливаем все горутины этого соединения
 
-		// Close proxy connection first (with mutex protection)
+		// Close proxy connection FIRST to stop any pending read/write operations
 		tc.proxyMu.Lock()
 		if tc.ProxyConn != nil {
 			tc.ProxyConn.Close()
@@ -221,7 +251,7 @@ func (ct *ConnTracker) RemoveTCP(tc *TCPConn) {
 		drainChannel(tc.ToProxy)
 		drainChannel(tc.FromProxy)
 
-		// Close channels
+		// Close channels AFTER closing proxy connection
 		close(tc.ToProxy)
 		close(tc.FromProxy)
 
@@ -252,7 +282,7 @@ func drainChannel(ch <-chan []byte) {
 // CreateUDP создает новую UDP сессию
 // Optimized: create UDPConn before lock to minimize lock hold time
 func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDPConn, error) {
-	k := ct.udpKey(meta.SourceIP, meta.SourcePort, meta.DestIP, meta.DestPort)
+	k := udpKey(meta.SourceIP, meta.SourcePort, meta.DestIP, meta.DestPort)
 
 	// Create UDPConn before lock to avoid blocking other goroutines during allocation
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -278,7 +308,7 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 			close(uc.FromProxy)
 		})
 		ct.droppedUDP.Add(1)
-		return nil, fmt.Errorf("UDP session already tracked")
+		return nil, fmt.Errorf("UDP сессия уже отслеживается")
 	}
 
 	ct.udpConns[k] = uc
@@ -288,8 +318,10 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 
 	ct.logger.Info("UDP session created", "conn", meta.String())
 
-	// Запускаем worker для отправки пакетов в proxy
-	go ct.relayUDPPackets(uc)
+	// Запускаем worker для отправки пакетов в proxy с защитой от паники
+	goroutine.SafeGo(func() {
+		ct.relayUDPPackets(uc)
+	})
 
 	return uc, nil
 }
@@ -298,33 +330,33 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 func (ct *ConnTracker) GetUDP(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16) (*UDPConn, bool) {
 	ct.mu.RLock()
 	defer ct.mu.RUnlock()
-	uc, ok := ct.udpConns[ct.udpKey(srcIP, srcPort, dstIP, dstPort)]
+	uc, ok := ct.udpConns[udpKey(srcIP, srcPort, dstIP, dstPort)]
 	return uc, ok
 }
 
 // RemoveUDP безопасно закрывает UDP сессию и удаляет из мапы
 func (ct *ConnTracker) RemoveUDP(uc *UDPConn) {
-	k := ct.udpKey(uc.Meta.SourceIP, uc.Meta.SourcePort, uc.Meta.DestIP, uc.Meta.DestPort)
+	k := udpKey(uc.Meta.SourceIP, uc.Meta.SourcePort, uc.Meta.DestIP, uc.Meta.DestPort)
 
 	uc.closeOnce.Do(func() {
 		uc.closed.Store(true)
 		uc.cancel()
 
-		// Drain buffered packets and return to pool
-		drainChannel(uc.ToProxy)
-		drainChannel(uc.FromProxy)
-
-		// Close channels
-		close(uc.ToProxy)
-		close(uc.FromProxy)
-
-		// Close proxy connection with mutex protection
+		// Close proxy connection FIRST to stop any pending read/write operations
 		uc.proxyMu.Lock()
 		if uc.ProxyConn != nil {
 			uc.ProxyConn.Close()
 			uc.ProxyConn = nil
 		}
 		uc.proxyMu.Unlock()
+
+		// Drain buffered packets and return to pool
+		drainChannel(uc.ToProxy)
+		drainChannel(uc.FromProxy)
+
+		// Close channels AFTER closing proxy connection
+		close(uc.ToProxy)
+		close(uc.FromProxy)
 
 		ct.mu.Lock()
 		delete(ct.udpConns, k)
@@ -433,6 +465,12 @@ func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
 				return
 			}
 
+			// Check if connection is closed before writing
+			if tc.closed.Load() {
+				buffer.Put(payload)
+				return
+			}
+
 			// Update activity timestamp
 			tc.lastActivity.Store(time.Now().Unix())
 
@@ -454,7 +492,14 @@ func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
 			n, err := proxyConn.Write(payload)
 			if err != nil {
 				buffer.Put(payload) // Return buffer to pool on error
-				ct.logger.Debug("Write to proxy failed", "err", err)
+				// Don't log errors for closed connections or timeouts
+				if !errors.Is(err, net.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, io.EOF) {
+					// Check for network timeout errors
+					var netErr net.Error
+					if !errors.As(err, &netErr) || !netErr.Timeout() {
+						ct.logger.Debug("Write to proxy failed", "err", err)
+					}
+				}
 				return
 			}
 			tc.bytesSent.Add(uint64(n))
@@ -477,26 +522,27 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 	buf := buffer.Get(buffer.LargeBufferSize)
 	defer buffer.Put(buf)
 
-	// Reusable timer to avoid allocation leak in polling loop
-	waitTimer := time.NewTimer(100 * time.Millisecond)
+	// Use a longer polling interval to reduce CPU usage
+	// 500ms is reasonable for waiting proxy connection establishment
+	waitTimer := time.NewTimer(500 * time.Millisecond)
 	defer waitTimer.Stop()
 
 	for {
-		// Reset timer before each use
-		if !waitTimer.Stop() {
-			select {
-			case <-waitTimer.C:
-			default:
-			}
-		}
-		waitTimer.Reset(100 * time.Millisecond)
-
 		tc.proxyMu.Lock()
 		proxyConn := tc.ProxyConn
 		tc.proxyMu.Unlock()
 
 		if proxyConn == nil {
 			// Wait for proxy connection with reusable timer
+			// Reset timer before each use
+			if !waitTimer.Stop() {
+				select {
+				case <-waitTimer.C:
+				default:
+				}
+			}
+			waitTimer.Reset(500 * time.Millisecond)
+
 			select {
 			case <-tc.ctx.Done():
 				return
@@ -508,7 +554,14 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 		proxyConn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		n, err := proxyConn.Read(buf)
 		if err != nil {
-			ct.logger.Debug("Read from proxy failed", "err", err)
+			// Don't log errors for closed connections or timeouts
+			if !errors.Is(err, net.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, io.EOF) {
+				// Check for network timeout errors
+				var netErr net.Error
+				if !errors.As(err, &netErr) || !netErr.Timeout() {
+					ct.logger.Debug("Read from proxy failed", "err", err)
+				}
+			}
 			return
 		}
 
@@ -531,9 +584,12 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 // dialProxy устанавливает соединение с прокси с retry логикой
 func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 	// Check if already connected (caller should hold tc.proxyMu, but double-check)
+	tc.proxyMu.Lock()
 	if tc.ProxyConn != nil {
+		tc.proxyMu.Unlock()
 		return nil
 	}
+	tc.proxyMu.Unlock()
 
 	metadata := &M.Metadata{
 		Network: M.TCP,
@@ -547,6 +603,13 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 	maxRetries := 3
 	baseDelay := 100 * time.Millisecond
 
+	// Reusable timer for backoff delays
+	retryTimer := time.NewTimer(0)
+	if !retryTimer.Stop() {
+		<-retryTimer.C
+	}
+	defer retryTimer.Stop()
+
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		ctx, cancel := context.WithTimeout(tc.ctx, 10*time.Second)
@@ -555,7 +618,10 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 
 		if err == nil {
 			cancel() // Success - cancel context
+			// Write to ProxyConn under mutex protection to prevent race condition
+			tc.proxyMu.Lock()
 			tc.ProxyConn = conn
+			tc.proxyMu.Unlock()
 			ct.logger.Debug("Proxy connection established", "conn", tc.Meta.String(), "attempt", attempt+1)
 			return nil
 		}
@@ -580,11 +646,15 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 				"max_retries", maxRetries,
 				"delay", delay,
 				"err", err)
-			// Use select to allow context cancellation during backoff
+			// Use select to allow context cancellation during backoff with reusable timer
+			retryTimer.Reset(delay)
 			select {
 			case <-tc.ctx.Done():
+				if !retryTimer.Stop() {
+					<-retryTimer.C
+				}
 				return fmt.Errorf("proxy dial cancelled during backoff: %w", tc.ctx.Err())
-			case <-time.After(delay):
+			case <-retryTimer.C:
 				// Continue to next retry attempt
 			}
 		}
@@ -613,12 +683,24 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 				return
 			}
 
+			// Check if connection is closed before writing
+			if uc.closed.Load() {
+				buffer.Put(payload)
+				return
+			}
+
 			uc.lastActivity.Store(time.Now().Unix())
 			uc.packetsSent.Add(1)
 			uc.bytesSent.Add(uint64(len(payload)))
 
 			uc.proxyMu.Lock()
 			if uc.ProxyConn == nil {
+				// Check again if closed before dialing
+				if uc.closed.Load() {
+					uc.proxyMu.Unlock()
+					buffer.Put(payload)
+					return
+				}
 				// Lazy dial UDP association
 				uc.proxyMu.Unlock()
 				if err := ct.dialUDPProxy(uc); err != nil {
@@ -636,11 +718,16 @@ func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
 			}
 			proxyConn := uc.ProxyConn
 			uc.proxyMu.Unlock()
-			
+
 			_, err := proxyConn.WriteTo(payload, addr)
 			if err != nil {
-				buffer.Put(payload) // Return buffer to pool on error
-				ct.logger.Warn("Write UDP to proxy failed", "err", err)
+				// Don't log errors for closed connections or timeouts
+				if !errors.Is(err, net.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+					buffer.Put(payload)
+					ct.logger.Warn("Write UDP to proxy failed", "err", err)
+				} else {
+					buffer.Put(payload)
+				}
 				return
 			}
 
@@ -674,8 +761,10 @@ func (ct *ConnTracker) dialUDPProxy(uc *UDPConn) error {
 	uc.ProxyConn = pc
 	uc.proxyMu.Unlock()
 
-	// Start reading from proxy
-	go ct.readUDPFromProxy(uc)
+	// Start reading from proxy с защитой от паники
+	goroutine.SafeGo(func() {
+		ct.readUDPFromProxy(uc)
+	})
 
 	ct.logger.Debug("UDP proxy association established", "conn", uc.Meta.String())
 	return nil
@@ -693,16 +782,31 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 	buf := buffer.Get(buffer.MediumBufferSize)
 	defer buffer.Put(buf)
 
-	// Reusable timer to avoid allocation in polling loop
-	waitTimer := time.NewTimer(100 * time.Millisecond)
+	// Use a longer polling interval to reduce CPU usage
+	waitTimer := time.NewTimer(500 * time.Millisecond)
 	defer waitTimer.Stop()
 
 	for {
+		// Check if connection is closed before reading
+		if uc.closed.Load() {
+			return
+		}
+
 		uc.proxyMu.Lock()
 		proxyConn := uc.ProxyConn
 		uc.proxyMu.Unlock()
 
 		if proxyConn == nil {
+			// Wait for proxy connection with reusable timer
+			// Reset timer before each use
+			if !waitTimer.Stop() {
+				select {
+				case <-waitTimer.C:
+				default:
+				}
+			}
+			waitTimer.Reset(500 * time.Millisecond)
+
 			// Wait for proxy connection with reusable timer
 			select {
 			case <-uc.ctx.Done():
@@ -715,7 +819,14 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 		proxyConn.SetReadDeadline(time.Now().Add(120 * time.Second))
 		n, _, err := proxyConn.ReadFrom(buf)
 		if err != nil {
-			ct.logger.Debug("Read UDP from proxy failed", "err", err)
+			// Don't log errors for closed connections or timeouts
+			if !errors.Is(err, net.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+				// Check for network timeout errors
+				var netErr net.Error
+				if !errors.As(err, &netErr) || !netErr.Timeout() {
+					ct.logger.Debug("Read UDP from proxy failed", "err", err)
+				}
+			}
 			return
 		}
 

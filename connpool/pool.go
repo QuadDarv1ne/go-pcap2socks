@@ -146,19 +146,31 @@ func (p *Pool) Put(conn net.Conn) {
 // Close closes the pool and all connections
 func (p *Pool) Close() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if p.closed {
+		p.mu.Unlock()
 		return
 	}
-
 	p.closed = true
+	p.mu.Unlock()
 
-	// Close all connections in the pool
+	// Close the channel to prevent new connections from being added
 	close(p.connections)
-	for wrapped := range p.connections {
-		if wrapped.conn != nil {
-			wrapped.conn.Close()
+
+	// Drain and close all connections WITHOUT holding the mutex
+	// This prevents potential deadlocks if conn.Close() blocks
+	for {
+		select {
+		case wrapped, ok := <-p.connections:
+			if !ok {
+				// Channel drained
+				return
+			}
+			if wrapped.conn != nil {
+				wrapped.conn.Close()
+			}
+		default:
+			// No more connections
+			return
 		}
 	}
 }

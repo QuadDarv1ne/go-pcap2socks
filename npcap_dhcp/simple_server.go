@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/gopacket/gopacket/pcap"
@@ -32,6 +33,7 @@ type SimpleServer struct {
 	leaseMu        sync.RWMutex
 	smartDHCP      *dhcpSmartManager
 	deviceProfiles map[string]deviceProfile
+	wg             sync.WaitGroup // WaitGroup for graceful shutdown
 }
 
 // deviceProfile contains device-specific information
@@ -109,18 +111,36 @@ func (s *SimpleServer) Start(handle *pcap.Handle) error {
 		"lease", fmt.Sprintf("%ds", int(s.config.LeaseDuration.Seconds())),
 		"COMPATIBILITY", "ALL DEVICES")
 
-	go s.packetLoop()
+	// Start packet loop with WaitGroup for graceful shutdown and panic protection
+	s.wg.Add(1)
+	goroutine.SafeGo(func() {
+		s.packetLoop()
+	})
 
 	return nil
 }
 
-// Stop stops the DHCP server
+// Stop stops the DHCP server and waits for goroutines to complete
 func (s *SimpleServer) Stop() {
 	close(s.stopChan)
+	s.wg.Wait() // Wait for packetLoop to finish
+	slog.Info("DHCP server stopped gracefully")
+}
+
+// restartPacketLoop restarts the packet loop after an error
+// This should be called when the packet loop exits unexpectedly
+func (s *SimpleServer) restartPacketLoop() {
+	slog.Info("Restarting DHCP packet loop")
+	s.wg.Add(1)
+	goroutine.SafeGo(func() {
+		s.packetLoop()
+	})
 }
 
 // packetLoop captures and processes DHCP packets
 func (s *SimpleServer) packetLoop() {
+	defer s.wg.Done() // Signal completion when loop exits
+
 	if s.handle == nil {
 		slog.Error("DHCP packetLoop: handle is nil")
 		return
@@ -172,8 +192,11 @@ func (s *SimpleServer) packetLoop() {
 						if errorCount >= maxErrors {
 							slog.Error("Too many packet errors, restarting DHCP server")
 							errorCount = 0
+							// Note: wg.Done() already called by defer, so we just return
+							// Restart with proper WaitGroup tracking
 							time.Sleep(1 * time.Second)
-							go s.packetLoop()
+							s.restartPacketLoop()
+							return
 						}
 					}
 				}()

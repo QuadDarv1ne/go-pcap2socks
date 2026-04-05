@@ -3,10 +3,12 @@ package core
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
@@ -244,10 +246,21 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 		defer buffer.Put(buf)
 
 		for {
+			// Check if connection is closed before reading
+			if uc.closed.Load() {
+				return
+			}
 			conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 			n, _, err := conn.ReadFrom(buf)
 			if err != nil {
-				h.logger.Debug("UDP read from gVisor failed", "err", err)
+				// Don't log expected errors (timeouts, closed connections)
+				if !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, net.ErrClosed) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+					// Check for network timeout errors
+					var netErr net.Error
+					if !errors.As(err, &netErr) || !netErr.Timeout() {
+						h.logger.Debug("UDP read from gVisor failed", "err", err)
+					}
+				}
 				return
 			}
 
@@ -279,13 +292,25 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 					return
 				}
 
+				// Check if connection is closed before writing
+				if uc.closed.Load() {
+					buffer.Put(data) // Return buffer to pool
+					return
+				}
 				conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 				_, err := conn.WriteTo(data, &net.UDPAddr{
 					IP:   udpMeta.DestIP.AsSlice(),
 					Port: int(udpMeta.DestPort),
 				})
 				if err != nil {
-					h.logger.Debug("UDP write to gVisor failed", "err", err)
+					// Don't log expected errors (timeouts, closed connections)
+					if !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, net.ErrClosed) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+						// Check for network timeout errors
+						var netErr net.Error
+						if !errors.As(err, &netErr) || !netErr.Timeout() {
+							h.logger.Debug("UDP write to gVisor failed", "err", err)
+						}
+					}
 					return
 				}
 			}

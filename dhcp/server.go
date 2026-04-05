@@ -326,14 +326,18 @@ func (s *Server) HandleRequest(data []byte) ([]byte, error) {
 		slog.Debug("DHCP: Request queued to worker",
 			"mac", macStr,
 			"queue_len", len(s.requestQueue))
-		// Successfully queued, wait for response
+		// Successfully queued, wait for response with reusable timer
+		waitTimer := time.NewTimer(500 * time.Millisecond)
 		select {
 		case response := <-responseCh:
+			if !waitTimer.Stop() {
+				<-waitTimer.C
+			}
 			slog.Debug("DHCP: Response received from worker",
 				"mac", macStr,
 				"response_len", len(response))
 			return response, nil
-		case <-time.After(500 * time.Millisecond):
+		case <-waitTimer.C:
 			slog.Error("DHCP: Request timeout",
 				"mac", macStr,
 				"timeout", "500ms")

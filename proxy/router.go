@@ -405,10 +405,10 @@ func (r *Router) performHealthChecks() {
 
 	// Wait for all goroutines to complete with timeout
 	done := make(chan struct{})
-	go func() {
+	goroutine.SafeGo(func() {
 		wg.Wait()
 		close(done)
-	}()
+	})
 
 	select {
 	case <-done:

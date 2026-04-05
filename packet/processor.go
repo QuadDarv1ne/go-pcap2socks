@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
 )
 
@@ -103,15 +104,19 @@ func NewProcessor(handler PacketHandler, cfg Config) *Processor {
 		},
 	}
 
-	// Start workers
+	// Start workers with panic protection
 	for i := 0; i < cfg.Workers; i++ {
 		p.wg.Add(1)
-		go p.worker(i)
+		goroutine.SafeGo(func() {
+			p.worker(i)
+		})
 	}
 
-	// Start latency monitoring
+	// Start latency monitoring with panic protection
 	p.wg.Add(1)
-	go p.monitorLatency()
+	goroutine.SafeGo(func() {
+		p.monitorLatency()
+	})
 
 	slog.Info("Packet processor started",
 		"workers", cfg.Workers,
@@ -236,6 +241,7 @@ func (p *Processor) Submit(data []byte) bool {
 
 // SubmitSync submits a packet and waits for processing
 // Use when result is needed immediately
+// Optimized with reusable timer to avoid GC pressure
 func (p *Processor) SubmitSync(data []byte) (*Packet, error) {
 	// Get buffer from pool
 	buf := p.bufferPool.Get().([]byte)
@@ -248,11 +254,16 @@ func (p *Processor) SubmitSync(data []byte) (*Packet, error) {
 
 	select {
 	case p.queue <- packet:
-		// Wait for result
+		// Wait for result with reusable timer
+		waitTimer := time.NewTimer(100 * time.Millisecond)
+		defer waitTimer.Stop()
 		select {
 		case result := <-p.resultChan:
+			if !waitTimer.Stop() {
+				<-waitTimer.C
+			}
 			return result, result.Err
-		case <-time.After(100 * time.Millisecond):
+		case <-waitTimer.C:
 			p.dropped.Add(1)
 			return nil, context.DeadlineExceeded
 		}

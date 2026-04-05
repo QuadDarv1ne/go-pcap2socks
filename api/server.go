@@ -131,9 +131,11 @@ func NewServer(statsStore *stats.Store, profileMgr *profiles.Manager, upnpMgr *u
 	// Initialize rate limiter: 100 requests per minute per IP
 	rateLimiter := newRateLimiter(100, 1*time.Minute)
 
-	// Initialize WebSocket hub
+	// Initialize WebSocket hub with panic protection
 	wsHub := NewWebSocketHub()
-	go wsHub.Run()
+	goroutine.SafeGo(func() {
+		wsHub.Run()
+	})
 
 	s := &Server{
 		mux:            http.NewServeMux(),

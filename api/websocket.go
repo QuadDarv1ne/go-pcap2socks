@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/gorilla/websocket"
 )
 
@@ -205,17 +206,23 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	s.wsHub.register <- client
 
-	// Start ping/pong heartbeat
+	// Start ping/pong heartbeat with panic protection
 	s.wsHub.wg.Add(1)
-	go s.wsHub.runPingPong(client)
+	goroutine.SafeGo(func() {
+		s.wsHub.runPingPong(client)
+	})
 
-	// Start write pump
+	// Start write pump with panic protection
 	s.wsHub.wg.Add(1)
-	go s.wsHub.writePump(client)
+	goroutine.SafeGo(func() {
+		s.wsHub.writePump(client)
+	})
 
-	// Start read pump (handle client messages)
+	// Start read pump (handle client messages) with panic protection
 	s.wsHub.wg.Add(1)
-	go s.wsHub.readPump(client)
+	goroutine.SafeGo(func() {
+		s.wsHub.readPump(client)
+	})
 }
 
 func (h *WebSocketHub) runPingPong(client *WebSocketClient) {

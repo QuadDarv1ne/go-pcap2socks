@@ -63,7 +63,9 @@ func NewAsyncHandlerWithSize(handler slog.Handler, queueSize int, flushInterval 
 	}
 
 	h.wg.Add(1)
-	go h.processLoop(flushInterval)
+	goroutine.SafeGo(func() {
+		h.processLoop(flushInterval)
+	})
 
 	return h
 }

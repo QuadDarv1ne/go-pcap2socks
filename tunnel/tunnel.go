@@ -274,7 +274,10 @@ done:
 }
 
 func init() {
-	go process()
+	// Start tunnel processor with panic protection
+	goroutine.SafeGo(func() {
+		process()
+	})
 }
 
 // TCPIn return fan-in TCP queue.

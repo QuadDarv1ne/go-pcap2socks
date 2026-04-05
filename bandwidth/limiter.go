@@ -103,7 +103,15 @@ func (tb *TokenBucket) Take(n int) int {
 }
 
 // Wait blocks until n tokens are available
+// Optimized with reusable timer to avoid GC pressure
 func (tb *TokenBucket) Wait(ctx context.Context, n int) error {
+	// Reuse timer to avoid allocations in retry loop
+	waitTimer := time.NewTimer(0)
+	if !waitTimer.Stop() {
+		<-waitTimer.C
+	}
+	defer waitTimer.Stop()
+
 	for {
 		taken := tb.Take(n)
 		if taken >= n {
@@ -121,10 +129,15 @@ func (tb *TokenBucket) Wait(ctx context.Context, n int) error {
 			waitTime = time.Millisecond
 		}
 
+		// Reset timer for wait
+		waitTimer.Reset(waitTime)
 		select {
 		case <-ctx.Done():
+			if !waitTimer.Stop() {
+				<-waitTimer.C
+			}
 			return ctx.Err()
-		case <-time.After(waitTime):
+		case <-waitTimer.C:
 			// Continue and try again
 		}
 	}

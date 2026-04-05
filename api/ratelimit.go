@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // RateLimiterConfig holds configuration for the rate limiter
@@ -71,8 +73,10 @@ func newRateLimiterWithConfig(cfg *RateLimiterConfig) *rateLimiter {
 		maxVisitors:     10000, // Cap to prevent unbounded memory growth
 	}
 
-	// Start cleanup goroutine to evict stale entries
-	go rl.cleanupLoop()
+	// Start cleanup goroutine with panic protection
+	goroutine.SafeGo(func() {
+		rl.cleanupLoop()
+	})
 	return rl
 }
 

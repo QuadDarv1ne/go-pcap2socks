@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
 )
 
@@ -96,10 +97,12 @@ func NewPool(cfg PoolConfig) *Pool {
 		},
 	}
 
-	// Start workers
+	// Start workers with panic protection
 	for i := 0; i < cfg.Workers; i++ {
 		pool.wg.Add(1)
-		go pool.worker(ctx, i)
+		goroutine.SafeGo(func() {
+			pool.worker(ctx, i)
+		})
 	}
 
 	pool.initialized.Store(true)
@@ -236,6 +239,7 @@ func (p *Pool) Submit(data []byte, result chan<- ProcessResult) bool {
 
 // SubmitSync submits a packet and waits for the result
 // Use for synchronous processing when result is needed immediately
+// Optimized with reusable timer to avoid GC pressure
 func (p *Pool) SubmitSync(data []byte) (ProcessResult, bool) {
 	resultChan := make(chan ProcessResult, 1)
 
@@ -243,10 +247,16 @@ func (p *Pool) SubmitSync(data []byte) (ProcessResult, bool) {
 		return ProcessResult{}, false
 	}
 
+	// Use reusable timer to avoid GC pressure
+	waitTimer := time.NewTimer(5 * time.Second)
+	defer waitTimer.Stop()
 	select {
 	case result := <-resultChan:
+		if !waitTimer.Stop() {
+			<-waitTimer.C
+		}
 		return result, true
-	case <-time.After(5 * time.Second):
+	case <-waitTimer.C:
 		return ProcessResult{}, false
 	}
 }

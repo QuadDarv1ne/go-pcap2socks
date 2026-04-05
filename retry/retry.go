@@ -84,6 +84,13 @@ func Do(ctx context.Context, fn RetryFunc, cfg Config) Result {
 	startTime := time.Now()
 	delay := cfg.InitialDelay
 
+	// Reusable timer for backoff delays
+	waitTimer := time.NewTimer(0)
+	if !waitTimer.Stop() {
+		<-waitTimer.C
+	}
+	defer waitTimer.Stop()
+
 	for attempt := 1; ; attempt++ {
 		result.Attempts = attempt
 
@@ -137,12 +144,16 @@ func Do(ctx context.Context, fn RetryFunc, cfg Config) Result {
 			"delay", actualDelay,
 			"err", err)
 
-		// Wait before next attempt
+		// Wait before next attempt using reusable timer
+		waitTimer.Reset(actualDelay)
 		select {
 		case <-ctx.Done():
+			if !waitTimer.Stop() {
+				<-waitTimer.C
+			}
 			result.LastErr = ctx.Err()
 			return result
-		case <-time.After(actualDelay):
+		case <-waitTimer.C:
 		}
 
 		// Exponential backoff

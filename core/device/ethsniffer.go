@@ -79,9 +79,11 @@ func NewEthSniffer(lower stack.LinkEndpoint, outputFile string) (*Endpoint, erro
 	// Initialize nested endpoint
 	e.Endpoint.Init(lower, e)
 
-	// Start writer goroutine
+	// Start writer goroutine with panic protection
 	e.wg.Add(1)
-	go e.packetWriter()
+	goroutine.SafeGo(func() {
+		e.packetWriter()
+	})
 
 	slog.Info("Ethernet PCAP capture enabled", "outputFile", outputFile)
 

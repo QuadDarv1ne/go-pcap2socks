@@ -14,7 +14,7 @@ import (
 
 // createDHCPServer creates a DHCP server instance
 // On non-Windows platforms, only standard DHCP server is available
-func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig *device.NetworkConfig) (interface{}, error) {
+func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig *device.NetworkConfig, ifaceName string) (interface{}, error) {
 	// Only standard DHCP server available on non-Windows
 	stdDHCP := dhcp.NewServer(dhcpConfig)
 	slog.Info("DHCP server initialized",

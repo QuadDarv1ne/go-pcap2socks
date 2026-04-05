@@ -10,7 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/buffer"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	alog "github.com/anacrolix/log"
 	"github.com/anacrolix/upnp"
@@ -40,14 +42,6 @@ var (
 	upnpCacheMu       sync.RWMutex
 	upnpCachedDevices []upnp.Device
 	upnpCacheExpiry   time.Time
-
-	// udpBufferPool provides zero-copy UDP buffer allocation
-	// 64KB buffers are expensive, so we pool them
-	udpBufferPool = sync.Pool{
-		New: func() any {
-			return make([]byte, udpRelayBufferSize)
-		},
-	}
 )
 
 type UDPMapping struct {
@@ -120,7 +114,9 @@ func setupUPnP(session *UDPSession, port int) {
 	devices := getUPnPDevices()
 
 	for _, d := range devices {
-		go addPortMapping(session, d, upnp.UDP, port)
+		goroutine.SafeGo(func() {
+			addPortMapping(session, d, upnp.UDP, port)
+		})
 	}
 }
 
@@ -179,8 +175,13 @@ func HandleUDPConn(uc adapter.UDPConn) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 
-	go pipeChannel(pc, uc, &wg)
-	go pipeChannel(uc, pc, &wg)
+	// Use SafeGo for panic protection (pipeChannel has internal recover but SafeGo adds extra safety)
+	goroutine.SafeGo(func() {
+		pipeChannel(pc, uc, &wg)
+	})
+	goroutine.SafeGo(func() {
+		pipeChannel(uc, pc, &wg)
+	})
 	wg.Wait()
 
 	uc.Close()
@@ -190,13 +191,13 @@ func HandleUDPConn(uc adapter.UDPConn) {
 func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// Get buffer from pool instead of allocating
-	buf := udpBufferPool.Get().([]byte)
+	// Get buffer from global pool instead of allocating
+	buf := buffer.Get(udpRelayBufferSize)
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Debug("UDP pipe panic recovered", "recover", r)
 		}
-		udpBufferPool.Put(buf) // Ensure buffer is returned even on panic
+		buffer.Put(buf) // Ensure buffer is returned even on panic
 	}()
 
 	// Set deadlines ONCE at session start to avoid syscall overhead
@@ -216,7 +217,7 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 
 		n, dest, err := from.ReadFrom(buf)
 		if err != nil {
-			if errors.Is(err, io.ErrClosedPipe) {
+			if errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed) {
 				return
 			}
 			if errors.Is(err, os.ErrDeadlineExceeded) {
@@ -232,10 +233,31 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 				to.SetWriteDeadline(deadline)
 				continue
 			}
+			// Check for other network timeout errors
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				// Treat same as DeadlineExceeded - extend with limits
+				idleResets++
+				if idleResets >= udpMaxIdleResets {
+					slog.Debug("UDP session idle timeout limit reached, closing")
+					return
+				}
+				deadline := time.Now().Add(UdpSessionTimeout)
+				from.SetReadDeadline(deadline)
+				to.SetWriteDeadline(deadline)
+				continue
+			}
 			return
 		}
 
 		if _, err := to.WriteTo(buf[:n], dest); err != nil {
+			// Don't log expected write errors
+			if !errors.Is(err, net.ErrClosed) && !errors.Is(err, io.ErrClosedPipe) {
+				var netErr net.Error
+				if !errors.As(err, &netErr) || !netErr.Timeout() {
+					slog.Debug("UDP pipe write error", "err", err)
+				}
+			}
 			return
 		}
 	}

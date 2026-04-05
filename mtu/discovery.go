@@ -13,6 +13,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // MTU Discovery constants
@@ -98,8 +100,10 @@ func NewMTUDiscoverer() *MTUDiscoverer {
 		stopEviction: make(chan struct{}),
 		evictionDone: make(chan struct{}),
 	}
-	// Start background eviction goroutine
-	go d.runEviction()
+	// Start background eviction goroutine with panic protection
+	goroutine.SafeGo(func() {
+		d.runEviction()
+	})
 	return d
 }
 

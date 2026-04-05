@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 )
 
@@ -42,8 +43,10 @@ func NewSocks5WithFallback(addr, user, pass string) (*Socks5WithFallback, error)
 	sf.socksAvailable.Store(true)
 	sf.lastCheckTime.Store(time.Time{})
 
-	// Start background health check
-	go sf.healthCheckLoop()
+	// Start background health check with panic protection
+	goroutine.SafeGo(func() {
+		sf.healthCheckLoop()
+	})
 
 	return sf, nil
 }

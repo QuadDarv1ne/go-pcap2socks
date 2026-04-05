@@ -268,8 +268,10 @@ func (s *ServerV6) Start(ctx context.Context) error {
 	s.conn = conn
 	slog.Info("DHCPv6 server started", "listen", addr)
 
-	// Start server goroutine
-	go s.serve(ctx)
+	// Start server goroutine with panic protection
+	goroutine.SafeGo(func() {
+		s.serve(ctx)
+	})
 
 	return nil
 }

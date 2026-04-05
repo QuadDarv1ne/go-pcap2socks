@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/discord"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/telegram"
 )
 
@@ -85,24 +87,58 @@ func Show(title, message, notifyType string) {
 	// Показываем Windows toast уведомление
 	showToastNotification(title, message, notifyType)
 
-	// Отправляем внешние уведомления (Telegram/Discord)
+	// Отправляем внешние уведомления (Telegram/Discord) с защитой от утечки
 	if externalEnabled.Load() {
-		go sendExternalNotification(title, message, notifyType)
+		goroutine.SafeGo(func() {
+			// Add timeout to prevent goroutine leak if external service is slow
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			sendExternalNotification(ctx, title, message, notifyType)
+		})
 	}
 }
 
 // sendExternalNotification sends notification to Telegram and Discord
-func sendExternalNotification(title, message, notifyType string) {
-	// Send to Telegram
+// Now accepts context for timeout control
+func sendExternalNotification(ctx context.Context, title, message, notifyType string) {
+	// Send to Telegram with timeout using buffered channel to prevent goroutine leak
 	if telegramBot != nil {
 		text := formatMessage(title, message, notifyType)
-		_ = telegramBot.SendMessage(text)
+		done := make(chan struct{}, 1)
+		goroutine.SafeGo(func() {
+			_ = telegramBot.SendMessage(text)
+			select {
+			case done <- struct{}{}:
+			default:
+				// Context already timed out, drop result
+			}
+		})
+		select {
+		case <-done:
+			// Success
+		case <-ctx.Done():
+			slog.Warn("Telegram notification timeout", "title", title)
+		}
 	}
 
-	// Send to Discord
+	// Send to Discord with timeout using buffered channel to prevent goroutine leak
 	if discordWebhook != nil {
 		embed := formatDiscordEmbed(title, message, notifyType)
-		_ = discordWebhook.SendEmbed(embed)
+		done := make(chan struct{}, 1)
+		goroutine.SafeGo(func() {
+			_ = discordWebhook.SendEmbed(embed)
+			select {
+			case done <- struct{}{}:
+			default:
+				// Context already timed out, drop result
+			}
+		})
+		select {
+		case <-done:
+			// Success
+		case <-ctx.Done():
+			slog.Warn("Discord notification timeout", "title", title)
+		}
 	}
 }
 

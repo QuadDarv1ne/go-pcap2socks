@@ -154,10 +154,12 @@ func onReady(hotkeyMgr *hotkey.Manager) {
 		apiToken = config.API.Token
 	}
 
-	// Start status polling goroutine
+	// Start status polling goroutine with panic protection
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go pollStatus(ctx, mStatus, mDevices, mStart, mStop)
+	goroutine.SafeGo(func() {
+		pollStatus(ctx, mStatus, mDevices, mStart, mStop)
+	})
 
 	// Register hotkeys
 	proxyToggled := false

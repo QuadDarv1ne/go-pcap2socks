@@ -16,7 +16,7 @@ import (
 
 // createDHCPServer creates a DHCP server instance
 // Uses WinDivert if available, otherwise returns nil (DHCP disabled)
-func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig *device.NetworkConfig) (interface{}, error) {
+func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig *device.NetworkConfig, ifaceName string) (interface{}, error) {
 	slog.Info("Creating DHCP server...", "enabled", cfg.DHCP != nil && cfg.DHCP.Enabled, "pool", dhcpConfig.FirstIP, "-", dhcpConfig.LastIP)
 
 	// Enable Smart DHCP for device-based IP allocation
@@ -53,8 +53,9 @@ func createDHCPServer(cfg *cfg.Config, dhcpConfig *dhcp.ServerConfig, netConfig 
 		return nil, nil
 	}
 
-	// Create WinDivert DHCP server
-	winDivertDHCP, err := windivert.NewDHCPServer(dhcpConfig, netConfig.LocalMAC, enableSmartDHCP, poolStart, poolEnd)
+	// Create WinDivert DHCP server with interface name for pcap send
+	// The interface name is needed to open a pcap handle for sending Ethernet frames
+	winDivertDHCP, err := windivert.NewDHCPServer(dhcpConfig, netConfig.LocalMAC, enableSmartDHCP, poolStart, poolEnd, ifaceName)
 	if err != nil {
 		slog.Error("Failed to create WinDivert DHCP server", "err", err)
 		return nil, fmt.Errorf("create WinDivert DHCP: %w", err)

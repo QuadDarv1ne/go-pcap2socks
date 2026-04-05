@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Pre-defined error for rate limiting
@@ -135,7 +137,9 @@ func NewPooledLimiter(rate float64, burst int, cleanupInterval time.Duration) *P
 	}
 
 	if cleanupInterval > 0 {
-		go pl.cleanupLoop(cleanupInterval)
+		goroutine.SafeGo(func() {
+			pl.cleanupLoop(cleanupInterval)
+		})
 	}
 
 	return pl

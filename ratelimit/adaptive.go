@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // AdaptiveLimiter implements adaptive rate limiting based on system load.
@@ -134,9 +136,11 @@ func NewAdaptiveLimiter(cfg AdaptiveLimiterConfig) *AdaptiveLimiter {
 	limiter.currentRate = toFixed(cfg.InitialRate)
 	limiter.lastAdjust = time.Now().UnixNano()
 
-	// Start monitoring goroutine
+	// Start monitoring goroutine with panic protection
 	limiter.wg.Add(1)
-	go limiter.monitorLoop()
+	goroutine.SafeGo(func() {
+		limiter.monitorLoop()
+	})
 
 	return limiter
 }

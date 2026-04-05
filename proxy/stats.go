@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"net"
-	"time"
 
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
 	"github.com/QuadDarv1ne/go-pcap2socks/ratelimit"
@@ -110,12 +109,11 @@ type statsConn struct {
 }
 
 func (sc *statsConn) Read(b []byte) (int, error) {
-	// Check rate limit for download with exponential backoff
+	// Check rate limit for download
+	// Optimized: use non-blocking check to avoid context allocation per packet
 	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.srcIP, len(b), false) {
-		// Use context-based wait instead of blocking sleep
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-		_ = sc.rateLimiter.Wait(ctx, sc.srcIP, len(b), false)
+		// Rate limited - return 0 to signal backpressure
+		return 0, nil
 	}
 
 	n, err := sc.Conn.Read(b)
@@ -126,12 +124,11 @@ func (sc *statsConn) Read(b []byte) (int, error) {
 }
 
 func (sc *statsConn) Write(b []byte) (int, error) {
-	// Check rate limit for upload with exponential backoff
+	// Check rate limit for upload
+	// Optimized: use non-blocking check to avoid context allocation per packet
 	if sc.rateLimiter != nil && !sc.rateLimiter.Allow(sc.srcIP, len(b), true) {
-		// Use context-based wait instead of blocking sleep
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-		_ = sc.rateLimiter.Wait(ctx, sc.srcIP, len(b), true)
+		// Rate limited - return 0 to signal backpressure
+		return 0, nil
 	}
 
 	n, err := sc.Conn.Write(b)
@@ -152,11 +149,12 @@ type statsPacketConn struct {
 }
 
 func (spc *statsPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
-	// Check rate limit for download with context-based wait
+	// Check rate limit for download
+	// Optimized: use non-blocking check to avoid context allocation per packet
 	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.srcIP, len(p), false) {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-		_ = spc.rateLimiter.Wait(ctx, spc.srcIP, len(p), false)
+		// Rate limited - drop packet instead of blocking to avoid latency
+		// This is better for real-time traffic (gaming, VoIP)
+		return 0, nil, nil
 	}
 
 	n, addr, err := spc.PacketConn.ReadFrom(p)
@@ -167,11 +165,11 @@ func (spc *statsPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 func (spc *statsPacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	// Check rate limit for upload with context-based wait
+	// Check rate limit for upload
+	// Optimized: use non-blocking check to avoid context allocation per packet
 	if spc.rateLimiter != nil && !spc.rateLimiter.Allow(spc.srcIP, len(p), true) {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-		_ = spc.rateLimiter.Wait(ctx, spc.srcIP, len(p), true)
+		// Rate limited - drop packet instead of blocking to avoid latency
+		return 0, nil
 	}
 
 	n, err := spc.PacketConn.WriteTo(p, addr)

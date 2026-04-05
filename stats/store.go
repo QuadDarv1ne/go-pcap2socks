@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 )
 
 // Store holds traffic statistics
@@ -165,10 +167,12 @@ func NewStoreWithCleanup(inactivityTimeout, cleanupInterval time.Duration) *Stor
 		arpCacheTTL:       defaultArpCacheTTL,
 	}
 
-	// Start cleanup goroutine if cleanup is enabled
+	// Start cleanup goroutine with panic protection
 	if inactivityTimeout > 0 && cleanupInterval > 0 {
 		s.cleanupWg.Add(1)
-		go s.cleanupLoop()
+		goroutine.SafeGo(func() {
+			s.cleanupLoop()
+		})
 	}
 
 	return s

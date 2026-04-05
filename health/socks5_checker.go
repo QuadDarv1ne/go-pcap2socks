@@ -260,7 +260,9 @@ func (c *Checker) checkProxy(p proxy.Proxy) {
 
 		if wasUnhealthy && c.onRecovery != nil {
 			c.logger.Info("Proxy recovered", "addr", addr)
-			go c.onRecovery(addr)
+			goroutine.SafeGo(func() {
+				c.onRecovery(addr)
+			})
 		}
 	} else {
 		// Increment failure counter
@@ -275,7 +277,9 @@ func (c *Checker) checkProxy(p proxy.Proxy) {
 					"failures", c.failureCount[addr])
 
 				if c.onUnhealthy != nil {
-					go c.onUnhealthy(addr)
+					goroutine.SafeGo(func() {
+						c.onUnhealthy(addr)
+					})
 				}
 			}
 		} else {

@@ -961,18 +961,31 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string, qtype uint16) ([]net.IP, error) {
 	var lastErr error
 
+	// Reuse timer to avoid allocations in retry loop
+	retryTimer := time.NewTimer(0)
+	if !retryTimer.Stop() {
+		<-retryTimer.C
+	}
+	defer retryTimer.Stop()
+
 	// Retry up to 3 times with exponential backoff
 	for attempt := 0; attempt < 3; attempt++ {
 		conn, err := net.DialTimeout("udp", server, DefaultDNSTimeout)
 		if err != nil {
 			lastErr = err
 			if attempt < 2 {
+				// Use reusable timer instead of time.After
+				delay := time.Duration(1<<uint(attempt)) * 100 * time.Millisecond
+				retryTimer.Reset(delay)
 				select {
 				case <-ctx.Done():
+					if !retryTimer.Stop() {
+						<-retryTimer.C
+					}
 					return nil, ctx.Err()
-				case <-time.After(time.Duration(1<<uint(attempt)) * 100 * time.Millisecond):
+				case <-retryTimer.C:
+					continue
 				}
-				continue
 			}
 			return nil, err
 		}
@@ -990,13 +1003,19 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string,
 			conn.Close()
 			lastErr = err
 			if attempt < 2 {
+				// Use reusable timer instead of time.After
+				delay := time.Duration(1<<uint(attempt)) * 100 * time.Millisecond
+				retryTimer.Reset(delay)
 				select {
 				case <-ctx.Done():
+					if !retryTimer.Stop() {
+						<-retryTimer.C
+					}
 					conn.Close()
 					return nil, ctx.Err()
-				case <-time.After(time.Duration(1<<uint(attempt)) * 100 * time.Millisecond):
+				case <-retryTimer.C:
+					continue
 				}
-				continue
 			}
 			return nil, err
 		}
@@ -1009,12 +1028,18 @@ func (r *Resolver) queryDNS(ctx context.Context, hostname string, server string,
 			buffer.Put(buf)
 			lastErr = err
 			if attempt < 2 {
+				// Use reusable timer instead of time.After
+				delay := time.Duration(1<<uint(attempt)) * 100 * time.Millisecond
+				retryTimer.Reset(delay)
 				select {
 				case <-ctx.Done():
+					if !retryTimer.Stop() {
+						<-retryTimer.C
+					}
 					return nil, ctx.Err()
-				case <-time.After(time.Duration(1<<uint(attempt)) * 100 * time.Millisecond):
+				case <-retryTimer.C:
+					continue
 				}
-				continue
 			}
 			return nil, err
 		}

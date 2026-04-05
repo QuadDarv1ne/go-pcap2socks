@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/quic-go/quic-go"
 )
 
@@ -50,8 +51,10 @@ func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr, release func
 	conn.readDeadline.Store(time.Time{})
 	conn.writeDeadline.Store(time.Time{})
 
-	// Start datagram receiver
-	go conn.receiveDatagrams()
+	// Start datagram receiver with panic protection
+	goroutine.SafeGo(func() {
+		conn.receiveDatagrams()
+	})
 
 	return conn, nil
 }

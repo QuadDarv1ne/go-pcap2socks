@@ -117,7 +117,9 @@ func (b *Bot) Start() {
 	b.RegisterCommand("/report", b.handleReport)
 	b.RegisterCommand("/discord_status", b.handleDiscordStatus)
 
-	go b.poll()
+	goroutine.SafeGo(func() {
+		b.poll()
+	})
 }
 
 // StartPeriodicReports starts periodic traffic reports
@@ -214,6 +216,13 @@ func (b *Bot) poll() {
 	errorCount := 0
 	const maxErrors = 5
 
+	// Reusable timer for backoff delays
+	backoffTimer := time.NewTimer(0)
+	if !backoffTimer.Stop() {
+		<-backoffTimer.C
+	}
+	defer backoffTimer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -240,15 +249,19 @@ func (b *Bot) poll() {
 				return
 			}
 
-			// Exponential backoff
+			// Exponential backoff with reusable timer
 			backoff := time.Duration(5*(1<<errorCount)) * time.Second
 			if backoff > 5*time.Minute {
 				backoff = 5 * time.Minute
 			}
+			backoffTimer.Reset(backoff)
 			select {
 			case <-ctx.Done():
+				if !backoffTimer.Stop() {
+					<-backoffTimer.C
+				}
 				return
-			case <-time.After(backoff):
+			case <-backoffTimer.C:
 			}
 			continue
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device/iobased"
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/gopacket/gopacket/pcap"
@@ -212,7 +213,9 @@ func (t *PCAP) Read() []byte {
 				// Handle DHCP in separate goroutine to avoid blocking main read loop
 				// Copy data for async processing using buffer pool
 				dataCopy := buffer.Clone(data)
-				go t.handleDHCPAsync(dataCopy)
+				goroutine.SafeGo(func() {
+					t.handleDHCPAsync(dataCopy)
+				})
 				return nil // Don't pass DHCP packets to the stack
 			}
 		}

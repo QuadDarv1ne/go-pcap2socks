@@ -370,8 +370,9 @@ func main() {
 	slog.Debug("GC tuned for low latency", "gc_percent", 20)
 
 	// Pre-warm buffer pool to reduce initial allocations
-	buffer.PreWarmPool(100, 50, 20)
-	slog.Debug("Buffer pool pre-warmed", "small", 100, "medium", 50, "large", 20)
+	// Increased medium buffers for better UDP performance (gaming, PS4 traffic)
+	buffer.PreWarmPool(200, 100, 50)
+	slog.Debug("Buffer pool pre-warmed", "small", 200, "medium", 100, "large", 50)
 
 	// Initialize shutdown manager
 	executable, _ := os.Executable()
@@ -1422,7 +1423,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	}
 
 	// Initialize DHCP server if enabled
-	dhcpServer, err := createDHCPServerIfNeeded(cfg, netConfig)
+	dhcpServer, err := createDHCPServerIfNeeded(cfg, netConfig, ifce.Name)
 	if err != nil {
 		return err
 	}
@@ -3609,7 +3610,7 @@ func createWANBalancer(cfg *cfg.Config, proxies map[string]proxy.Proxy) (*wanbal
 }
 
 // createDHCPServerIfNeeded creates DHCP server if enabled in configuration
-func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) (interface{}, error) {
+func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig, ifaceName string) (interface{}, error) {
 	dhcpNil := cfg.DHCP == nil
 	dhcpEnabled := false
 	poolStartStr := ""
@@ -3656,7 +3657,7 @@ func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig) 
 	}
 
 	// Create DHCP server (platform-specific implementation)
-	dhcpServerImpl, err := createDHCPServer(cfg, dhcpConfig, netConfig)
+	dhcpServerImpl, err := createDHCPServer(cfg, dhcpConfig, netConfig, ifaceName)
 	if err != nil {
 		slog.Error("Failed to create DHCP server", "err", err)
 		return nil, err

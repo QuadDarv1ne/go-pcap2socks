@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
+	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/gopacket/gopacket/pcap"
@@ -44,17 +45,18 @@ func ipInt(ip net.IP) uint32 {
 
 // DHCPServer represents a DHCP server using WinDivert
 type DHCPServer struct {
-	mu          sync.RWMutex
-	config      *dhcp.ServerConfig
-	server      *dhcp.Server
-	handle      *Handle
-	pcapHandle  *pcap.Handle // Npcap handle for sending Ethernet frames
-	stopChan    chan struct{}
-	wg          sync.WaitGroup
-	localMAC    net.HardwareAddr
-	localIP     net.IP
-	ifaceName   string // Network interface name for pcap
-	lastRequest sync.Map // Rate limiting per MAC: map[string]int64 (nanoseconds)
+	mu           sync.RWMutex
+	config       *dhcp.ServerConfig
+	server       *dhcp.Server
+	handle       *Handle
+	pcapHandle   *pcap.Handle // Npcap handle for sending Ethernet frames
+	stopChan     chan struct{}
+	wg           sync.WaitGroup
+	localMAC     net.HardwareAddr
+	localIP      net.IP
+	ifaceName    string // Network interface name for pcap
+	lastRequest  sync.Map // Rate limiting per MAC: map[string]int64 (nanoseconds)
+	backoffTimer *time.Timer // Reusable timer for backoff delays
 
 	// Metrics for monitoring
 	metrics struct {
@@ -150,7 +152,9 @@ func (s *DHCPServer) Start() error {
 		"reserved_ips", 1) // Gateway IP is reserved
 
 	s.wg.Add(1)
-	go s.packetLoop()
+	goroutine.SafeGo(func() {
+		s.packetLoop()
+	})
 
 	slog.Info("WinDivert DHCP server started successfully",
 		"goroutine_started", true)
@@ -183,12 +187,25 @@ func (s *DHCPServer) packetLoop() {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("WinDivert packet loop panic", "recover", r)
-			// Restart loop after panic
+			// Stop backoff timer if running
+			if s.backoffTimer != nil {
+				s.backoffTimer.Stop()
+			}
+			// Restart loop after panic with limit
 			time.Sleep(1 * time.Second)
 			s.wg.Add(1)
-			go s.packetLoop()
+			goroutine.SafeGo(func() {
+				s.packetLoop()
+			})
 		}
 	}()
+
+	// Initialize backoff timer
+	s.backoffTimer = time.NewTimer(0)
+	if !s.backoffTimer.Stop() {
+		<-s.backoffTimer.C
+	}
+	defer s.backoffTimer.Stop()
 
 	// Lock goroutine to OS thread for stable WinDivert performance
 	runtime.LockOSThread()
@@ -244,16 +261,20 @@ func (s *DHCPServer) packetLoop() {
 					return
 				}
 
-				// Exponential backoff with max 2 seconds
+				// Exponential backoff with max 2 seconds using reusable timer
 				backoff := time.Duration(100*(1<<errorCount)) * time.Millisecond
 				if backoff > 2*time.Second {
 					backoff = 2 * time.Second
 				}
 
+				s.backoffTimer.Reset(backoff)
 				select {
-				case <-time.After(backoff):
+				case <-s.backoffTimer.C:
 					continue
 				case <-s.stopChan:
+					if !s.backoffTimer.Stop() {
+						<-s.backoffTimer.C
+					}
 					return
 				}
 			}

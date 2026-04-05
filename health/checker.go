@@ -433,17 +433,32 @@ func (hc *HealthChecker) run(ctx context.Context) {
 	// Run initial check immediately
 	hc.runChecks(ctx)
 
+	// Reuse timer to avoid allocations in loop
+	checkTimer := time.NewTimer(0)
+	if !checkTimer.Stop() {
+		<-checkTimer.C
+	}
+	defer checkTimer.Stop()
+
 	for {
 		// Calculate delay with jitter to prevent thundering herd
 		baseBackoff := time.Duration(hc.backoffInterval.Load())
 		delay := hc.applyJitter(baseBackoff)
 
+		// Reset timer for next check
+		checkTimer.Reset(delay)
 		select {
 		case <-hc.stopChan:
+			if !checkTimer.Stop() {
+				<-checkTimer.C
+			}
 			return
 		case <-ctx.Done():
+			if !checkTimer.Stop() {
+				<-checkTimer.C
+			}
 			return
-		case <-time.After(delay):
+		case <-checkTimer.C:
 			hc.runChecks(ctx)
 		}
 	}
@@ -537,6 +552,13 @@ func (hc *HealthChecker) runProbeWithRetry(ctx context.Context, probe Probe) Pro
 	retryConfig := DefaultRetryConfig()
 	var lastResult ProbeResult
 
+	// Reuse timer for retry delays
+	retryTimer := time.NewTimer(0)
+	if !retryTimer.Stop() {
+		<-retryTimer.C
+	}
+	defer retryTimer.Stop()
+
 	for attempt := 0; attempt <= retryConfig.MaxRetries; attempt++ {
 		// Run the probe
 		result := probe.Run(ctx)
@@ -578,12 +600,16 @@ func (hc *HealthChecker) runProbeWithRetry(ctx context.Context, probe Probe) Pro
 				"delay_ms", delay.Milliseconds(),
 				"error", result.Error)
 
-			// Wait before retry
+			// Wait before retry using reusable timer
+			retryTimer.Reset(delay)
 			select {
 			case <-ctx.Done():
+				if !retryTimer.Stop() {
+					<-retryTimer.C
+				}
 				lastResult.Error = ctx.Err()
 				return lastResult
-			case <-time.After(delay):
+			case <-retryTimer.C:
 				// Continue to next retry
 			}
 		}
@@ -654,9 +680,11 @@ func (hc *HealthChecker) triggerRecovery(ctx context.Context, failedProbes []Pro
 		// Call recovery handler
 		hc.onRecoveryNeeded()
 
-		// Wait a bit for recovery to complete
+		// Wait a bit for recovery to complete using reusable timer
+		recoveryTimer := time.NewTimer(5 * time.Second)
+		defer recoveryTimer.Stop()
 		select {
-		case <-time.After(5 * time.Second):
+		case <-recoveryTimer.C:
 		case <-ctx.Done():
 			return
 		}

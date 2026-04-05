@@ -185,16 +185,25 @@ type dnsConn struct {
 func (d *dnsConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	// Use select with timeout to prevent goroutine hang if WriteTo was never called
 	// or if the goroutine inside WriteTo panicked/exited without sending to answerCh
+	// Use reusable timer instead of time.After to avoid allocations
+	readTimer := time.NewTimer(30 * time.Second)
+	defer readTimer.Stop()
 	select {
 	case msg := <-d.answerCh:
+		if !readTimer.Stop() {
+			<-readTimer.C
+		}
 		_, err = msg.PackBuffer(b)
 		if err != nil {
 			return 0, nil, err
 		}
 		return msg.Len(), d.m.UDPAddr(), nil
 	case <-d.stopCh:
+		if !readTimer.Stop() {
+			<-readTimer.C
+		}
 		return 0, nil, fmt.Errorf("dns connection closed")
-	case <-time.After(30 * time.Second):
+	case <-readTimer.C:
 		return 0, nil, fmt.Errorf("dns read timeout (30s)")
 	}
 }
@@ -228,8 +237,10 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 		responseCh := make(chan *dns.Msg, 1)
 		errCh := make(chan error, 1)
 
-		// Start async exchange with all servers
-		go d.asyncExchange(ctx, msg, responseCh, errCh)
+		// Start async exchange with all servers using SafeGo for panic protection
+		goroutine.SafeGo(func() {
+			d.asyncExchange(ctx, msg, responseCh, errCh)
+		})
 
 		// Wait for response or timeout
 		select {

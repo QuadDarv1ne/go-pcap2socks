@@ -62,13 +62,22 @@ func NewWebSocketStatusClient() *WebSocketStatusClient {
 	}
 }
 
-// Connect establishes WebSocket connection
+// Connect establishes WebSocket connection with panic protection
 func (c *WebSocketStatusClient) Connect(ctx context.Context, mStatus, mDevices, mStart, mStop *systray.MenuItem) {
-	go c.run(ctx, mStatus, mDevices, mStart, mStop)
+	goroutine.SafeGo(func() {
+		c.run(ctx, mStatus, mDevices, mStart, mStop)
+	})
 }
 
 // run manages WebSocket connection lifecycle
 func (c *WebSocketStatusClient) run(ctx context.Context, mStatus, mDevices, mStart, mStop *systray.MenuItem) {
+	// Reusable timer for reconnect delay
+	reconnectTimer := time.NewTimer(0)
+	if !reconnectTimer.Stop() {
+		<-reconnectTimer.C
+	}
+	defer reconnectTimer.Stop()
+
 	for {
 		select {
 		case <-c.stop:
@@ -78,12 +87,19 @@ func (c *WebSocketStatusClient) run(ctx context.Context, mStatus, mDevices, mSta
 		default:
 			c.connectAndListen(ctx, mStatus, mDevices, mStart, mStop)
 
-			// Wait before reconnect
+			// Wait before reconnect with reusable timer
+			reconnectTimer.Reset(3 * time.Second)
 			select {
-			case <-time.After(3 * time.Second):
+			case <-reconnectTimer.C:
 			case <-c.stop:
+				if !reconnectTimer.Stop() {
+					<-reconnectTimer.C
+				}
 				return
 			case <-ctx.Done():
+				if !reconnectTimer.Stop() {
+					<-reconnectTimer.C
+				}
 				return
 			}
 		}
@@ -298,7 +314,9 @@ func onReadyWithWebSocket(hotkeyMgr *hotkey.Manager) {
 
 		if !connected {
 			slog.Info("WebSocket not available, falling back to polling")
-			go pollStatus(ctx, mStatus, mDevices, mStart, mStop)
+			goroutine.SafeGo(func() {
+				pollStatus(ctx, mStatus, mDevices, mStart, mStop)
+			})
 		}
 	})
 
