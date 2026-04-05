@@ -1,0 +1,26 @@
+# Конфигурация для PS4 через Ethernet
+app:
+  name: go-pcap2socks
+  version: auto
+
+# Захват трафика с Ethernet интерфейса
+pcap:
+  interface: ""  # auto-detect
+  gateway: "192.168.137.1"  # стандартный IP для общего доступа Windows
+
+# DHCP сервер для PS4
+dhcp:
+  enabled: true
+  pool_start: "192.168.137.100"
+  pool_end: "192.168.137.200"
+  dns: "8.8.8.8"
+
+# API веб-интерфейс
+api:
+  port: 8080
+  token: ""  # можно оставить пустым для локального доступа
+
+# Настройки исходящего соединения (без SOCKS, напрямую)
+outbounds:
+  - tag: "direct"
+    type: "direct"
