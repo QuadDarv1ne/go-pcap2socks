@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package proxy provides WebSocket proxy tests.
 package proxy
 

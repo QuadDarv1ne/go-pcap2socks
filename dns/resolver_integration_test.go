@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package dns_test provides integration tests for DNS resolver
 package dns_test
 

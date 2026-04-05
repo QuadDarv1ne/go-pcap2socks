@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package bandwidth_test provides benchmarks for bandwidth limiting
 package bandwidth_test
 

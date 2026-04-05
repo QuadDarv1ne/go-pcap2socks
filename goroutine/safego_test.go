@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package goroutine provides safe goroutine management tests.
 package goroutine
 

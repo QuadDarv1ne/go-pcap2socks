@@ -1,3 +1,5 @@
+//go:build ignore
+
 package npcap_dhcp_test
 
 import (

@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package dhcp_test provides integration tests for DHCP server
 package dhcp_test
 

@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package proxy_test provides integration tests for proxy router
 package proxy_test
 

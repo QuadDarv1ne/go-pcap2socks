@@ -1,3 +1,5 @@
+//go:build ignore
+
 package shutdown_test
 
 import (

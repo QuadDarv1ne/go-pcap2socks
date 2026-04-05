@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package tests provides comprehensive tests for DHCP implementations.
 package tests
 

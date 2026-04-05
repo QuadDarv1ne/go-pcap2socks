@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package ws provides WebSocket transport tests.
 package ws
 

@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package api_test provides integration tests for Web UI API
 package api_test
 

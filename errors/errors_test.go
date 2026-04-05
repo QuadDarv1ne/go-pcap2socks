@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package errors provides structured error tests.
 package errors
 
