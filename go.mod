@@ -15,14 +15,12 @@ require (
 	github.com/miekg/dns v1.1.68
 	github.com/quic-go/quic-go v0.59.0
 	github.com/sagernet/sing v0.7.12
-	github.com/stretchr/testify v1.11.1
 	github.com/threatwinds/godivert v0.0.0-20231220161426-b6f75f7fc971
 	go.uber.org/atomic v1.11.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/time v0.14.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	gvisor.dev/gvisor v0.0.0-20251007062105-0520b1c18dd1
-	pgregory.net/rapid v1.2.0
 )
 
 require (
@@ -39,6 +37,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/exp v0.0.0-20251002181428-27f1f14c8bb9 // indirect
 	golang.org/x/mod v0.33.0 // indirect
