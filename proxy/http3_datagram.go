@@ -20,6 +20,8 @@ type quicDatagramConn struct {
 	once       sync.Once // Для однократного закрытия каналов
 	readChan   chan []byte
 	errChan    chan error
+	closeDone  chan struct{} // Сигнализирует о завершении receiveDatagrams
+	release    func()        // Callback для cleanup в HTTP3
 
 	// Deadline support with atomic operations
 	readDeadline  atomic.Value // time.Time
@@ -27,7 +29,7 @@ type quicDatagramConn struct {
 }
 
 // newQuicDatagramConn creates a new QUIC datagram connection
-func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr) (*quicDatagramConn, error) {
+func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr, release func()) (*quicDatagramConn, error) {
 	// Check if datagrams are supported
 	cs := qconn.ConnectionState()
 	if !cs.SupportsDatagrams.Remote || !cs.SupportsDatagrams.Local {
@@ -40,6 +42,8 @@ func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr) (*quicDatagr
 		remoteAddr: remoteAddr,
 		readChan:   make(chan []byte, 10000), // Increased buffer for better burst handling
 		errChan:    make(chan error, 1),
+		closeDone:  make(chan struct{}),
+		release:    release,
 	}
 
 	// Initialize deadlines
@@ -53,8 +57,10 @@ func newQuicDatagramConn(qconn *quic.Conn, remoteAddr *net.UDPAddr) (*quicDatagr
 }
 
 // receiveDatagrams continuously reads datagrams from the QUIC connection
-// Optimized with atomic closed check
+// Protected against send on closed channel race
 func (c *quicDatagramConn) receiveDatagrams() {
+	defer close(c.closeDone)
+
 	ctx := c.conn.Context()
 	for {
 		select {
@@ -70,18 +76,20 @@ func (c *quicDatagramConn) receiveDatagrams() {
 				if c.closed.Load() {
 					return
 				}
+				// Use select with default to avoid blocking on closed channel
 				select {
 				case c.errChan <- err:
 				default:
+					// Channel closed or full, drop error
 				}
 				continue
 			}
 
-			// Send data to read channel
+			// Send data to read channel with race protection
 			select {
 			case c.readChan <- data:
 			default:
-				// Channel full, drop packet
+				// Channel full or closed, drop packet
 			}
 		}
 	}
@@ -141,11 +149,17 @@ func (c *quicDatagramConn) Close() error {
 	var err error
 	c.once.Do(func() {
 		c.closed.Store(true)
-		// Close channels
+		// Close QUIC connection first to stop receiveDatagrams goroutine
+		err = c.conn.CloseWithError(0, "closed")
+		// Wait for receiveDatagrams to finish
+		<-c.closeDone
+		// Close channels after goroutine has exited
 		close(c.readChan)
 		close(c.errChan)
-		// Close QUIC connection
-		err = c.conn.CloseWithError(0, "closed")
+		// Release from HTTP3 tracker
+		if c.release != nil {
+			c.release()
+		}
 	})
 	return err
 }

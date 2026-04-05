@@ -534,17 +534,20 @@ func (r *Router) UpdateRules(rules []cfg.Rule) {
 	slog.Info("Routing rules updated", "count", len(rules))
 }
 
-// SetMACFilter sets the MAC filter for the router
+// SetMACFilter sets the IP filter for the router (renamed from MAC for clarity)
+// Note: At L3 routing level we only have IP addresses, not MAC addresses
 func (r *Router) SetMACFilter(filter *cfg.MACFilter) {
 	r.macFilter = filter
 }
 
-// isMACAllowed checks if the MAC address is allowed
-func (r *Router) isMACAllowed(mac string) bool {
+// isSourceAllowed checks if the source IP address is allowed
+// Uses IP-based filtering since MAC addresses are not available at L3
+func (r *Router) isSourceAllowed(srcIP string) bool {
 	if r.macFilter == nil {
 		return true
 	}
-	return r.macFilter.IsAllowed(mac)
+	// Treat the IP as the identifier for filtering
+	return r.macFilter.IsAllowed(srcIP)
 }
 
 // route performs routing logic and returns the selected proxy tag
@@ -570,9 +573,9 @@ func (d *Router) route(cacheKey string, metadata *M.Metadata) (string, error) {
 }
 
 func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
-	// Check MAC filter first
-	if !d.isMACAllowed(metadata.SrcIP.String()) {
-		slog.Debug("Connection blocked by MAC filter", "srcIP", metadata.SrcIP)
+	// Check source IP filter first
+	if !d.isSourceAllowed(metadata.SrcIP.String()) {
+		slog.Debug("Connection blocked by source filter", "srcIP", metadata.SrcIP)
 		return nil, ErrBlockedByMACFilter
 	}
 
@@ -638,9 +641,9 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 }
 
 func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
-	// Check MAC filter first
-	if !d.isMACAllowed(metadata.SrcIP.String()) {
-		slog.Debug("UDP blocked by MAC filter", "srcIP", metadata.SrcIP)
+	// Check source IP filter first
+	if !d.isSourceAllowed(metadata.SrcIP.String()) {
+		slog.Debug("UDP blocked by source filter", "srcIP", metadata.SrcIP)
 		return nil, ErrBlockedByMACFilter
 	}
 

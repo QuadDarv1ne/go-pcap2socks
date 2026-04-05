@@ -65,7 +65,7 @@ func (c *http3Conn) SetWriteDeadline(t time.Time) error {
 }
 
 // dialConnectStream establishes HTTP CONNECT tunnel over QUIC stream
-func dialConnectStream(ctx context.Context, qconn *quic.Conn, targetAddr string) (net.Conn, error) {
+func dialConnectStream(ctx context.Context, qconn *quic.Conn, targetAddr string) (*http3Conn, error) {
 	stream, err := qconn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open QUIC stream: %w", err)
@@ -93,4 +93,26 @@ func dialConnectStream(ctx context.Context, qconn *quic.Conn, targetAddr string)
 	}
 
 	return newHTTP3Conn(stream, qconn, targetAddr), nil
+}
+
+// http3TrackedConn wraps http3Conn with a release callback for QUIC connection cleanup
+type http3TrackedConn struct {
+	*http3Conn
+	release func()
+	closed  bool
+}
+
+func (c *http3TrackedConn) Close() error {
+	if c.closed {
+		return nil
+	}
+	c.closed = true
+	if c.release != nil {
+		c.release()
+	}
+	// Close the underlying QUIC connection
+	if c.http3Conn != nil && c.http3Conn.conn != nil {
+		c.http3Conn.conn.CloseWithError(0, "connection closed")
+	}
+	return c.http3Conn.Close()
 }

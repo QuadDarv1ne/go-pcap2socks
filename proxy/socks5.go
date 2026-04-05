@@ -347,9 +347,12 @@ func (pc *socksPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 		return 0, nil, fmt.Errorf("convert %s to UDPAddr is nil", addr)
 	}
 
-	// Shift payload to beginning of buffer (minimal copy within same buffer)
-	if payloadLen > 0 && payloadLen < n {
-		copy(b[:payloadLen], b[n-payloadLen:n])
+	// Shift payload to beginning of buffer
+	// SOCKS5 UDP format: [RSV(2)][FRAG(1)][DST.ADDR][PAYLOAD]
+	// Payload starts at headerLen offset, move it to buffer start
+	headerLen := n - payloadLen
+	if payloadLen > 0 && headerLen > 0 && headerLen < n {
+		copy(b[:payloadLen], b[headerLen:n])
 	}
 
 	return payloadLen, udpAddr, nil

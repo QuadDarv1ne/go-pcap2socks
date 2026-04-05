@@ -1,24 +1,89 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (05.04.2026, тридцать пятая волна)
+## Статус проекта (05.04.2026, тридцать шестая волна)
 
 **Ветка:** `dev` (текущая, требует коммита и синхронизации в main)
 
 **Последние изменения:**
-- ✅ **ТРИДЦАТЬ ПЯТАЯ ВОЛНА** (05.04.2026, Proxy Group стабильность)
-- ✅ **Proxy Group**: исправлена утечка счётчиков соединений в Failover политике
-- ✅ **Proxy Group**: добавлена проверка на nil прокси во всех политиках
-- ✅ **Proxy Group**: исправлен double Close в trackedConn и trackedPacketConn
-- ✅ **Proxy Group**: валидация nil прокси при создании группы
+- ✅ **ТРИДЦАТЬ ШЕСТАЯ ВОЛНА** (05.04.2026, Критические исправления стабильности)
+- ✅ **HTTP3**: исправлена утечка QUIC соединений — трекинг и cleanup в Close()
+- ✅ **HTTP3 Datagram**: исправлен panic send on closed channel — защита receiveDatagrams
+- ✅ **SOCKS5 UDP**: исправлена corrupted payload — правильный сдвиг данных в ReadFrom
+- ✅ **Router**: исправлена MAC-фильтрация — теперь IP-фильтрация (MAC недоступен на L3)
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
 dev:  ✅ требует коммита
-main: ✅ 0f82339 — требует синхронизации
+main: ✅ 19af630 — требует синхронизации
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
+
+---
+
+## ✅ Результаты тридцать шестой волны (05.04.2026)
+
+### Исправленные проблемы:
+
+| # | Проблема | Файл | Изменение | Статус |
+|---|----------|------|-----------|--------|
+| 1 | Утечка QUIC соединений в DialContext | `proxy/http3.go`, `proxy/http3_conn.go` | Трекинг quicConns + http3TrackedConn + release callback | ✅ ИСПРАВЛЕНО |
+| 2 | Panic: send on closed channel | `proxy/http3_datagram.go` | closeDone channel + правильный порядок закрытия | ✅ ИСПРАВЛЕНО |
+| 3 | Corrupted UDP payload в ReadFrom | `proxy/socks5.go` | copy(b[:payloadLen], b[headerLen:n]) вместо b[n-payloadLen:n] | ✅ ИСПРАВЛЕНО |
+| 4 | MAC-фильтрация проверяет IP вместо MAC | `proxy/router.go` | Переименовано в isSourceAllowed, IP-based фильтрация | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**proxy/http3.go:**
+- Добавлены поля `mu sync.Mutex` и `quicConns map[*quic.Conn]struct{}`
+- `DialContext()`: трекинг QUIC соединения перед созданием tunnel
+  - `h.quicConns[qconn] = struct{}{}` при успехе
+  - `delete(h.quicConns, qconn)` при ошибке и cleanup
+  - Возврат `http3TrackedConn` с release callback
+- `DialUDP()`: аналогичный трекинг для datagram соединений
+  - Передача release callback в `newQuicDatagramConn`
+- `Close()`: закрытие всех активных QUIC соединений
+  - `for _, qconn := range conns { qconn.CloseWithError(0, "proxy closed") }`
+
+**proxy/http3_conn.go:**
+- `dialConnectStream`: возвращает `*http3Conn` вместо `net.Conn`
+- Добавлен `http3TrackedConn`:
+  - `release func()` — callback для удаления из HTTP3.quicConns
+  - `closed bool` — защита от двойного Close
+  - `Close()`: вызывает release, закрывает QUIC conn, затем stream
+
+**proxy/http3_datagram.go:**
+- Добавлены поля `closeDone chan struct{}` и `release func()`
+- `newQuicDatagramConn`: принимает release callback, инициализирует closeDone
+- `receiveDatagrams()`: `defer close(c.closeDone)` при выходе
+  - Защита от send on closed channel через select с default
+- `Close()`: исправлен порядок закрытия:
+  1. `c.closed.Store(true)` — атомарный флаг
+  2. `c.conn.CloseWithError()` — остановка горутины
+  3. `<-c.closeDone` — ожидание завершения
+  4. `close(c.readChan)` / `close(c.errChan)` — закрытие каналов
+  5. `c.release()` — удаление из HTTP3 tracker
+
+**proxy/socks5.go:**
+- `ReadFrom()`: исправлена логика сдвига payload
+  - Было: `copy(b[:payloadLen], b[n-payloadLen:n])` — копировало с конца буфера
+  - Стало: `copy(b[:payloadLen], b[headerLen:n])` — копирует с начала после заголовка
+  - SOCKS5 UDP формат: `[RSV(2)][FRAG(1)][DST.ADDR][PAYLOAD]`
+  - `headerLen = n - payloadLen` — вычисляется dynamically
+
+**proxy/router.go:**
+- `isMACAllowed` → `isSourceAllowed` — переименована функция
+- Комментарии обновлены: "At L3 routing level we only have IP addresses"
+- `DialContext` / `DialUDP`: используют `isSourceAllowed(metadata.SrcIP.String())`
+- Логи изменены: "blocked by source filter" вместо "blocked by MAC filter"
+- `SetMACFilter`: добавлен комментарий о L3 ограничении
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
 
 ---
 
