@@ -23,6 +23,43 @@ if (-not $isAdmin) {
 Write-Host "✓ Права администратора подтверждены" -ForegroundColor Green
 Write-Host ""
 
+# Настройка приоритета сетевых интерфейсов (Wi-Fi > Ethernet)
+Write-Host "Настройка приоритета сетевых интерфейсов..." -ForegroundColor Yellow
+try {
+    # Используем несколько методов для надёжного определения Wi-Fi
+    $wifiInterface = Get-NetAdapter | Where-Object {
+        $_.Status -eq 'Up' -and (
+            $_.InterfaceType -eq 71 -or  # IEEE 802.11 (Wireless)
+            $_.InterfaceDescription -match 'Wi-Fi|Wireless|802\.11|Centrino|AX200|AX201|AX210'
+        )
+    } | Select-Object -First 1
+
+    $ethernetInterfaces = Get-NetAdapter | Where-Object {
+        $_.Status -eq 'Up' -and (
+            $_.InterfaceType -eq 6 -or   # Ethernet (IEEE 802.3)
+            ($_.InterfaceDescription -match 'Ethernet|LAN|GbE|FastEther' -and $_.InterfaceType -ne 71)
+        )
+    }
+
+    if ($wifiInterface) {
+        # Получаем текущие индексы интерфейсов
+        $wifiIdx = (Get-NetIPInterface -InterfaceAlias $wifiInterface.InterfaceAlias -AddressFamily IPv4).ifIndex
+        Set-NetIPInterface -ifIndex $wifiIdx -InterfaceMetric 25
+        Write-Host "✓ Wi-Fi ($($wifiInterface.InterfaceAlias)) приоритет: 25 (высокий)" -ForegroundColor Green
+
+        foreach ($eth in $ethernetInterfaces) {
+            $ethIdx = (Get-NetIPInterface -InterfaceAlias $eth.InterfaceAlias -AddressFamily IPv4).ifIndex
+            Set-NetIPInterface -ifIndex $ethIdx -InterfaceMetric 35
+            Write-Host "✓ Ethernet ($($eth.InterfaceAlias)) приоритет: 35 (средний)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "INFO: Wi-Fi не найден, пропускаем настройку приоритета" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "⚠ Не удалось настроить приоритет интерфейсов: $_" -ForegroundColor Yellow
+}
+Write-Host ""
+
 # Проверка наличия исполняемого файла
 if (-not (Test-Path $ExePath)) {
     Write-Host "❌ ОШИБКА: go-pcap2socks.exe не найден в $ExePath" -ForegroundColor Red
