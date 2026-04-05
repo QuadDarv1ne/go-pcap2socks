@@ -1467,10 +1467,10 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 
 	// Create proxy handler with DNS hijacker for transparent proxy routing
 	var proxyHandler adapter.TransportHandler
-	if _, ok := _defaultProxy.(*proxy.Router); ok {
-		// Router is available, use basic handler
-		proxyHandler = core.NewProxyHandler(_defaultProxy, slog.Default())
-		slog.Info("Proxy handler created with router")
+	if r, ok := _defaultProxy.(*proxy.Router); ok {
+		// Router is available, use handler with DNS hijacker
+		proxyHandler = core.NewProxyHandlerWithDNS(_defaultProxy, r, _dnsHijacker, slog.Default())
+		slog.Info("Proxy handler with DNS hijacker created")
 	} else {
 		// Fallback to basic tunnel if router is not available
 		proxyHandler = &core.Tunnel{}
