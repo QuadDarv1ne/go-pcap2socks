@@ -229,15 +229,35 @@ func (h *WebSocketHub) readPump(client *WebSocketClient) {
 		client.conn.Close()
 	}()
 
+	// Set read deadline so ReadMessage unblocks periodically to check stopChan
+	readDeadline := 2 * time.Second
+
 	for {
 		select {
 		case <-h.stopChan:
 			return
 		default:
+			// Set deadline so ReadMessage doesn't block forever
+			client.conn.SetReadDeadline(time.Now().Add(readDeadline))
 			_, message, err := client.conn.ReadMessage()
 			if err != nil {
-				return
+				// Check if it's just a deadline exceeded (continue loop)
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure) ||
+					websocket.IsUnexpectedCloseError(err) {
+					return
+				}
+				// For deadline or other errors, check stopChan
+				select {
+				case <-h.stopChan:
+					return
+				default:
+					// Not stopped, continue loop
+					continue
+				}
 			}
+
+			// Reset deadline for next read
+			client.conn.SetReadDeadline(time.Time{})
 
 			// Handle client messages (e.g., subscribe/unsubscribe)
 			var msg struct {

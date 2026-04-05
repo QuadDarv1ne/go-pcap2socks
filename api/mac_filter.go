@@ -221,18 +221,26 @@ func (h *MACFilterAPI) HandleCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	allowed := true
+	mode := ""
 	if h.config != nil {
-		allowed = h.config.IsAllowed(mac)
-	}
+		mode = string(h.config.Mode)
+		allowed := h.config.IsAllowed(mac)
+		h.mu.RUnlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(MACFilterResponse{
-		Mode:    h.GetMode(),
-		Allowed: allowed,
-	})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(MACFilterResponse{
+			Mode:    mode,
+			Allowed: allowed,
+		})
+	} else {
+		h.mu.RUnlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(MACFilterResponse{
+			Mode:    "disabled",
+			Allowed: true,
+		})
+	}
 }
 
 // HandleMode handles PUT /api/macfilter/mode

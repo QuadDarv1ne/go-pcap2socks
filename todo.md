@@ -1,25 +1,96 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (05.04.2026, тридцать седьмая волна)
+## Статус проекта (05.04.2026, тридцать восьмая волна)
 
 **Ветка:** `dev` (текущая, требует коммита и синхронизации в main)
 
 **Последние изменения:**
-- ✅ **ТРИДЦАТЬ СЕДЬМАЯ ВОЛНА** (05.04.2026, Оптимизация стабильности и ресурсов)
-- ✅ **ConnTracker**: исправлена утечка таймеров в relayFromProxy — reusable time.NewTimer
-- ✅ **ConnTracker**: добавлен jitter в dialProxy backoff для предотвращения thundering herd
-- ✅ **DNS Resolver**: добавлен goroutineSem semaphore для ограничения параллельных goroutine
-- ✅ **DNS Resolver**: исправлен баг с prefetchStop/prefetchChan рассогласованием
-- ✅ **Глубокий аудит**: проверено 18+ файлов core/dns/dhcp/proxy/api
+- ✅ **ТРИДЦАТЬ ВОСЬМАЯ ВОЛНА** (05.04.2026, API стабильность + main.go shutdown)
+- ✅ **RateLimiter**: исправлена TOCTOU race на token reset — atomic CAS + Int64 timestamp
+- ✅ **RateLimiter**: добавлен cleanupLoop для eviction stale entries из sync.Map
+- ✅ **RateLimiter**: IP extraction теперь stripping port — per-IP вместо per-connection
+- ✅ **WebSocket**: исправлен goroutine leak в readPump — SetReadDeadline 2s + stopChan check
+- ✅ **MACFilter**: исправлен potential deadlock — убран nested RLock в HandleCheck
+- ✅ **main.go**: CreateStack failure теперь возвращает error вместо silent nil
+- ✅ **main.go**: stopImpl() дополнен — configReloader, hotkeyManager, DNS resolver
+- ✅ **Глубокий аудит**: проверено 12+ файлов api/ + main.go
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
 dev:  ✅ требует коммита
-main: ✅ 6116d4d — требует синхронизации
+main: ✅ e29156d — требует синхронизации
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
+
+---
+
+## ✅ Результаты тридцать восьмой волны (05.04.2026)
+
+### Исправленные проблемы:
+
+| # | Проблема | Файл | Изменение | Статус |
+|---|----------|------|-----------|--------|
+| 1 | TOCTOU race condition на token reset | `api/ratelimit.go` | atomic.Int64 + CompareAndSwap для lastReset | ✅ ИСПРАВЛЕНО |
+| 2 | Unbounded memory growth sync.Map | `api/ratelimit.go` | cleanupLoop + cleanup для eviction stale entries | ✅ ИСПРАВЛЕНО |
+| 3 | Per-connection вместо per-IP rate limit | `api/ratelimit.go` | net.SplitHostPort для извлечения IP | ✅ ИСПРАВЛЕНО |
+| 4 | Goroutine leak в readPump | `api/websocket.go` | SetReadDeadline 2s + periodic stopChan check | ✅ ИСПРАВЛЕНО |
+| 5 | Potential deadlock nested RLock | `api/mac_filter.go` | Убран вызов GetMode() внутри RLock, прямой доступ | ✅ ИСПРАВЛЕНО |
+| 6 | CreateStack silent failure | `main.go` | return error вместо return nil при ошибке | ✅ ИСПРАВЛЕНО |
+| 7 | Incomplete shutdown stopImpl | `main.go` | Добавлены configReloader, DNS resolver, hotkeyManager | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**api/ratelimit.go:**
+- Полная переработка rate limiter:
+  - `lastReset atomic.Value` → `lastReset atomic.Int64` (unix timestamp)
+  - TOCTOU fix: `CompareAndSwap(lastReset, nowUnix)` для атомарного reset
+  - Добавлен `cleanupInterval` и `stopChan`
+  - `cleanupLoop()` — periodic ticker для eviction
+  - `cleanup()` — удаляет stale entries (3+ window без активности)
+  - `net.SplitHostPort(ip)` для корректного per-IP limiting
+  - Предотвращает unbounded memory growth + race condition
+
+**api/websocket.go:**
+- `readPump()` (строки 225-278):
+  - `SetReadDeadline(time.Now().Add(2s))` перед каждым ReadMessage
+  - На deadline error: проверка stopChan → continue или return
+  - На success: `SetReadDeadline(time.Time{})` reset
+  - Предотвращает goroutine leak при shutdown
+  - `websocket.IsCloseError` / `IsUnexpectedCloseError` для правильной обработки
+
+**api/mac_filter.go:**
+- `HandleCheck()` (строки 203-244):
+  - Убран `defer h.mu.RUnlock()` + вызов `h.GetMode()` (nested lock)
+  - Прямой доступ к `h.config.Mode` внутри того же RLock
+  - Ранний RUnlock после чтения → response encoding вне lock
+  - Предотвращает deadlock при concurrent writer
+
+**main.go:**
+- `run()` CreateStack (строка 1468):
+  - Было: `return nil` после ошибки
+  - Стало: `return fmt.Errorf("create network stack: %w", err)`
+  - Предотвращает silent failure с nil stack
+
+- `stopImpl()` (строки 1805-1820):
+  - Добавлен `_configReloader.Stop()`
+  - Добавлен `_dnsResolver.Stop()` (вместо StopPrefetch)
+  - Добавлен `_hotkeyManager.Stop()`
+  - Синхронизировано с `performGracefulShutdownImpl`
+
+### Результаты глубокого аудита (проверено 12+ файлов api/ + main.go):
+
+| Пакет | Файлы | Критические | Исправлено |
+|-------|-------|-------------|------------|
+| **api** | ratelimit.go, websocket.go, mac_filter.go | 5 (race, leak, deadlock, memory, per-conn) | ✅ 5/5 |
+| **main** | main.go | 2 (silent failure, incomplete shutdown) | ✅ 2/2 |
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
 
 ---
 

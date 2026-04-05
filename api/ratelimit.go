@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -23,24 +24,22 @@ func DefaultRateLimiterConfig() *RateLimiterConfig {
 	}
 }
 
-// rateLimiter implements a simple token bucket rate limiter per IP
-// Optimized with sync.Map for lock-free visitor lookup
+// rateLimiter implements a token bucket rate limiter per IP
+// Uses sync.Map for lock-free visitor lookup with periodic cleanup
 type rateLimiter struct {
-	visitors sync.Map // map[string]*visitor
-	rate     int32    // requests per window (atomic)
-	window   time.Duration
-	// Cleanup interval removed - not used in optimized version
-	stopChan chan struct{}
+	visitors        sync.Map // map[string]*visitor
+	rate            int32    // requests per window (atomic)
+	window          time.Duration
+	cleanupInterval time.Duration
+	stopChan        chan struct{}
 }
 
 type visitor struct {
 	tokens    atomic.Int32
-	lastReset atomic.Value // time.Time
+	lastReset atomic.Int64 // unix timestamp, avoids TOCTOU race
 }
 
 // newRateLimiter creates a new rate limiter
-// rate: number of requests allowed per window
-// window: time window for rate limiting (e.g., 1 minute)
 func newRateLimiter(rate int, window time.Duration) *rateLimiter {
 	return newRateLimiterWithConfig(&RateLimiterConfig{
 		Rate:   rate,
@@ -59,32 +58,34 @@ func newRateLimiterWithConfig(cfg *RateLimiterConfig) *rateLimiter {
 	if cfg.Window <= 0 {
 		cfg.Window = 1 * time.Minute
 	}
-
-	rl := &rateLimiter{
-		rate:     int32(cfg.Rate),
-		window:   cfg.Window,
-		stopChan: make(chan struct{}),
+	if cfg.CleanupInterval <= 0 {
+		cfg.CleanupInterval = 2 * time.Minute
 	}
 
-	// Cleanup loop removed - sync.Map is self-cleaning via LoadOrStore
-	// Old entries naturally get replaced when new requests come in
+	rl := &rateLimiter{
+		rate:            int32(cfg.Rate),
+		window:          cfg.Window,
+		cleanupInterval: cfg.CleanupInterval,
+		stopChan:        make(chan struct{}),
+	}
+
+	// Start cleanup goroutine to evict stale entries
+	go rl.cleanupLoop()
 	return rl
 }
 
 // allow checks if a request from the given IP should be allowed
-// Optimized with sync.Map Load for lock-free reads
 func (rl *rateLimiter) allow(ip string) bool {
 	// Fast path: try to load existing visitor
 	var v *visitor
 	if val, ok := rl.visitors.Load(ip); ok {
 		v = val.(*visitor)
 	} else {
-		// Create new visitor
+		// Create new visitor atomically
 		v = &visitor{}
 		v.tokens.Store(rl.rate)
-		v.lastReset.Store(time.Now())
+		v.lastReset.Store(time.Now().Unix())
 
-		// Store and check if we won (in case of concurrent access)
 		if actual, loaded := rl.visitors.LoadOrStore(ip, v); loaded {
 			v = actual.(*visitor)
 		}
@@ -92,13 +93,17 @@ func (rl *rateLimiter) allow(ip string) bool {
 
 	// Check and update tokens atomically
 	now := time.Now()
-	lastReset := v.lastReset.Load().(time.Time)
+	nowUnix := now.Unix()
+	lastReset := v.lastReset.Load()
 
-	// Reset tokens if window has passed
-	if now.Sub(lastReset) > rl.window {
-		v.tokens.Store(rl.rate)
-		v.lastReset.Store(now)
-		lastReset = now
+	// Reset tokens if window has passed (atomic compare-and-swap to prevent TOCTOU race)
+	windowSeconds := int64(rl.window / time.Second)
+	if nowUnix-lastReset > windowSeconds {
+		// Only one goroutine can successfully reset
+		if v.lastReset.CompareAndSwap(lastReset, nowUnix) {
+			v.tokens.Store(rl.rate)
+		}
+		// Reload tokens in case another goroutine reset
 	}
 
 	// Try to decrement tokens atomically
@@ -110,13 +115,47 @@ func (rl *rateLimiter) allow(ip string) bool {
 		if v.tokens.CompareAndSwap(tokens, tokens-1) {
 			return true
 		}
-		// Retry if CAS failed (concurrent access)
+		// Retry if CAS failed
 	}
 }
 
-// stop stops the rate limiter (no-op in optimized version)
+// cleanupLoop periodically removes stale visitor entries
+func (rl *rateLimiter) cleanupLoop() {
+	ticker := time.NewTicker(rl.cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			rl.cleanup()
+		case <-rl.stopChan:
+			return
+		}
+	}
+}
+
+// cleanup removes visitors whose window has expired long ago
+func (rl *rateLimiter) cleanup() {
+	now := time.Now().Unix()
+	windowSeconds := int64(rl.window / time.Second)
+	// Remove visitors that haven't been active for 3 windows
+	staleThreshold := now - (windowSeconds * 3)
+
+	rl.visitors.Range(func(key, value interface{}) bool {
+		v := value.(*visitor)
+		lastReset := v.lastReset.Load()
+		tokens := v.tokens.Load()
+		// Remove if stale AND has full tokens (inactive)
+		if lastReset < staleThreshold && tokens >= rl.rate {
+			rl.visitors.Delete(key)
+		}
+		return true
+	})
+}
+
+// stop stops the rate limiter
 func (rl *rateLimiter) stop() {
-	// No cleanup goroutine to stop in optimized version
+	close(rl.stopChan)
 }
 
 // rateLimitMiddleware applies rate limiting to endpoints
@@ -127,8 +166,11 @@ func (s *Server) rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Extract IP from request
+		// Extract IP from request (strip port for per-IP limiting)
 		ip := r.RemoteAddr
+		if host, _, err := net.SplitHostPort(ip); err == nil {
+			ip = host
+		}
 		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 			ip = forwarded
 		}

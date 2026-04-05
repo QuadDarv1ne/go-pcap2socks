@@ -1465,6 +1465,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		Options:          []option.Option{},
 	}); err != nil {
 		slog.Error(msgs.CreateStackError, slog.Any("err", err))
+		return fmt.Errorf("create network stack: %w", err)
 	}
 
 	return nil
@@ -1795,13 +1796,25 @@ func stopImpl() {
 		}
 	}
 
-	// Stop DNS prefetch
+	// Stop DNS prefetch and resolver
 	if _dnsResolver != nil {
-		_dnsResolver.StopPrefetch()
-		slog.Info("DNS prefetch stopped")
+		_dnsResolver.Stop()
+		slog.Info("DNS resolver stopped")
 	}
 
-	// Stop DoH server
+	// Stop config reloader
+	if _configReloader != nil {
+		_configReloader.Stop()
+		slog.Info("Config reloader stopped")
+	}
+
+	// Stop hotkey manager
+	if _hotkeyManager != nil {
+		_hotkeyManager.Stop()
+		slog.Info("Hotkey manager stopped")
+	}
+
+	// DoH server
 	if _dohServer != nil {
 		if err := _dohServer.Stop(); err != nil {
 			slog.Error("DoH server shutdown error", slog.Any("err", err))
