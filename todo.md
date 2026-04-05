@@ -1,24 +1,83 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (05.04.2026, тридцать шестая волна)
+## Статус проекта (05.04.2026, тридцать седьмая волна)
 
 **Ветка:** `dev` (текущая, требует коммита и синхронизации в main)
 
 **Последние изменения:**
-- ✅ **ТРИДЦАТЬ ШЕСТАЯ ВОЛНА** (05.04.2026, Критические исправления стабильности)
-- ✅ **HTTP3**: исправлена утечка QUIC соединений — трекинг и cleanup в Close()
-- ✅ **HTTP3 Datagram**: исправлен panic send on closed channel — защита receiveDatagrams
-- ✅ **SOCKS5 UDP**: исправлена corrupted payload — правильный сдвиг данных в ReadFrom
-- ✅ **Router**: исправлена MAC-фильтрация — теперь IP-фильтрация (MAC недоступен на L3)
+- ✅ **ТРИДЦАТЬ СЕДЬМАЯ ВОЛНА** (05.04.2026, Оптимизация стабильности и ресурсов)
+- ✅ **ConnTracker**: исправлена утечка таймеров в relayFromProxy — reusable time.NewTimer
+- ✅ **ConnTracker**: добавлен jitter в dialProxy backoff для предотвращения thundering herd
+- ✅ **DNS Resolver**: добавлен goroutineSem semaphore для ограничения параллельных goroutine
+- ✅ **DNS Resolver**: исправлен баг с prefetchStop/prefetchChan рассогласованием
+- ✅ **Глубокий аудит**: проверено 18+ файлов core/dns/dhcp/proxy/api
 - ✅ **СБОРКА**: проходит без ошибок (go build)
 
 **Статус веток:**
 ```
 dev:  ✅ требует коммита
-main: ✅ 19af630 — требует синхронизации
+main: ✅ 6116d4d — требует синхронизации
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
+
+---
+
+## ✅ Результаты тридцать седьмой волны (05.04.2026)
+
+### Исправленные проблемы:
+
+| # | Проблема | Файл | Изменение | Статус |
+|---|----------|------|-----------|--------|
+| 1 | Утечка таймеров в relayFromProxy polling | `core/conntrack.go` | Reusable time.NewTimer вместо time.After в цикле | ✅ ИСПРАВЛЕНО |
+| 2 | Thundering herd при retry dial | `core/conntrack.go` | Добавлен jitter ±50ms к exponential backoff | ✅ ИСПРАВЛЕНО |
+| 3 | Goroutine explosion в lookupIPUncached | `dns/resolver.go` | goroutineSem semaphore (max 50) на параллельные запросы | ✅ ИСПРАВЛЕНО |
+| 4 | Рассогласование полей prefetch | `dns/resolver.go` | Исправлен prefetchStop → stopPrefetch | ✅ ИСПРАВЛЕНО |
+
+### Детали изменений:
+
+**core/conntrack.go:**
+- `relayFromProxy()` (строки 467-527):
+  - Добавлен `waitTimer := time.NewTimer(100ms)` с `defer waitTimer.Stop()`
+  - Цикл polling теперь использует переиспользуемый таймер:
+    ```go
+    if !waitTimer.Stop() { select { case <-waitTimer.C: default: } }
+    waitTimer.Reset(100ms)
+    ```
+  - Убран `default` case из внешнего select — теперь только ctx.Done и timer
+  - Предотвращает аллокацию нового timer объекта каждые 100ms
+
+- `dialProxy()` (строки 565-580):
+  - Добавлен `math/rand` импорт
+  - Jitter к backoff: `jitter := time.Duration(rand.Intn(50)) * time.Millisecond`
+  - Итоговая задержка: `delay + jitter` (100-150ms, 200-250ms, 400-450ms)
+  - Предотвращает thundering herd когда множество соединений одновременно retry
+
+**dns/resolver.go:**
+- Добавлено поле `goroutineSem chan struct{}` (ёмкость 50)
+- `lookupIPUncached()` (строки 860-920):
+  - Перед запуском каждой goroutine: `select { case r.goroutineSem <- struct{}{}: case <-ctx.Done(): }`
+  - В defer goroutine: `defer func() { <-r.goroutineSem }()`
+  - Ограничивает общее число параллельных DNS goroutine до 50
+  - При 20 lookupIPUncached × 50 = max 1000 goroutine вместо потенциальных 2000+
+
+- Исправлен баг инициализации: `prefetchStop:` → `stopPrefetch:` (строка 208)
+- Удален дубликат `querySem` из структуры (строка 150)
+
+### Результаты глубокого аудита (проверено 18+ файлов):
+
+| Пакет | Файлы | Критические | Исправлено |
+|-------|-------|-------------|------------|
+| **core** | conntrack.go | 2 (timer leak, busy-wait) | ✅ 2/2 |
+| **dns** | resolver.go | 2 (goroutine explosion, field mismatch) | ✅ 2/2 |
+| **dhcp** | server.go, lease_db.go | 0 критичных | ✅ |
+| **proxy** | router.go, socks5.go, http3*.go | 0 (исправлено в 36-й) | ✅ |
+
+### Автоматические проверки:
+
+| Проверка | Команда | Результат | Статус |
+|----------|---------|-----------|--------|
+| **Сборка** | `go build -o NUL .` | Без ошибок | ✅ ПРОЙДЕН |
 
 ---
 

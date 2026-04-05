@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net"
 	"net/netip"
 	"sync"
@@ -476,44 +477,52 @@ func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
 	buf := buffer.Get(buffer.LargeBufferSize)
 	defer buffer.Put(buf)
 
+	// Reusable timer to avoid allocation leak in polling loop
+	waitTimer := time.NewTimer(100 * time.Millisecond)
+	defer waitTimer.Stop()
+
 	for {
-		select {
-		case <-tc.ctx.Done():
-			return
-		default:
-			tc.proxyMu.Lock()
-			proxyConn := tc.ProxyConn
-			tc.proxyMu.Unlock()
-
-			if proxyConn == nil {
-				// Wait for proxy connection with context-aware sleep
-				select {
-				case <-tc.ctx.Done():
-					return
-				case <-time.After(100 * time.Millisecond):
-					continue
-				}
-			}
-
-			proxyConn.SetReadDeadline(time.Now().Add(30 * time.Second))
-			n, err := proxyConn.Read(buf)
-			if err != nil {
-				ct.logger.Debug("Read from proxy failed", "err", err)
-				return
-			}
-
-			tc.lastActivity.Store(time.Now().Unix())
-			tc.bytesReceived.Add(uint64(n))
-
-			// Use buffer.Clone for efficient memory management
-			data := buffer.Clone(buf[:n])
-
+		// Reset timer before each use
+		if !waitTimer.Stop() {
 			select {
-			case tc.FromProxy <- data:
-			case <-tc.ctx.Done():
-				buffer.Put(data) // Return to pool if send failed
-				return
+			case <-waitTimer.C:
+			default:
 			}
+		}
+		waitTimer.Reset(100 * time.Millisecond)
+
+		tc.proxyMu.Lock()
+		proxyConn := tc.ProxyConn
+		tc.proxyMu.Unlock()
+
+		if proxyConn == nil {
+			// Wait for proxy connection with reusable timer
+			select {
+			case <-tc.ctx.Done():
+				return
+			case <-waitTimer.C:
+				continue
+			}
+		}
+
+		proxyConn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		n, err := proxyConn.Read(buf)
+		if err != nil {
+			ct.logger.Debug("Read from proxy failed", "err", err)
+			return
+		}
+
+		tc.lastActivity.Store(time.Now().Unix())
+		tc.bytesReceived.Add(uint64(n))
+
+		// Use buffer.Clone for efficient memory management
+		data := buffer.Clone(buf[:n])
+
+		select {
+		case tc.FromProxy <- data:
+		case <-tc.ctx.Done():
+			buffer.Put(data) // Return to pool if send failed
+			return
 		}
 	}
 }
@@ -559,9 +568,12 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 			return fmt.Errorf("proxy dial cancelled: %w", tc.ctx.Err())
 		}
 
-		// Exponential backoff: 100ms, 200ms, 400ms
+		// Exponential backoff with jitter: 100ms, 200ms, 400ms + random 0-50ms
 		if attempt < maxRetries-1 {
 			delay := baseDelay * time.Duration(1<<uint(attempt))
+			// Add jitter to prevent thundering herd
+			jitter := time.Duration(rand.Intn(50)) * time.Millisecond
+			delay += jitter
 			ct.logger.Debug("Proxy dial failed, retrying",
 				"conn", tc.Meta.String(),
 				"attempt", attempt+1,

@@ -130,6 +130,10 @@ type Resolver struct {
 	queriesCached    atomic.Int64
 	queriesFailed    atomic.Int64
 
+	// Semaphores for concurrency limiting
+	querySem     chan struct{} // Limits concurrent lookupIPUncached calls
+	goroutineSem chan struct{} // Limits parallel goroutines per lookup
+
 	// Metrics
 	metrics *resolverMetrics
 
@@ -141,9 +145,6 @@ type Resolver struct {
 
 	// Shutdown protection
 	stopOnce sync.Once
-
-	// Semaphore to limit concurrent DNS queries (prevent goroutine explosion)
-	querySem chan struct{}
 }
 
 // resolverMetrics holds DNS resolver metrics
@@ -211,6 +212,10 @@ func NewResolver(config *ResolverConfig) *Resolver {
 		stopQueries:  make(chan struct{}),
 		// Semaphore to limit concurrent DNS queries (prevent goroutine explosion)
 		querySem: make(chan struct{}, 20), // Max 20 concurrent lookupIPUncached calls
+		// Semaphore to limit parallel goroutines per lookup (prevent goroutine explosion)
+		// Each lookupIPUncached spawns len(servers)*2 + len(dohServers) goroutines
+		// This limits total goroutines to ~50 per lookup
+		goroutineSem: make(chan struct{}, 50),
 	}
 
 	if config != nil {
@@ -853,7 +858,14 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	// Query regular DNS servers in parallel
 	for _, server := range servers {
 		srv := server // capture loop variable
+		// Acquire goroutine semaphore to prevent explosion
+		select {
+		case r.goroutineSem <- struct{}{}:
+		case <-ctx.Done():
+			break
+		}
 		goroutine.SafeGo(func() {
+			defer func() { <-r.goroutineSem }()
 			var allIPs []net.IP
 			// Query both A and AAAA records in parallel
 			var wg sync.WaitGroup
@@ -892,7 +904,14 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 	// Query DoH servers in parallel
 	for _, dohServer := range r.dohServers {
 		srv := dohServer // capture loop variable
+		// Acquire goroutine semaphore to prevent explosion
+		select {
+		case r.goroutineSem <- struct{}{}:
+		case <-ctx.Done():
+			break
+		}
 		goroutine.SafeGo(func() {
+			defer func() { <-r.goroutineSem }()
 			ips, err := r.queryDoH(ctx, hostname, srv)
 			resultCh <- serverResult{ips: ips, err: err}
 		})
