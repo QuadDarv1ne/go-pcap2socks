@@ -32,6 +32,7 @@ type rateLimiter struct {
 	window          time.Duration
 	cleanupInterval time.Duration
 	stopChan        chan struct{}
+	maxVisitors     int32 // Cap to prevent unbounded growth
 }
 
 type visitor struct {
@@ -67,6 +68,7 @@ func newRateLimiterWithConfig(cfg *RateLimiterConfig) *rateLimiter {
 		window:          cfg.Window,
 		cleanupInterval: cfg.CleanupInterval,
 		stopChan:        make(chan struct{}),
+		maxVisitors:     10000, // Cap to prevent unbounded memory growth
 	}
 
 	// Start cleanup goroutine to evict stale entries
@@ -138,19 +140,24 @@ func (rl *rateLimiter) cleanupLoop() {
 func (rl *rateLimiter) cleanup() {
 	now := time.Now().Unix()
 	windowSeconds := int64(rl.window / time.Second)
-	// Remove visitors that haven't been active for 3 windows
+	// Remove visitors that haven't been active for 3+ windows
 	staleThreshold := now - (windowSeconds * 3)
 
+	removed := int32(0)
 	rl.visitors.Range(func(key, value interface{}) bool {
 		v := value.(*visitor)
 		lastReset := v.lastReset.Load()
-		tokens := v.tokens.Load()
-		// Remove if stale AND has full tokens (inactive)
-		if lastReset < staleThreshold && tokens >= rl.rate {
+		// Remove if stale
+		if lastReset < staleThreshold {
 			rl.visitors.Delete(key)
+			removed++
 		}
 		return true
 	})
+
+	if removed > 0 {
+		// Log cleanup event
+	}
 }
 
 // stop stops the rate limiter
@@ -167,12 +174,10 @@ func (s *Server) rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// Extract IP from request (strip port for per-IP limiting)
+		// For local service, only use RemoteAddr - don't trust X-Forwarded-For (can be spoofed)
 		ip := r.RemoteAddr
 		if host, _, err := net.SplitHostPort(ip); err == nil {
 			ip = host
-		}
-		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-			ip = forwarded
 		}
 
 		if !s.rateLimiter.allow(ip) {

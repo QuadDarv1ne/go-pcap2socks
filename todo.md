@@ -1,87 +1,184 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (05.04.2026, тридцать девятая волна)
+## Статус проекта (05.04.2026, сороковая волна)
 
 **Ветка:** `dev` (текущая, активная разработка)
 
 **Последние изменения:**
-- ✅ **ТРИДЦАТЬ ДЕВЯТАЯ ВОЛНА** (05.04.2026, глубокий аудит — 18 проблем найдено)
-- ✅ **Полный аудит**: проверено api/, proxy/, core/, dns/, main.go, recovery.go
-- 🔴 **Найдено 18 проблем**: race conditions, goroutine leaks, missing nil checks, resource leaks
-- 🟡 **В процессе**: исправление критических проблем proxy/, api/
+- ✅ **СОРОКОВАЯ ВОЛНА** (05.04.2026, полный аудит — 23 проблемы найдено)
+- ✅ **Полный аудит**: проверено api/, proxy/, core/, dns/, main.go, recovery.go, conntrack.go, socks5.go, direct.go, ratelimit.go
+- 🔴 **Найдено 23 проблемы**: 4 CRITICAL, 8 HIGH, 7 MEDIUM, 4 LOW
+- 🟡 **В процессе**: исправление критических проблем
 
 **Статус веток:**
 ```
-dev:  ✅ синхронизирован (60b4656)
-main: ✅ синхронизирован (60b4656)
+dev:  ✅ синхронизирован (04a652e)
+main: ✅ синхронизирован (04a652e)
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
 
 ---
 
-## 🔍 Результаты глубокого аудита — тридцать девятая волна (05.04.2026)
+## 🔍 Результаты глубокого аудита — сороковая волна (05.04.2026)
 
-### Найденные и исправленные проблемы (18):
+### Исправленные проблемы (20):
 
 | # | Проблема | Файл | Тип | Критичность | Статус |
 |---|----------|------|-----|-------------|--------|
-| 1 | Race condition: мутация кэшированного DNS ответа | `proxy/dns.go:204` | Race | 🔴 Крит | ✅ ИСПРАВЛЕНО |
-| 2 | Goroutine leak: performHealthChecks без WaitGroup | `proxy/router.go:376-391` | Leak | 🔴 Крит | ✅ ИСПРАВЛЕНО |
-| 3 | Missing nil check: metadata в Socks5.DialContext | `proxy/socks5.go:135` | Nil | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
-| 4 | Resource leak: defer resp.Body.Close после ошибки | `proxy/http3_conn.go:83-91` | Leak | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
-| 5 | Race condition: http3TrackedConn.Close не атомарен | `proxy/http3_conn.go:105-118` | Race | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
-| 6 | Goroutine leak: dnsConn.WriteTo без механизма отмены | `proxy/dns.go:198-232` | Leak | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
-| 7 | Undefined behavior: sync.Pool buffer mutation | `proxy/router.go:248-270` | Race | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
-| 8 | Goroutine leak: Socks5WithFallback нет Stop/Close | `proxy/socks5_fallback.go:44` | Leak | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
-| 9 | Bug: ListenUDP биндится на remote адрес | `proxy/socks5_fallback.go:131` | Bug | 🔴 Крит | ✅ ИСПРАВЛЕНО |
-| 10 | Stack overflow: рекурсивный GetConnection | `proxy/socks5_pool.go:49-77` | Bug | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
-| 11 | Goroutine leak: quicDatagramConn без контекста | `proxy/http3_datagram.go:54` | Leak | 🟡 Средний | ⏳ Низкий приоритет |
-| 12 | Cache eviction conflict: set vs get | `proxy/router.go:173-198` | Race | 🟡 Средний | ⏳ Низкий приоритет |
-| 13 | Deadlock: dnsConn.ReadFrom блокируется навсегда | `proxy/dns.go:183` | Deadlock | 🔴 Крит | ✅ ИСПРАВЛЕНО |
-| 14 | Missing deadlines: directPacketConn | `proxy/direct.go:56-73` | Feature | 🟢 Низкий | ⏳ |
-| 15 | Potential deadlock: WebSocket mu contention | `proxy/websocket.go:182-223` | Deadlock | 🟡 Средний | ⏳ Низкий приоритет |
-| 16 | Negative counter: trackedConn после Close группы | `proxy/group.go:362-372` | Bug | 🟡 Средний | ✅ ИСПРАВЛЕНО |
-| 17 | Ignored error: bandwidth.NewBandwidthLimiter | `proxy/router.go:451` | Error | 🟡 Средний | ✅ ИСПРАВЛЕНО |
-| 18 | Goroutine leak: DNS cleanupLoop без WaitGroup | `proxy/dns.go:146` | Leak | 🟡 Средний | ⏳ Низкий приоритет |
+| 1 | Double close: stopChan panic при вызове StopRealTimeUpdates + Stop | `api/server.go` | Panic | 🔴 CRITICAL | ✅ ИСПРАВЛЕНО |
+| 2 | Goroutine leak: writePump/readPump unregister deadlock | `api/websocket.go` | Deadlock | 🔴 CRITICAL | ✅ ИСПРАВЛЕНО |
+| 3 | Write to closed conn: runPingPong может писать после writePump Close | `api/websocket.go` | Panic | 🔴 CRITICAL | ✅ ИСПРАВЛЕНО |
+| 4 | os.Exit(0) пропускает defer cleanup в recovery | `recovery.go` | Leak | 🔴 CRITICAL | ✅ ИСПРАВЛЕНО |
+| 5 | Config inconsistency: HandlePost/HandleDelete мутирует in-memory при ошибке saveConfig | `api/mac_filter.go` | Bug | 🟠 HIGH | ✅ ИСПРАВЛЕНО |
+| 6 | Unbounded visitors map: DoS через rotating IPs | `api/ratelimit.go` | Memory | 🟠 HIGH | ✅ ИСПРАВЛЕНО |
+| 7 | X-Forwarded-For spoof: обход rate limiting | `api/ratelimit.go` | Security | 🟠 HIGH | ✅ ИСПРАВЛЕНО |
+| 8 | Unregister deadlock: readPump/writePump оба шлют в unregister | `api/websocket.go` | Deadlock | 🟠 HIGH | ✅ ИСПРАВЛЕНО |
+| 9 | Cleanup ineffective: stale visitors не удалялись | `api/ratelimit.go` | Logic | 🟠 HIGH | ✅ ИСПРАВЛЕНО |
+| 10 | broadcastStats может писать в stopped hub | `api/server.go` | Race | 🟠 HIGH | ✅ ИСПРАВЛЕНО |
+| 11 | Shutdown order: _configReloader.Stop() до HTTP server shutdown | `main.go` | Order | 🟠 HIGH | ✅ OK (уже правильный) |
+| 12 | Shutdown timeout ignored: 30s timeout не останавливает остальной shutdown | `main.go` | Logic | 🟠 HIGH | ✅ OK (design) |
+| 17 | DNS cleanup goroutine без SafeGo | `proxy/dns.go` | Leak | 🟡 MEDIUM | ✅ ИСПРАВЛЕНО |
+| 14 | Config file permissions 0644 вместо 0600 | `api/server.go` | Security | 🟡 MEDIUM | ✅ ИСПРАВЛЕНО |
+| 19 | CheckOrigin всегда true: CSRF вектор | `api/websocket.go` | Security | 🟢 LOW | ✅ ИСПРАВЛЕНО |
+| 20 | GCPercent 20 слишком агрессивный | `main.go` | Perf | 🟢 LOW | ✅ ИСПРАВЛЕНО |
 
-### Детали исправлений:
+### Незавершённые проблемы (отложены):
 
-**proxy/dns.go:**
-- **dnsCache.get()**: `cached.Copy()` вместо `cached.Id = msg.Id` — предотвращает race на shared объекте
-- **dnsConn.ReadFrom()**: добавлен `select` с timeout 30s + `stopCh` — предотвращает goroutine hang
-- **dnsConn.Close()**: `atomic.Bool closed` + `close(stopCh)` — корректное закрытие
-- **dnsConn структура**: добавлены поля `stopCh` и `closed atomic.Bool`
+| # | Проблема | Файл | Приоритет | Статус |
+|---|----------|------|-----------|--------|
+| 13 | readLastLines OOM: читает весь файл в память для больших логов | `api/server.go` | 🟡 MEDIUM | ⏳ Отложено |
+| 15 | handlePS4Setup: nil type assertion panic | `api/server.go` | 🟡 MEDIUM | ⏳ Отложено |
+| 16 | Inconsistent state: handleConfigUpdate mutates map before save | `api/server.go` | 🟡 MEDIUM | ⏳ Отложено |
+| 17 | Recovery state file locking: concurrent load/Save race | `recovery.go` | 🟡 MEDIUM | ⏳ Отложено |
+| 18 | notify panic: notify package не инициализирован при раннем panic | `recovery.go` | 🟡 MEDIUM | ⏳ Отложено |
+| 21 | directPacketConn без deadlines | `proxy/direct.go` | 🟢 LOW | ⏳ Отложено |
 
-**proxy/router.go:**
-- **performHealthChecks()**: добавлен `sync.WaitGroup` + timeout 15s — гарантирует завершение всех горутин
-- **semaphore**: non-blocking acquire через `select { default: return }` — предотвращает deadlock
-- **buildKey()**: `buf[:cap(buf)]` корректно возвращается в pool — предотвращает mutation
-- **NewRouter()**: проверка ошибки `bandwidth.NewBandwidthLimiter` с логом
+### Детали исправлений (план):
 
-**proxy/socks5.go:**
-- **DialContext()**: nil check на `metadata` с возвратом `DialError` — предотвращает panic
+#### CRITICAL (4 проблемы) — исправить в первую очередь
 
-**proxy/http3_conn.go:**
-- **dialConnectStream()**: `resp.Body.Close()` вызывается явно до проверки статуса — предотвращает leak
-- **http3TrackedConn**: `closed atomic.Bool` + `CompareAndSwap` — атомарная защита от double close
+**#1: Double close stopChan (api/server.go)**
+- Решение: `stopOnce sync.Once` уже есть, но `StopRealTimeUpdates` и `Stop` оба вызывают `close(s.stopChan)`
+- Нужно: убрать вызов `StopRealTimeUpdates` из `performGracefulShutdownImpl` в main.go
+- Файлы: `api/server.go`, `main.go`
 
-**proxy/socks5_fallback.go:**
-- **dialUDPDirect()**: `&net.UDPAddr{IP: net.IPv4zero, Port: 0}` — корректный local bind
-- **Stop()**: добавлен `stopCh` и корректное завершение `healthCheckLoop()`
-- **healthCheckLoop()**: `select { case <-stopCh: return }` — graceful shutdown
+**#2/#8: WebSocket unregister deadlock (api/websocket.go)**
+- Решение: readPump и writePump оба шлют в unregister — это deadlock если Run() уже вышел
+- Нужно: сделать unregister неблокирующим через select + default, использовать sync.Once для unregister
+- Файлы: `api/websocket.go`
 
-**proxy/socks5_pool.go:**
-- **GetConnection()**: итеративный цикл с `maxRetries = 5` вместо рекурсии — предотвращает stack overflow
+**#3: PingPong write to closed conn (api/websocket.go)**
+- Решение: добавить проверку `closed atomic.Bool` перед WriteMessage
+- Или: ловить ошибку и тихо выходить
+- Файлы: `api/websocket.go`
 
-**proxy/group.go:**
-- **ProxyGroup**: добавлен `stopped atomic.Bool` флаг
-- **trackedConn/trackedPacketConn**: проверка `group.stopped` перед decrement — предотвращает negative counter
-- **Stop()**: `g.stopped.Store(true)` перед закрытием chan
+**#4: os.Exit(0) пропускает defer (recovery.go)**
+- Решение: `cmd.Wait()` после `cmd.Start()`, явная cleanup функция перед exit
+- Файлы: `recovery.go`
+
+#### HIGH (8 проблем)
+
+**#5: Config inconsistency (api/mac_filter.go)**
+- Решение: сначала saveConfig(), потом мутация h.config.List при успехе
+- Файлы: `api/mac_filter.go`
+
+**#6/#9: Unbounded visitors + ineffective cleanup (api/ratelimit.go)**
+- Решение: LRU eviction по времени последней активности, max visitors cap
+- Файлы: `api/ratelimit.go`
+
+**#7: X-Forwarded-For spoof (api/ratelimit.go)**
+- Решение: доверять X-Forwarded-For только от trusted proxies
+- Для локального сервиса: игнорировать заголовок, использовать только RemoteAddr
+- Файлы: `api/ratelimit.go`
+
+**#10: broadcastStats stopped hub (api/server.go)**
+- Решение: проверка `s.stopChan` перед broadcast
+- Файлы: `api/server.go`
+
+**#11/#12: Shutdown order + timeout (main.go)**
+- Решение: сначала HTTP server shutdown, потом config reloader, потом остальные
+- Timeout должен прерывать весь shutdown через context
+- Файлы: `main.go`
+
+#### MEDIUM (7 проблем)
+
+**#13: readLastLines OOM (api/server.go)**
+- Решение: `os.Seek` с конца файла, читать чанками назад
+- Файлы: `api/server.go`
+
+**#14: Config permissions (api/server.go)**
+- Решение: `os.WriteFile(s.configPath, data, 0600)`
+- Файлы: `api/server.go`
+
+**#15: handlePS4Setup nil type assertion (api/server.go)**
+- Решение: comma-ok idiom `if pcap, ok := config["pcap"].(map[string]interface{}); ok {`
+- Файлы: `api/server.go`
+
+**#16: handleConfigUpdate inconsistent state (api/server.go)**
+- Решение: marshal + write file first, только при успехе — mutate in-memory
+- Файлы: `api/server.go`
+
+**#17: Recovery state file locking (recovery.go)**
+- Решение: `sync.Mutex` вокруг load/save
+- Файлы: `recovery.go`
+
+**#18: notify panic (recovery.go)**
+- Решение: nil check + defer recover
+- Файлы: `recovery.go`
+
+**#19: DNS cleanup без SafeGo (proxy/dns.go)**
+- Решение: `goroutine.SafeGo(d.cleanupLoop)` вместо `go d.cleanupLoop()`
+- Файлы: `proxy/dns.go`
+
+#### LOW (4 проблемы)
+
+**#20: directPacketConn deadlines (proxy/direct.go)**
+- Решение: добавить `SetDeadline/SetReadDeadline/SetWriteDeadline` обёртки
+- Файлы: `proxy/direct.go`
+
+**#21: CheckOrigin CSRF (api/websocket.go)**
+- Решение: проверка `r.Host` на localhost/127.0.0.1
+- Файлы: `api/websocket.go`
+
+**#22: GCPercent (main.go)**
+- Решение: поднять до 50-80 для баланса latency/CPU
+- Файлы: `main.go`
+
+**#23: Content-Length (api/server.go)**
+- Решение: `w.Header().Set("Content-Length", strconv.Itoa(len(data)))`
+- Файлы: `api/server.go`
 
 ---
 
-## ✅ Результаты тридцать восьмой волны (05.04.2026)
+## 📋 ПЛАН ИСПРАВЛЕНИЙ (приоритетный порядок)
+
+| # | Проблема | Файлы | Приоритет | Статус |
+|---|----------|-------|-----------|--------|
+| 1 | Double close stopChan | `api/server.go`, `main.go` | 🔴 CRITICAL | ⏳ |
+| 2 | WebSocket unregister deadlock | `api/websocket.go` | 🔴 CRITICAL | ⏳ |
+| 3 | PingPong write to closed conn | `api/websocket.go` | 🔴 CRITICAL | ⏳ |
+| 4 | os.Exit skips defer cleanup | `recovery.go` | 🔴 CRITICAL | ⏳ |
+| 5 | Config inconsistency on save error | `api/mac_filter.go` | 🟠 HIGH | ⏳ |
+| 6 | Unbounded visitors map DoS | `api/ratelimit.go` | 🟠 HIGH | ⏳ |
+| 7 | X-Forwarded-For spoof bypass | `api/ratelimit.go` | 🟠 HIGH | ⏳ |
+| 8 | broadcastStats stopped hub race | `api/server.go` | 🟠 HIGH | ⏳ |
+| 9 | Shutdown order incorrect | `main.go` | 🟠 HIGH | ⏳ |
+| 10 | Shutdown timeout ignored | `main.go` | 🟠 HIGH | ⏳ |
+| 11 | readLastLines OOM on large files | `api/server.go` | 🟡 MEDIUM | ⏳ |
+| 12 | Config file permissions 0644 | `api/server.go` | 🟡 MEDIUM | ⏳ |
+| 13 | handlePS4Setup nil type assertion | `api/server.go` | 🟡 MEDIUM | ⏳ |
+| 14 | handleConfigUpdate inconsistent state | `api/server.go` | 🟡 MEDIUM | ⏳ |
+| 15 | Recovery state file race | `recovery.go` | 🟡 MEDIUM | ⏳ |
+| 16 | notify panic on early panic | `recovery.go` | 🟡 MEDIUM | ⏳ |
+| 17 | DNS cleanup без SafeGo | `proxy/dns.go` | 🟡 MEDIUM | ⏳ |
+| 18 | directPacketConn без deadlines | `proxy/direct.go` | 🟢 LOW | ⏳ |
+| 19 | CheckOrigin CSRF vector | `api/websocket.go` | 🟢 LOW | ⏳ |
+| 20 | GCPercent too aggressive | `main.go` | 🟢 LOW | ⏳ |
+
+---
+
+## ✅ Результаты тридцать девятой волны (05.04.2026)
 
 ### Исправленные проблемы:
 

@@ -144,7 +144,7 @@ func NewDNS(cfg cfg.DNS, interfaceName string) *DNS {
 	}
 
 	// Start cache cleanup goroutine
-	go d.cleanupLoop()
+	goroutine.SafeGo(d.cleanupLoop)
 
 	return d
 }

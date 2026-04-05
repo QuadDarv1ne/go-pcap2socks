@@ -58,6 +58,7 @@ type Server struct {
 	mu             sync.RWMutex
 	enabled        bool
 	stopChan       chan struct{} // For stopping background goroutines
+	stopOnceRTU    sync.Once     // Protects stopChan from double close
 
 	// Status cache for frequently accessed /api/status endpoint
 	statusCache     Status
@@ -566,7 +567,7 @@ func (s *Server) handleConfigUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
 		s.sendError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -668,7 +669,7 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write to config
-	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
 		s.sendError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1176,7 +1177,7 @@ func (s *Server) updateMACFilter(filter *cfg.MACFilter) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -1406,7 +1407,7 @@ func (s *Server) handlePS4Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
 		s.sendError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1464,7 +1465,7 @@ func saveConfig(filePath string, config *cfg.Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, data, 0644)
+	return os.WriteFile(filePath, data, 0600)
 }
 
 // handleDHCPLeases returns current DHCP leases
@@ -1746,7 +1747,9 @@ func (s *Server) StartRealTimeUpdates(interval time.Duration) {
 
 // StopRealTimeUpdates stops the real-time updates
 func (s *Server) StopRealTimeUpdates() {
-	close(s.stopChan)
+	s.stopOnceRTU.Do(func() {
+		close(s.stopChan)
+	})
 	if s.wsHub != nil {
 		s.wsHub.Stop()
 	}
@@ -1756,6 +1759,13 @@ func (s *Server) StopRealTimeUpdates() {
 func (s *Server) broadcastStats() {
 	if s.wsHub == nil {
 		return
+	}
+
+	// Check if server is being shut down
+	select {
+	case <-s.stopChan:
+		return // Don't broadcast during shutdown
+	default:
 	}
 
 	// Get current stats

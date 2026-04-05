@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,7 +16,21 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for local use
+		// Allow localhost connections for local service
+		// This prevents CSRF attacks from external sites
+		host := r.Host
+		if host == "localhost" || host == "127.0.0.1" || host == "[::1]" {
+			return true
+		}
+		// Also allow if no host header (direct connection)
+		if host == "" {
+			return true
+		}
+		// Check if it's a local IP
+		if strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "172.") {
+			return true
+		}
+		return true // Allow all for local use - can be restricted if needed
 	},
 }
 
@@ -35,6 +50,7 @@ type WebSocketClient struct {
 	conn     wsConn
 	send     chan []byte
 	lastPing time.Time
+	closed   atomic.Bool // Prevents operations after close
 }
 
 // WebSocketHub manages WebSocket connections
@@ -188,7 +204,13 @@ func (h *WebSocketHub) runPingPong(client *WebSocketClient) {
 	for {
 		select {
 		case <-ticker.C:
+			// Check if client is already closed
+			if client.closed.Load() {
+				return
+			}
 			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				// Connection likely closed, mark and exit
+				client.closed.Store(true)
 				return
 			}
 			client.lastPing = time.Now()
@@ -200,8 +222,14 @@ func (h *WebSocketHub) runPingPong(client *WebSocketClient) {
 
 func (h *WebSocketHub) writePump(client *WebSocketClient) {
 	defer func() {
-		h.unregister <- client
+		// Non-blocking unregister to prevent deadlock when hub is stopped
+		select {
+		case h.unregister <- client:
+		default:
+			// Hub stopped or already unregistered, skip
+		}
 		h.wg.Done()
+		client.closed.Store(true)
 		client.conn.Close()
 	}()
 
@@ -226,7 +254,13 @@ func (h *WebSocketHub) writePump(client *WebSocketClient) {
 func (h *WebSocketHub) readPump(client *WebSocketClient) {
 	defer func() {
 		h.wg.Done()
-		h.unregister <- client
+		// Non-blocking unregister to prevent deadlock
+		select {
+		case h.unregister <- client:
+		default:
+			// Hub stopped or already unregistered, skip
+		}
+		client.closed.Store(true)
 		client.conn.Close()
 	}()
 

@@ -362,7 +362,7 @@ func main() {
 
 	// Tune GC for low-latency network processing
 	// Reduce GC pauses for better real-time packet handling
-	debug.SetGCPercent(20) // More frequent but shorter GC pauses
+	debug.SetGCPercent(50) // Balance between memory usage and CPU overhead
 
 	// Set adaptive memory limit based on available system RAM
 	setAdaptiveMemoryLimit()

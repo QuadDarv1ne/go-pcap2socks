@@ -122,14 +122,17 @@ func (h *MACFilterAPI) HandlePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Add MAC to list
-	h.config.List = append(h.config.List, mac)
+	// Add MAC to list (temporarily)
+	newList := append(h.config.List, mac)
 
-	// Save config
-	if err := h.saveConfig(); err != nil {
+	// Save config first to avoid inconsistency
+	if err := h.saveConfigWithList(newList); err != nil {
 		http.Error(w, `{"error":"failed to save config"}`, http.StatusInternalServerError)
 		return
 	}
+
+	// Only update in-memory config after successful save
+	h.config.List = newList
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -184,13 +187,14 @@ func (h *MACFilterAPI) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.config.List = newList
-
-	// Save config
-	if err := h.saveConfig(); err != nil {
+	// Save config first to avoid inconsistency
+	if err := h.saveConfigWithList(newList); err != nil {
 		http.Error(w, `{"error":"failed to save config"}`, http.StatusInternalServerError)
 		return
 	}
+
+	// Only update in-memory config after successful save
+	h.config.List = newList
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(MACFilterResponse{
@@ -324,6 +328,19 @@ func (h *MACFilterAPI) saveConfig() error {
 		return h.onChange(h.config)
 	}
 	return nil
+}
+
+// saveConfigWithList saves a configuration with the given list (for atomic save-before-mutate)
+func (h *MACFilterAPI) saveConfigWithList(newList []string) error {
+	if h.onChange == nil {
+		return nil
+	}
+	// Create temporary config with the new list
+	tempConfig := &cfg.MACFilter{
+		Mode: h.config.Mode,
+		List: newList,
+	}
+	return h.onChange(tempConfig)
 }
 
 // normalizeMAC normalizes a MAC address to uppercase with colons

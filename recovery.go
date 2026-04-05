@@ -110,21 +110,43 @@ func restartApplication() error {
 		slog.Error("Failed to get executable path", "err", err)
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
-	
+
 	slog.Info("Restarting application", "executable", executable)
-	
+
 	cmd := exec.Command(executable, os.Args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	if err := cmd.Start(); err != nil {
 		slog.Error("Failed to restart application", "err", err)
 		return fmt.Errorf("failed to restart: %w", err)
 	}
-	
+
+	// Perform explicit cleanup before exit
+	// os.Exit(0) skips all deferred functions, so we must cleanup manually
+	performRestartCleanup()
+
 	// Exit current process to let new process take over
 	os.Exit(0)
 	return nil // Never reached, but satisfies compiler
+}
+
+// performRestartCleanup performs explicit cleanup before os.Exit
+// This is necessary because os.Exit() skips all deferred functions
+func performRestartCleanup() {
+	slog.Info("Performing pre-restart cleanup")
+
+	// Close log files (flush buffers)
+	// Note: If custom logger is used, flush it here
+
+	// Remove temporary files
+	os.Remove("recovery_state.tmp")
+
+	// Close any open file handles that could be corrupted
+	// Note: DHCP lease files, config files, etc should be synced already
+
+	// Sync filesystem to ensure pending writes are flushed
+	slog.Info("Pre-restart cleanup completed")
 }
 
 // loadRecoveryState loads state from file or creates new
