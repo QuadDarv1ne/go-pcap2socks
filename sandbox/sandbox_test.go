@@ -163,7 +163,7 @@ func TestExecutor_Execute_Timeout(t *testing.T) {
 func TestExecutor_Execute_InvalidCommand(t *testing.T) {
 	executor := NewExecutor(Config{})
 
-	result, err := executor.Execute(context.Background(), "invalid-command-xyz", []string{})
+	result, err := executor.Execute(context.Background(), "invalid-command-xyz")
 	if err == nil {
 		t.Error("Expected error for invalid command")
 	}

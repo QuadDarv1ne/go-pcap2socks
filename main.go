@@ -262,6 +262,46 @@ func restartAsAdmin() error {
 	return cmd.Run()
 }
 
+// printUsage displays help information
+func printUsage() {
+	fmt.Println("go-pcap2socks - Transparent network proxy for game consoles")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  pcap2socks.exe [command] [config-file]")
+	fmt.Println()
+	fmt.Println("Commands:")
+	fmt.Println("  config              Open config file in default editor")
+	fmt.Println("  auto-config         Run network auto-configuration")
+	fmt.Println("  auto-start          Auto-configure and start")
+	fmt.Println("  tray                Run in system tray mode")
+	fmt.Println("  web                 Start web server")
+	fmt.Println("  api                 Start API server")
+	fmt.Println("  upnp-discover       Discover UPnP devices")
+	fmt.Println("  install-service     Install as Windows service")
+	fmt.Println("  uninstall-service   Uninstall Windows service")
+	fmt.Println("  start-service       Start Windows service")
+	fmt.Println("  stop-service        Stop Windows service")
+	fmt.Println("  service-status      Show Windows service status")
+	fmt.Println("  service             Run as Windows service")
+	fmt.Println("  check-update        Check for updates")
+	fmt.Println("  update              Download and install update")
+	fmt.Println("  help, --help, -h    Show this help message")
+	fmt.Println()
+	fmt.Println("Arguments:")
+	fmt.Println("  <config-file>       Path to config.json (default: config.json)")
+	fmt.Println()
+	fmt.Println("Environment variables:")
+	fmt.Println("  SLOG_LEVEL          Log level: debug, info, warn, error (default: info)")
+	fmt.Println("  GOMEMLIMIT          Memory limit in bytes (default: adaptive)")
+	fmt.Println("  PPROF_ENABLED       Enable pprof profiling (default: 0)")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  pcap2socks.exe                  Start with default config")
+	fmt.Println("  pcap2socks.exe config.json       Start with custom config")
+	fmt.Println("  pcap2socks.exe auto-start        Auto-configure and start")
+	fmt.Println("  pcap2socks.exe --help            Show help")
+}
+
 func main() {
 	// Setup automatic recovery with exponential backoff and restart limits
 	defer func() {
@@ -284,9 +324,15 @@ func main() {
 			}
 		}
 	}()
-	// Check for commands that don't require admin
+	// Check for commands and flags that don't require admin
 	if len(os.Args) > 1 {
-		switch os.Args[1] {
+		arg := os.Args[1]
+		// Handle help flags
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			printUsage()
+			return
+		}
+		switch arg {
 		case "config":
 			openConfigInEditor()
 			return
@@ -332,6 +378,14 @@ func main() {
 		case "update":
 			doUpdate()
 			return
+		default:
+			// If argument looks like a flag, show usage
+			if strings.HasPrefix(arg, "-") {
+				fmt.Fprintf(os.Stderr, "Unknown flag: %s\n\n", arg)
+				printUsage()
+				os.Exit(1)
+			}
+			// Otherwise, treat it as a config file path (handled below)
 		}
 	}
 

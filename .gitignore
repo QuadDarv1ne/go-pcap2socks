@@ -79,5 +79,8 @@ log-analysis-*.txt
 state.json
 panic.log
 
+# Log files
+go-pcap2socks.log
+
 # Coverage
 coverage.out
