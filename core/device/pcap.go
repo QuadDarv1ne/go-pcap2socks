@@ -150,7 +150,7 @@ func createPcapHandle(dev pcap.Interface) (*pcap.InactiveHandle, error) {
 		return nil, fmt.Errorf("set promisc error: %w", err)
 	}
 
-	err = handle.SetSnapLen(1600)
+	err = handle.SetSnapLen(9000) // Support jumbo frames for better throughput
 	if err != nil {
 		return nil, fmt.Errorf("set snap len error: %w", err)
 	}
@@ -165,8 +165,8 @@ func createPcapHandle(dev pcap.Interface) (*pcap.InactiveHandle, error) {
 		return nil, fmt.Errorf("set immediate mode error: %w", err)
 	}
 
-	// Use optimized buffer size from SystemTuner if available, otherwise use default 4MB
-	bufferSize := 4 * 1024 * 1024 // Default 4MB
+	// Use optimized buffer size from SystemTuner if available, otherwise use default 8MB
+	bufferSize := 8 * 1024 * 1024 // 8MB - increased for better throughput
 	// Note: We can't access main._systemTuner here due to package boundaries
 	// The buffer size is set to 4MB by default, which is optimal for most systems
 	// For custom tuning, use environment variable PCAP_BUFFER_SIZE (in MB)

@@ -5,11 +5,15 @@ import (
 	"log/slog"
 	"net"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
+	"github.com/gopacket/gopacket"
+	"github.com/gopacket/gopacket/layers"
+	"github.com/gopacket/gopacket/pcap"
 	"github.com/threatwinds/godivert"
 )
 
@@ -44,10 +48,12 @@ type DHCPServer struct {
 	config      *dhcp.ServerConfig
 	server      *dhcp.Server
 	handle      *Handle
+	pcapHandle  *pcap.Handle // Npcap handle for sending Ethernet frames
 	stopChan    chan struct{}
 	wg          sync.WaitGroup
 	localMAC    net.HardwareAddr
 	localIP     net.IP
+	ifaceName   string // Network interface name for pcap
 	lastRequest sync.Map // Rate limiting per MAC: map[string]int64 (nanoseconds)
 
 	// Metrics for monitoring
@@ -64,7 +70,7 @@ type DHCPServer struct {
 }
 
 // NewDHCPServer creates a new DHCP server using WinDivert
-func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableSmartDHCP bool, poolStart, poolEnd string) (*DHCPServer, error) {
+func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableSmartDHCP bool, poolStart, poolEnd string, ifaceName string) (*DHCPServer, error) {
 	slog.Info("Creating WinDivert DHCP server...",
 		"config_network", config.Network.String(),
 		"config_server_ip", config.ServerIP.String(),
@@ -104,12 +110,13 @@ func NewDHCPServer(config *dhcp.ServerConfig, localMAC net.HardwareAddr, enableS
 		"filter", DHCPFilter)
 
 	s := &DHCPServer{
-		config:   config,
-		server:   dhcpServer,
-		handle:   handle,
-		stopChan: make(chan struct{}),
-		localMAC: localMAC,
-		localIP:  config.ServerIP,
+		config:    config,
+		server:    dhcpServer,
+		handle:    handle,
+		stopChan:  make(chan struct{}),
+		localMAC:  localMAC,
+		localIP:   config.ServerIP,
+		ifaceName: ifaceName,
 		// lastRequest is sync.Map, no initialization needed
 	}
 
@@ -158,6 +165,9 @@ func (s *DHCPServer) Stop() {
 
 	if s.handle != nil {
 		s.handle.Close()
+	}
+	if s.pcapHandle != nil {
+		s.pcapHandle.Close()
 	}
 }
 
@@ -466,6 +476,7 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	// DHCP message starts at dhcpData[0]
 	// YourIP (yiaddr) is at offset 16-19 in DHCP message
 	// ClientIP (ciaddr) is at offset 12-15 in DHCP message
+	clientHasIP := false
 	if len(dhcpData) >= 20 {
 		clientIP := net.IP(dhcpData[12:16]).To4()
 		yourIP := net.IP(dhcpData[16:20]).To4()
@@ -475,8 +486,11 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 			"yourIP", yourIP.String(),
 			"dhcpMsgType", dhcpMsgType)
 
+		// Track if client already has an IP
+		clientHasIP = !clientIP.Equal(net.IPv4zero)
+
 		// If client already has an IP (ciaddr != 0), use unicast
-		if !clientIP.Equal(net.IPv4zero) {
+		if clientHasIP {
 			dstIP = clientIP
 			dstMAC = clientMAC // Use client's MAC from DHCP payload
 			slog.Debug("DHCP response: Using unicast (client has IP)",
@@ -509,8 +523,19 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 	}
 
 	// Build packet with Ethernet header for proper L2 delivery
-	// Always use Ethernet framing to ensure packets reach the client by MAC address
-	// This is critical for DHCP OFFER/ACK to work correctly
+	// For broadcast DHCP OFFER/ACK, use packet layer handle with Ethernet framing
+	// For unicast responses, use network layer (simpler, works fine)
+	// IMPORTANT: Use network layer for ALL OFFER/ACK when client has no IP yet,
+	// even if broadcast flag is not set (some devices like PS4 don't set it)
+	useNetworkLayer := isOfferOrAck && !clientHasIP
+	if useNetworkLayer {
+		// Use network layer with broadcast IP
+		slog.Info("Using network layer for broadcast DHCP response",
+			"msgType", dhcpMsgType,
+			"clientHasIP", clientHasIP)
+		return s.sendBroadcastDHCP(clientMAC, dhcpData, request.Addr.IfIdx)
+	}
+
 	var responsePacket []byte
 	var err error
 
@@ -584,6 +609,182 @@ func (s *DHCPServer) sendDHCPResponseWithMAC(clientMAC net.HardwareAddr, request
 		"dstIP", dstIP.String(),
 		"dstMAC", dstMAC.String(),
 		"broadcast", broadcastFlag,
+		"packetLen", len(responsePacket))
+
+	return nil
+}
+
+// sendBroadcastDHCP sends DHCP response via raw UDP socket to broadcast
+func (s *DHCPServer) sendBroadcastDHCP(clientMAC net.HardwareAddr, dhcpData []byte, ifIdx uint32) error {
+	slog.Info("Sending DHCP OFFER via UDP broadcast to client MAC",
+		"clientMAC", clientMAC.String(),
+		"offeredIP", "192.168.100.101")
+
+	return s.sendViaPcap(clientMAC, dhcpData)
+}
+
+// sendViaPcap sends DHCP response via raw Ethernet frame using Npcap
+func (s *DHCPServer) sendViaPcap(clientMAC net.HardwareAddr, dhcpData []byte) error {
+	// Open pcap handle for this interface (only for sending, not receiving)
+	if s.pcapHandle == nil {
+		// Find the device by matching IP address (same approach as core/device/pcap.go)
+		devices, err := pcap.FindAllDevs()
+		if err != nil {
+			return fmt.Errorf("find pcap devices: %w", err)
+		}
+
+		var devName string
+		
+		// Method 1: Try to find device by matching interface name
+		for _, dev := range devices {
+			if dev.Name == s.ifaceName || strings.HasSuffix(dev.Name, s.ifaceName) || strings.Contains(dev.Name, s.ifaceName) {
+				devName = dev.Name
+				slog.Info("Found pcap device by name match", "device", devName, "search", s.ifaceName)
+				break
+			}
+		}
+
+		// Method 2: If not found, try to find by matching IP addresses
+		if devName == "" {
+			// Get the IP address of our interface
+			ifce, err := net.InterfaceByName(s.ifaceName)
+			if err == nil {
+				addrs, _ := ifce.Addrs()
+				for _, dev := range devices {
+					for _, devAddr := range dev.Addresses {
+						for _, ifaceAddr := range addrs {
+							if ipnet, ok := ifaceAddr.(*net.IPNet); ok {
+								if devAddr.IP.Equal(ipnet.IP) {
+									devName = dev.Name
+									slog.Info("Found pcap device by IP match", "device", devName, "ip", ipnet.IP)
+									break
+								}
+							}
+						}
+						if devName != "" {
+							break
+						}
+					}
+					if devName != "" {
+						break
+					}
+				}
+			}
+		}
+
+		if devName == "" {
+			// Fallback: use interface name directly
+			devName = s.ifaceName
+			slog.Warn("Could not find pcap device by name or IP, using interface name directly", "device", devName)
+		}
+
+		slog.Info("Opening pcap handle for DHCP send", "device", devName)
+		pcapH, err := pcap.OpenLive(devName, 9000, true, pcap.BlockForever) // 9000 for jumbo frame support
+		if err != nil {
+			return fmt.Errorf("open pcap handle: %w", err)
+		}
+		s.pcapHandle = pcapH
+		slog.Info("pcap handle opened successfully", "device", devName)
+	}
+	
+	// Build Ethernet frame with DHCP payload
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+
+	// Ethernet layer - use BROADCAST MAC so client receives it
+	eth := &layers.Ethernet{
+		SrcMAC:       s.localMAC,
+		DstMAC:       net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		EthernetType: layers.EthernetTypeIPv4,
+	}
+
+	// IP layer - use broadcast IP
+	ip := &layers.IPv4{
+		Version:  4,
+		IHL:      5,
+		TTL:      64,
+		Protocol: layers.IPProtocolUDP,
+		SrcIP:    s.localIP,
+		DstIP:    net.IPv4(255, 255, 255, 255),
+	}
+
+	// UDP layer
+	udp := &layers.UDP{
+		SrcPort:  layers.UDPPort(67),
+		DstPort:  layers.UDPPort(68),
+	}
+
+	// Set network layer for checksum computation (required by gopacket)
+	if err := udp.SetNetworkLayerForChecksum(ip); err != nil {
+		slog.Warn("Failed to set network layer for checksum", "err", err)
+	}
+
+	err := gopacket.SerializeLayers(buf, opts, eth, ip, udp, gopacket.Payload(dhcpData))
+	if err != nil {
+		return fmt.Errorf("serialize DHCP response: %w", err)
+	}
+
+	// Send raw Ethernet frame via pcap
+	err = s.pcapHandle.WritePacketData(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("pcap write packet: %w", err)
+	}
+	
+	slog.Info("DHCP response sent successfully via raw Ethernet",
+		"mac", clientMAC.String(),
+		"dstMAC", "ff:ff:ff:ff:ff:ff",
+		"packetLen", len(buf.Bytes()))
+	
+	return nil
+}
+
+// sendViaNetworkLayer sends DHCP response via WinDivert network layer (fallback)
+func (s *DHCPServer) sendViaNetworkLayer(clientMAC net.HardwareAddr, dhcpData []byte, ifIdx uint32) error {
+	// Build IP+UDP+DHCP packet for network layer
+	responsePacket, err := buildIPUDPPacket(
+		s.localIP,     // Source IP (server)
+		net.IPv4bcast, // Destination IP (broadcast)
+		67,            // Source port (DHCP server)
+		68,            // Destination port (DHCP client)
+		dhcpData,
+	)
+	if err != nil {
+		slog.Error("Failed to build DHCP response packet",
+			"err", err,
+			"clientMAC", clientMAC.String())
+		return fmt.Errorf("build DHCP response: %w", err)
+	}
+
+	// Create WinDivert packet
+	godivertPacket := &godivert.Packet{
+		Raw: responsePacket,
+		Addr: &godivert.WinDivertAddress{
+			IfIdx:    ifIdx,
+			SubIfIdx: 0,
+			Data:     0, // outbound
+		},
+		PacketLen: uint(len(responsePacket)),
+	}
+
+	// Send via network layer handle
+	s.handle.mu.Lock()
+	_, err = s.handle.handle.Send(godivertPacket)
+	s.handle.mu.Unlock()
+
+	if err != nil {
+		slog.Error("Failed to send DHCP response via network layer",
+			"err", err,
+			"clientMAC", clientMAC.String(),
+			"ifIdx", ifIdx)
+		return fmt.Errorf("send DHCP response: %w", err)
+	}
+
+	slog.Info("DHCP response sent successfully via network layer",
+		"mac", clientMAC.String(),
+		"dstIP", "255.255.255.255",
 		"packetLen", len(responsePacket))
 
 	return nil

@@ -1,7 +1,7 @@
 {
   "pcap": {
     "interfaceGateway": "192.168.100.1",
-    "mtu": 1486,
+    "mtu": 1500,
     "network": "192.168.100.0/24",
     "localIP": "192.168.100.1",
     "localMAC": "b0:25:aa:65:67:bb"
@@ -37,6 +37,15 @@
         "SrcPortMatcher": null,
         "DstPortMatcher": null,
         "SrcIPs": null,
+        "DstIPs": null,
+        "SrcIPsIPv6": null,
+        "DstIPsIPv6": null
+      },
+      {
+        "outboundTag": "direct",
+        "srcIP": ["192.168.100.0/24"],
+        "SrcPortMatcher": null,
+        "DstPortMatcher": null,
         "DstIPs": null,
         "SrcIPsIPv6": null,
         "DstIPsIPv6": null
