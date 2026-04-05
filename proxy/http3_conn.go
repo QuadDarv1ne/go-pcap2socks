@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -85,12 +86,15 @@ func dialConnectStream(ctx context.Context, qconn *quic.Conn, targetAddr string)
 		stream.Close()
 		return nil, fmt.Errorf("read CONNECT response: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		stream.Close()
 		return nil, fmt.Errorf("CONNECT failed: %s", resp.Status)
 	}
+	// Defer Body close for successful case - stream will be closed by caller
+	// when the connection is closed
+	resp.Body.Close()
 
 	return newHTTP3Conn(stream, qconn, targetAddr), nil
 }
@@ -99,14 +103,13 @@ func dialConnectStream(ctx context.Context, qconn *quic.Conn, targetAddr string)
 type http3TrackedConn struct {
 	*http3Conn
 	release func()
-	closed  bool
+	closed  atomic.Bool
 }
 
 func (c *http3TrackedConn) Close() error {
-	if c.closed {
-		return nil
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
 	}
-	c.closed = true
 	if c.release != nil {
 		c.release()
 	}

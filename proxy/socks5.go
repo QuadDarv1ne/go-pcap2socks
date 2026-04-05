@@ -122,6 +122,15 @@ func (ss *Socks5) ConnPoolStats() map[string]interface{} {
 }
 
 func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.Conn, err error) {
+	if metadata == nil {
+		return nil, &DialError{
+			ProxyAddr: ss.Addr(),
+			DestAddr:  "unknown",
+			Timeout:   tcpConnectTimeout,
+			Err:       fmt.Errorf("metadata is nil"),
+		}
+	}
+
 	network := "tcp"
 	if ss.unix {
 		network = "unix"

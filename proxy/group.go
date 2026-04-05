@@ -70,6 +70,7 @@ type ProxyGroup struct {
 	name     string
 	stopChan chan struct{}
 	wg       sync.WaitGroup
+	stopped  atomic.Bool // Flag to prevent operations after Stop
 
 	// Health check configuration
 	checkInterval time.Duration
@@ -355,8 +356,9 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 // trackedConn wraps a net.Conn and decrements the active connection counter on Close
 type trackedConn struct {
 	net.Conn
-	counter *atomic.Int32
-	closed  atomic.Bool
+	counter    *atomic.Int32
+	group      *ProxyGroup
+	closed     atomic.Bool
 }
 
 func (c *trackedConn) Close() error {
@@ -367,7 +369,10 @@ func (c *trackedConn) Close() error {
 	if c.Conn == nil {
 		return nil
 	}
-	c.counter.Add(-1)
+	// Only decrement if group is not stopped
+	if c.group != nil && !c.group.stopped.Load() {
+		c.counter.Add(-1)
+	}
 	return c.Conn.Close()
 }
 
@@ -386,7 +391,7 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 		if err == nil {
 			// Wrap connection to track active connections
 			g.activeConns[idx].Add(1)
-			return &trackedConn{Conn: conn, counter: &g.activeConns[idx]}, nil
+			return &trackedConn{Conn: conn, counter: &g.activeConns[idx], group: g}, nil
 		}
 
 		// Mark as unhealthy on failure
@@ -407,7 +412,7 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 				atomic.StoreInt32(&g.activeIndex, int32(fallbackIdx))
 				// Wrap connection to track active connections
 				g.activeConns[fallbackIdx].Add(1)
-				return &trackedConn{Conn: conn, counter: &g.activeConns[fallbackIdx]}, nil
+				return &trackedConn{Conn: conn, counter: &g.activeConns[fallbackIdx], group: g}, nil
 			}
 
 			g.healthStatus[fallbackIdx].Store(false)
@@ -443,13 +448,14 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 	}
 
 	// Wrap connection to track active connections
-	return &trackedConn{Conn: conn, counter: &g.activeConns[idx]}, nil
+	return &trackedConn{Conn: conn, counter: &g.activeConns[idx], group: g}, nil
 }
 
 // trackedPacketConn wraps a net.PacketConn and decrements the active connection counter on Close
 type trackedPacketConn struct {
 	net.PacketConn
 	counter *atomic.Int32
+	group   *ProxyGroup
 	closed  atomic.Bool
 }
 
@@ -461,7 +467,10 @@ func (c *trackedPacketConn) Close() error {
 	if c.PacketConn == nil {
 		return nil
 	}
-	c.counter.Add(-1)
+	// Only decrement if group is not stopped
+	if c.group != nil && !c.group.stopped.Load() {
+		c.counter.Add(-1)
+	}
 	return c.PacketConn.Close()
 }
 
@@ -490,7 +499,7 @@ func (g *ProxyGroup) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	}
 
 	// Wrap connection to track active connections
-	return &trackedPacketConn{PacketConn: pc, counter: &g.activeConns[idx]}, nil
+	return &trackedPacketConn{PacketConn: pc, counter: &g.activeConns[idx], group: g}, nil
 }
 
 // Addr returns the group address (name)
@@ -505,6 +514,7 @@ func (g *ProxyGroup) Mode() Mode {
 
 // Stop stops the health check loop
 func (g *ProxyGroup) Stop() {
+	g.stopped.Store(true)
 	close(g.stopChan)
 	g.wg.Wait()
 }

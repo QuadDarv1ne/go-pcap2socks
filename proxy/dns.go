@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
@@ -163,6 +164,7 @@ func (d *DNS) DialUDP(m *M.Metadata) (net.PacketConn, error) {
 		dotClients:    d.dotClients,
 		tcpPools:      d.tcpPools,
 		cache:         d.cache,
+		stopCh:        make(chan struct{}),
 	}, nil
 }
 
@@ -176,16 +178,25 @@ type dnsConn struct {
 	dotClients    map[string]*localdns.DoTClient
 	tcpPools      map[string]*dnsConnPool
 	cache         *dnsCache
+	stopCh        chan struct{}
+	closed        atomic.Bool
 }
 
 func (d *dnsConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
-	msg := <-d.answerCh
-	_, err = msg.PackBuffer(b)
-	if err != nil {
-		return 0, nil, err
+	// Use select with timeout to prevent goroutine hang if WriteTo was never called
+	// or if the goroutine inside WriteTo panicked/exited without sending to answerCh
+	select {
+	case msg := <-d.answerCh:
+		_, err = msg.PackBuffer(b)
+		if err != nil {
+			return 0, nil, err
+		}
+		return msg.Len(), d.m.UDPAddr(), nil
+	case <-d.stopCh:
+		return 0, nil, fmt.Errorf("dns connection closed")
+	case <-time.After(30 * time.Second):
+		return 0, nil, fmt.Errorf("dns read timeout (30s)")
 	}
-
-	return msg.Len(), d.m.UDPAddr(), nil
 }
 
 func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
@@ -200,9 +211,11 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 		cacheKey := getCacheKey(msg)
 		if cacheKey != "" {
 			if cached, found := d.cache.get(cacheKey); found {
-				// Update message ID to match request
-				cached.Id = msg.Id
-				d.answerCh <- cached
+				// Clone response to avoid race on shared cached object
+				// The cached.Id mutation would race with other goroutines reading it
+				respCopy := cached.Copy()
+				respCopy.Id = msg.Id
+				d.answerCh <- respCopy
 				return
 			}
 		}
@@ -361,6 +374,10 @@ func (d *dnsConn) asyncExchange(ctx context.Context, msg *dns.Msg, responseCh ch
 }
 
 func (d *dnsConn) Close() error {
+	if !d.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
+	}
+	close(d.stopCh)
 	return nil
 }
 

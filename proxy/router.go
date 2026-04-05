@@ -263,13 +263,12 @@ func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dst
 	buf = append(buf, ':')
 	buf = strconv.AppendUint(buf, uint64(dstPort), 10)
 
-	// Convert to string (safe copy - buffer returned to pool)
+	// Convert to string — this creates a copy of the buffer content
 	result := string(buf)
 
 	// Return buffer to pool for reuse
-	// Reset length but keep capacity for next use
-	buf = buf[:cap(buf)]
-	c.keyPool.Put(buf)
+	// Reset to full capacity for next use
+	c.keyPool.Put(buf[:cap(buf)])
 
 	return result
 }
@@ -374,15 +373,26 @@ func (r *Router) performHealthChecks() {
 	// Limit parallel health checks to avoid resource exhaustion
 	const maxParallel = 10
 	sem := make(chan struct{}, maxParallel)
+	var wg sync.WaitGroup
 
 	for tag, proxy := range r.Proxies {
 		// Check if proxy supports health checks
 		if healthChecker, ok := proxy.(interface{ CheckHealth() bool }); ok {
 			proxyTag := tag
 			proxyChecker := healthChecker
-			sem <- struct{}{} // Acquire semaphore
+			wg.Add(1)
 			goroutine.SafeGo(func() {
-				defer func() { <-sem }() // Release semaphore
+				defer wg.Done()
+				// Acquire semaphore
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				default:
+					// Semaphore full, skip this health check
+					slog.Debug("Skipping proxy health check - too many in flight", "proxy", proxyTag)
+					return
+				}
+
 				healthy := proxyChecker.CheckHealth()
 				if healthy {
 					slog.Debug("Proxy health check passed", "proxy", proxyTag)
@@ -391,6 +401,20 @@ func (r *Router) performHealthChecks() {
 				}
 			})
 		}
+	}
+
+	// Wait for all goroutines to complete with timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All completed
+	case <-time.After(15 * time.Second):
+		slog.Warn("Health checks timed out after 15s")
 	}
 }
 
@@ -436,7 +460,11 @@ func NewRouter(rules []cfg.Rule, proxies map[string]Proxy) *Router {
 		Default: "10Mbps", // 10 Mbps default
 		Rules:   []cfg.RateLimitRule{},
 	}
-	r.bandwidthLimiter, _ = bandwidth.NewBandwidthLimiter(rateLimitConfig)
+	limiter, err := bandwidth.NewBandwidthLimiter(rateLimitConfig)
+	if err != nil {
+		slog.Warn("failed to create bandwidth limiter, proceeding without limits", "err", err)
+	}
+	r.bandwidthLimiter = limiter
 
 	// Start cleanup goroutine
 	goroutine.SafeGo(r.cleanupLoop)

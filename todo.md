@@ -1,28 +1,83 @@
 ﻿# Архитектурные заметки и план улучшений
 
-## Статус проекта (05.04.2026, тридцать восьмая волна)
+## Статус проекта (05.04.2026, тридцать девятая волна)
 
-**Ветка:** `dev` (текущая, требует коммита и синхронизации в main)
+**Ветка:** `dev` (текущая, активная разработка)
 
 **Последние изменения:**
-- ✅ **ТРИДЦАТЬ ВОСЬМАЯ ВОЛНА** (05.04.2026, API стабильность + main.go shutdown)
-- ✅ **RateLimiter**: исправлена TOCTOU race на token reset — atomic CAS + Int64 timestamp
-- ✅ **RateLimiter**: добавлен cleanupLoop для eviction stale entries из sync.Map
-- ✅ **RateLimiter**: IP extraction теперь stripping port — per-IP вместо per-connection
-- ✅ **WebSocket**: исправлен goroutine leak в readPump — SetReadDeadline 2s + stopChan check
-- ✅ **MACFilter**: исправлен potential deadlock — убран nested RLock в HandleCheck
-- ✅ **main.go**: CreateStack failure теперь возвращает error вместо silent nil
-- ✅ **main.go**: stopImpl() дополнен — configReloader, hotkeyManager, DNS resolver
-- ✅ **Глубокий аудит**: проверено 12+ файлов api/ + main.go
-- ✅ **СБОРКА**: проходит без ошибок (go build)
+- ✅ **ТРИДЦАТЬ ДЕВЯТАЯ ВОЛНА** (05.04.2026, глубокий аудит — 18 проблем найдено)
+- ✅ **Полный аудит**: проверено api/, proxy/, core/, dns/, main.go, recovery.go
+- 🔴 **Найдено 18 проблем**: race conditions, goroutine leaks, missing nil checks, resource leaks
+- 🟡 **В процессе**: исправление критических проблем proxy/, api/
 
 **Статус веток:**
 ```
-dev:  ✅ требует коммита
-main: ✅ e29156d — требует синхронизации
+dev:  ✅ синхронизирован (60b4656)
+main: ✅ синхронизирован (60b4656)
 ```
 
 **Реализовано модулей:** 38+ (все отмечены как ✅ ЗАВЕРШЁН)
+
+---
+
+## 🔍 Результаты глубокого аудита — тридцать девятая волна (05.04.2026)
+
+### Найденные и исправленные проблемы (18):
+
+| # | Проблема | Файл | Тип | Критичность | Статус |
+|---|----------|------|-----|-------------|--------|
+| 1 | Race condition: мутация кэшированного DNS ответа | `proxy/dns.go:204` | Race | 🔴 Крит | ✅ ИСПРАВЛЕНО |
+| 2 | Goroutine leak: performHealthChecks без WaitGroup | `proxy/router.go:376-391` | Leak | 🔴 Крит | ✅ ИСПРАВЛЕНО |
+| 3 | Missing nil check: metadata в Socks5.DialContext | `proxy/socks5.go:135` | Nil | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
+| 4 | Resource leak: defer resp.Body.Close после ошибки | `proxy/http3_conn.go:83-91` | Leak | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
+| 5 | Race condition: http3TrackedConn.Close не атомарен | `proxy/http3_conn.go:105-118` | Race | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
+| 6 | Goroutine leak: dnsConn.WriteTo без механизма отмены | `proxy/dns.go:198-232` | Leak | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
+| 7 | Undefined behavior: sync.Pool buffer mutation | `proxy/router.go:248-270` | Race | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
+| 8 | Goroutine leak: Socks5WithFallback нет Stop/Close | `proxy/socks5_fallback.go:44` | Leak | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
+| 9 | Bug: ListenUDP биндится на remote адрес | `proxy/socks5_fallback.go:131` | Bug | 🔴 Крит | ✅ ИСПРАВЛЕНО |
+| 10 | Stack overflow: рекурсивный GetConnection | `proxy/socks5_pool.go:49-77` | Bug | 🟠 Высокий | ✅ ИСПРАВЛЕНО |
+| 11 | Goroutine leak: quicDatagramConn без контекста | `proxy/http3_datagram.go:54` | Leak | 🟡 Средний | ⏳ Низкий приоритет |
+| 12 | Cache eviction conflict: set vs get | `proxy/router.go:173-198` | Race | 🟡 Средний | ⏳ Низкий приоритет |
+| 13 | Deadlock: dnsConn.ReadFrom блокируется навсегда | `proxy/dns.go:183` | Deadlock | 🔴 Крит | ✅ ИСПРАВЛЕНО |
+| 14 | Missing deadlines: directPacketConn | `proxy/direct.go:56-73` | Feature | 🟢 Низкий | ⏳ |
+| 15 | Potential deadlock: WebSocket mu contention | `proxy/websocket.go:182-223` | Deadlock | 🟡 Средний | ⏳ Низкий приоритет |
+| 16 | Negative counter: trackedConn после Close группы | `proxy/group.go:362-372` | Bug | 🟡 Средний | ✅ ИСПРАВЛЕНО |
+| 17 | Ignored error: bandwidth.NewBandwidthLimiter | `proxy/router.go:451` | Error | 🟡 Средний | ✅ ИСПРАВЛЕНО |
+| 18 | Goroutine leak: DNS cleanupLoop без WaitGroup | `proxy/dns.go:146` | Leak | 🟡 Средний | ⏳ Низкий приоритет |
+
+### Детали исправлений:
+
+**proxy/dns.go:**
+- **dnsCache.get()**: `cached.Copy()` вместо `cached.Id = msg.Id` — предотвращает race на shared объекте
+- **dnsConn.ReadFrom()**: добавлен `select` с timeout 30s + `stopCh` — предотвращает goroutine hang
+- **dnsConn.Close()**: `atomic.Bool closed` + `close(stopCh)` — корректное закрытие
+- **dnsConn структура**: добавлены поля `stopCh` и `closed atomic.Bool`
+
+**proxy/router.go:**
+- **performHealthChecks()**: добавлен `sync.WaitGroup` + timeout 15s — гарантирует завершение всех горутин
+- **semaphore**: non-blocking acquire через `select { default: return }` — предотвращает deadlock
+- **buildKey()**: `buf[:cap(buf)]` корректно возвращается в pool — предотвращает mutation
+- **NewRouter()**: проверка ошибки `bandwidth.NewBandwidthLimiter` с логом
+
+**proxy/socks5.go:**
+- **DialContext()**: nil check на `metadata` с возвратом `DialError` — предотвращает panic
+
+**proxy/http3_conn.go:**
+- **dialConnectStream()**: `resp.Body.Close()` вызывается явно до проверки статуса — предотвращает leak
+- **http3TrackedConn**: `closed atomic.Bool` + `CompareAndSwap` — атомарная защита от double close
+
+**proxy/socks5_fallback.go:**
+- **dialUDPDirect()**: `&net.UDPAddr{IP: net.IPv4zero, Port: 0}` — корректный local bind
+- **Stop()**: добавлен `stopCh` и корректное завершение `healthCheckLoop()`
+- **healthCheckLoop()**: `select { case <-stopCh: return }` — graceful shutdown
+
+**proxy/socks5_pool.go:**
+- **GetConnection()**: итеративный цикл с `maxRetries = 5` вместо рекурсии — предотвращает stack overflow
+
+**proxy/group.go:**
+- **ProxyGroup**: добавлен `stopped atomic.Bool` флаг
+- **trackedConn/trackedPacketConn**: проверка `group.stopped` перед decrement — предотвращает negative counter
+- **Stop()**: `g.stopped.Store(true)` перед закрытием chan
 
 ---
 

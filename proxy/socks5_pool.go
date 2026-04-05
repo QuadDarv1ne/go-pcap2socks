@@ -46,16 +46,25 @@ func NewSocks5ConnPool(addr, user, pass string) *Socks5ConnPool {
 }
 
 // GetConnection gets a connection from pool or creates a new one
+// Uses iterative approach instead of recursion to prevent stack overflow
 func (p *Socks5ConnPool) GetConnection(ctx context.Context) (net.Conn, error) {
-	// Try to get from pool first
-	if pooled := p.pool.Get(); pooled != nil {
+	const maxRetries = 5 // Prevent infinite loop
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Try to get from pool first
+		pooled := p.pool.Get()
+		if pooled == nil {
+			// Pool empty, create new connection
+			return p.dialNewConnection(ctx)
+		}
+
 		pc := pooled.(*pooledSocks5Conn)
 
 		// Check if connection is still valid
 		if time.Since(pc.lastUsed) > p.maxIdleTime {
 			pc.conn.Close()
 			slog.Debug("Socks5 pool: connection expired", "addr", p.addr)
-			return p.GetConnection(ctx) // Recursively get a new one
+			continue // Try again from pool
 		}
 
 		// Check if connection is still alive using SetReadDeadline
@@ -77,10 +86,11 @@ func (p *Socks5ConnPool) GetConnection(ctx context.Context) (net.Conn, error) {
 		if err == nil && n > 0 {
 			slog.Debug("Socks5 pool: connection has pending data", "addr", p.addr)
 		}
-		return p.GetConnection(ctx) // Recursively get a new one
+		// Loop continues to try next connection from pool
 	}
 
-	// Create new connection
+	// Max retries reached, create new connection
+	slog.Warn("Socks5 pool: max retries reached, creating new connection", "addr", p.addr)
 	return p.dialNewConnection(ctx)
 }
 
