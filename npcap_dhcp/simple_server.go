@@ -342,11 +342,11 @@ func (s *SimpleServer) processPacket(packet gopacket.Packet) {
 		"hostname", hostname,
 		"vendorClass", vendorClass)
 
-	// Rate limiting: prevent DHCP flood (max 1 request per 500ms per MAC)
+	// Rate limiting: prevent DHCP flood (max 1 request per 100ms per MAC)
 	now := time.Now()
 	s.requestMu.Lock()
 	if lastTime, exists := s.lastRequest[macStr]; exists {
-		if now.Sub(lastTime) < 500*time.Millisecond {
+		if now.Sub(lastTime) < 100*time.Millisecond {
 			s.requestMu.Unlock()
 			slog.Debug("DHCP rate limit", "mac", macStr)
 			return
