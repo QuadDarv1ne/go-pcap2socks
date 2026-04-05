@@ -126,16 +126,31 @@ func NewProxyGroup(cfg *ProxyGroupConfig) *ProxyGroup {
 		cfg.CheckTimeout = 5 * time.Second
 	}
 
+	// Validate proxies - filter out nil entries
+	validProxies := make([]Proxy, 0, len(cfg.Proxies))
+	for i, p := range cfg.Proxies {
+		if p == nil {
+			slog.Warn("Skipping nil proxy in group", "group", cfg.Name, "index", i)
+			continue
+		}
+		validProxies = append(validProxies, p)
+	}
+
+	if len(validProxies) == 0 {
+		slog.Error("No valid proxies in group", "group", cfg.Name)
+		return nil
+	}
+
 	g := &ProxyGroup{
-		proxies:       cfg.Proxies,
+		proxies:       validProxies,
 		policy:        cfg.Policy,
 		name:          cfg.Name,
 		stopChan:      make(chan struct{}),
 		checkInterval: cfg.CheckInterval,
 		checkTimeout:  cfg.CheckTimeout,
 		checkURL:      cfg.CheckURL,
-		healthStatus:  make([]atomic.Bool, len(cfg.Proxies)),
-		activeConns:   make([]atomic.Int32, len(cfg.Proxies)),
+		healthStatus:  make([]atomic.Bool, len(validProxies)),
+		activeConns:   make([]atomic.Int32, len(validProxies)),
 	}
 
 	// Initialize all as unhealthy, let health check determine status
@@ -256,14 +271,25 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 	switch g.policy {
 	case Failover:
 		idx := int(atomic.LoadInt32(&g.activeIndex))
+		// Bounds and nil check
+		if idx >= len(g.proxies) || g.proxies[idx] == nil {
+			// Find first valid proxy
+			for i, p := range g.proxies {
+				if p != nil && g.healthStatus[i].Load() {
+					atomic.StoreInt32(&g.activeIndex, int32(i))
+					return p, i, nil
+				}
+			}
+			return nil, -1, fmt.Errorf("no valid proxies in group")
+		}
 		if g.healthStatus[idx].Load() {
 			return g.proxies[idx], idx, nil
 		}
 		// Find next healthy proxy
-		for i := range g.proxies {
-			if g.healthStatus[i].Load() {
+		for i, p := range g.proxies {
+			if p != nil && g.healthStatus[i].Load() {
 				atomic.StoreInt32(&g.activeIndex, int32(i))
-				return g.proxies[i], i, nil
+				return p, i, nil
 			}
 		}
 		// All unhealthy, return current anyway
@@ -274,21 +300,26 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 		for attempt := 0; attempt < len(g.proxies); attempt++ {
 			// Atomic increment and get previous value
 			idx := int(atomic.AddInt32(&g.current, 1) - 1) % len(g.proxies)
-			if g.healthStatus[idx].Load() {
+			if g.proxies[idx] != nil && g.healthStatus[idx].Load() {
 				return g.proxies[idx], idx, nil
 			}
 		}
-		// All unhealthy, return first anyway
-		idx := int(atomic.LoadInt32(&g.current)) % len(g.proxies)
-		return g.proxies[idx], idx, nil
+		// All unhealthy, return first valid proxy
+		for _, p := range g.proxies {
+			if p != nil {
+				idx := int(atomic.LoadInt32(&g.current)) % len(g.proxies)
+				return p, idx, nil
+			}
+		}
+		return nil, -1, fmt.Errorf("no valid proxies in group")
 
 	case LeastLoad:
 		// Find proxy with least active connections
 		minConns := int32(-1)
-		selectedIdx := 0
-		for i := range g.proxies {
-			if !g.healthStatus[i].Load() {
-				continue // Skip unhealthy proxies
+		selectedIdx := -1
+		for i, p := range g.proxies {
+			if p == nil || !g.healthStatus[i].Load() {
+				continue // Skip nil and unhealthy proxies
 			}
 			conns := g.activeConns[i].Load()
 			if minConns < 0 || conns < minConns {
@@ -296,10 +327,28 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 				selectedIdx = i
 			}
 		}
+		// Fallback to first valid proxy if no healthy found
+		if selectedIdx < 0 {
+			for i, p := range g.proxies {
+				if p != nil {
+					selectedIdx = i
+					break
+				}
+			}
+		}
+		if selectedIdx < 0 {
+			return nil, -1, fmt.Errorf("no valid proxies in group")
+		}
 		return g.proxies[selectedIdx], selectedIdx, nil
 
 	default:
-		return g.proxies[0], 0, nil
+		// Return first valid proxy
+		for i, p := range g.proxies {
+			if p != nil {
+				return p, i, nil
+			}
+		}
+		return nil, -1, fmt.Errorf("no valid proxies in group")
 	}
 }
 
@@ -307,9 +356,17 @@ func (g *ProxyGroup) selectProxy() (Proxy, int, error) {
 type trackedConn struct {
 	net.Conn
 	counter *atomic.Int32
+	closed  atomic.Bool
 }
 
 func (c *trackedConn) Close() error {
+	// Prevent double close and double decrement
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
+	}
+	if c.Conn == nil {
+		return nil
+	}
 	c.counter.Add(-1)
 	return c.Conn.Close()
 }
@@ -327,7 +384,9 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 		// Try active proxy first
 		conn, err := proxy.DialContext(ctx, metadata)
 		if err == nil {
-			return conn, nil
+			// Wrap connection to track active connections
+			g.activeConns[idx].Add(1)
+			return &trackedConn{Conn: conn, counter: &g.activeConns[idx]}, nil
 		}
 
 		// Mark as unhealthy on failure
@@ -346,7 +405,9 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 			if err == nil {
 				// Update active index on success
 				atomic.StoreInt32(&g.activeIndex, int32(fallbackIdx))
-				return conn, nil
+				// Wrap connection to track active connections
+				g.activeConns[fallbackIdx].Add(1)
+				return &trackedConn{Conn: conn, counter: &g.activeConns[fallbackIdx]}, nil
 			}
 
 			g.healthStatus[fallbackIdx].Store(false)
@@ -389,9 +450,17 @@ func (g *ProxyGroup) DialContext(ctx context.Context, metadata *M.Metadata) (net
 type trackedPacketConn struct {
 	net.PacketConn
 	counter *atomic.Int32
+	closed  atomic.Bool
 }
 
 func (c *trackedPacketConn) Close() error {
+	// Prevent double close and double decrement
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil // Already closed
+	}
+	if c.PacketConn == nil {
+		return nil
+	}
 	c.counter.Add(-1)
 	return c.PacketConn.Close()
 }
