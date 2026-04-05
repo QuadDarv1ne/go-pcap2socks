@@ -1,0 +1,99 @@
+{
+  "pcap": {
+    "interfaceGateway": "192.168.100.1",
+    "mtu": 1472,
+    "network": "192.168.100.0/24",
+    "localIP": "192.168.100.1",
+    "localMAC": "b0:25:aa:65:67:bb"
+  },
+  "dhcp": {
+    "enabled": true,
+    "poolStart": "192.168.100.101",
+    "poolEnd": "192.168.100.201",
+    "leaseDuration": 86400
+  },
+  "dns": {
+    "servers": [
+      {
+        "address": "8.8.8.8:53"
+      },
+      {
+        "address": "1.1.1.1:53"
+      },
+      {
+        "address": "1.0.0.1:53"
+      }
+    ],
+    "useSystemDNS": false,
+    "autoBench": false,
+    "benchInterval": 0,
+    "cacheSize": 0,
+    "cacheTTL": 0,
+    "preWarmCache": false,
+    "persistentCache": false
+  },
+  "routing": {
+    "rules": [
+      {
+        "dstPort": "53",
+        "outboundTag": "dns-out",
+        "SrcPortMatcher": null,
+        "DstPortMatcher": null,
+        "SrcIPs": null,
+        "DstIPs": null,
+        "SrcIPsIPv6": null,
+        "DstIPsIPv6": null
+      }
+    ]
+  },
+  "outbounds": [
+    {
+      "direct": {},
+      "tag": "direct"
+    },
+    {
+      "dns": {},
+      "tag": "dns-out"
+    }
+  ],
+  "capture": {},
+  "language": "ru",
+  "hotkey": {
+    "enabled": true,
+    "toggle": "Ctrl+Alt+P"
+  },
+  "upnp": {
+    "enabled": true,
+    "autoForward": true,
+    "leaseDuration": 3600,
+    "gamePresets": {
+      "ps4": [
+        3478,
+        3479,
+        3480
+      ],
+      "ps5": [
+        3478,
+        3479,
+        3480
+      ],
+      "switch": [
+        12400,
+        12401,
+        12402,
+        6657,
+        6667
+      ],
+      "xbox": [
+        3074,
+        3075,
+        3478,
+        3479,
+        3480
+      ]
+    }
+  },
+  "windivert": {
+    "enabled": true
+  }
+}

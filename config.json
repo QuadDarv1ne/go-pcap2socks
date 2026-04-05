@@ -1,7 +1,7 @@
 {
   "pcap": {
     "interfaceGateway": "192.168.100.1",
-    "mtu": 1486,
+    "mtu": 1472,
     "network": "192.168.100.0/24",
     "localIP": "192.168.100.1",
     "localMAC": "b0:25:aa:65:67:bb"
@@ -14,6 +14,9 @@
   },
   "dns": {
     "servers": [
+      {
+        "address": "8.8.8.8:53"
+      },
       {
         "address": "1.1.1.1:53"
       },
