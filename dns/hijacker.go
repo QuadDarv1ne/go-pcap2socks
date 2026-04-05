@@ -184,8 +184,6 @@ func (h *Hijacker) InterceptDNS(query []byte) ([]byte, bool) {
 		return nil, false
 	}
 
-	h.queriesIntercepted++
-
 	// Check if we already have a fake IP for this domain
 	h.mu.RLock()
 	mapping, exists := h.domainToFake[domain]
@@ -193,11 +191,13 @@ func (h *Hijacker) InterceptDNS(query []byte) ([]byte, bool) {
 
 	if exists {
 		h.cacheHits++
+		h.queriesIntercepted++
 		h.logger.Debug("DNS cache hit", "domain", domain, "fake_ip", mapping.ip)
 		return h.createDNSResponse(&msg, mapping.ip, qtype), true
 	}
 
 	h.cacheMisses++
+	h.queriesIntercepted++
 
 	// Allocate new fake IP and store mapping atomically (prevents race)
 	h.mu.Lock()

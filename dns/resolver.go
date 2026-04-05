@@ -143,8 +143,9 @@ type Resolver struct {
 	// Insert order tracking for O(1) eviction
 	insertOrder []string
 
-	// Shutdown protection
-	stopOnce sync.Once
+	// Shutdown protection — separate Once for different shutdown paths
+	stopOnceQuery    sync.Once // For queryQueue/workers shutdown
+	stopOncePrefetch sync.Once // For prefetch shutdown
 }
 
 // resolverMetrics holds DNS resolver metrics
@@ -324,7 +325,7 @@ func (r *Resolver) dnsWorker(id int) {
 			}
 
 			// Process DNS query
-			ips, err := r.resolveDomain(query.domain)
+			ips, err := r.resolveDomain(query.ctx, query.domain)
 			r.queriesProcessed.Add(1)
 
 			if err != nil {
@@ -347,10 +348,7 @@ func (r *Resolver) dnsWorker(id int) {
 }
 
 // resolveDomain resolves a domain name to IP addresses
-func (r *Resolver) resolveDomain(domain string) ([]net.IP, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultDNSTimeout)
-	defer cancel()
-
+func (r *Resolver) resolveDomain(ctx context.Context, domain string) ([]net.IP, error) {
 	// Try each server in order
 	for _, server := range r.servers {
 		ip, err := r.resolveWithServer(ctx, domain, server)
@@ -546,8 +544,8 @@ func (r *Resolver) StartPrefetch() {
 
 // StopPrefetch stops the prefetch goroutine
 func (r *Resolver) StopPrefetch() {
-	// Use stopOnce to prevent double-close panic
-	r.stopOnce.Do(func() {
+	// Use dedicated stopOncePrefetch to prevent double-close panic
+	r.stopOncePrefetch.Do(func() {
 		close(r.stopPrefetch)
 	})
 	r.prefetchWG.Wait()
@@ -566,8 +564,8 @@ func (r *Resolver) Stop() {
 func (r *Resolver) StopWithTimeout(ctx context.Context) {
 	slog.Info("Stopping DNS resolver...")
 
-	// Use struct field stopOnce to ensure channels are closed only once
-	r.stopOnce.Do(func() {
+	// Use dedicated stopOnceQuery for queryQueue/workers shutdown
+	r.stopOnceQuery.Do(func() {
 		// Stop worker pool first
 		close(r.stopQueries)
 		close(r.queryQueue)
@@ -862,7 +860,7 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 		select {
 		case r.goroutineSem <- struct{}{}:
 		case <-ctx.Done():
-			break
+			continue // Skip this server if context cancelled
 		}
 		goroutine.SafeGo(func() {
 			defer func() { <-r.goroutineSem }()
@@ -908,7 +906,7 @@ func (r *Resolver) lookupIPUncached(ctx context.Context, hostname string) ([]net
 		select {
 		case r.goroutineSem <- struct{}{}:
 		case <-ctx.Done():
-			break
+			continue // Skip this server if context cancelled
 		}
 		goroutine.SafeGo(func() {
 			defer func() { <-r.goroutineSem }()
@@ -1346,7 +1344,13 @@ func (r *Resolver) getCached(hostname string) ([]net.IP, bool) {
 		r.metrics.cacheHits.Add(1)
 	}
 
-	return entry.IPs, true
+	// Return a copy to prevent aliasing bug (caller modifying internal slice)
+	ipsCopy := make([]net.IP, len(entry.IPs))
+	for i, ip := range entry.IPs {
+		ipsCopy[i] = make(net.IP, len(ip))
+		copy(ipsCopy[i], ip)
+	}
+	return ipsCopy, true
 }
 
 // setCached caches IPs for hostname

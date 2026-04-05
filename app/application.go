@@ -158,10 +158,7 @@ func (a *Application) Shutdown() error {
 
 	// Save shutdown state
 	if a.ShutdownMgr != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = a.ShutdownMgr.ShutdownWithTimeout(5 * time.Second)
-		_ = ctx // suppress unused warning
+		_ = a.ShutdownMgr.Shutdown()
 	}
 
 	slog.Info("Application shut down completed", "total_uptime", time.Since(a.startTime).Round(time.Second))
