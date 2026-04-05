@@ -3638,13 +3638,9 @@ func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig, 
 	_, network, _ := net.ParseCIDR(cfg.PCAP.Network)
 
 	// Parse DNS servers for DHCP
-	dnsServers := make([]net.IP, 0, len(cfg.DNS.Servers))
-	for _, dns := range cfg.DNS.Servers {
-		ipStr := strings.Split(dns.Address, ":")[0]
-		if ip := net.ParseIP(ipStr); ip != nil {
-			dnsServers = append(dnsServers, ip)
-		}
-	}
+	// CRITICAL: DHCP must give local IP (192.168.100.1) as DNS server, NOT external DNS servers!
+	// This allows DNS hijacker to intercept DNS queries from clients
+	dnsServers := []net.IP{localIP}
 
 	dhcpConfig := &dhcp.ServerConfig{
 		ServerIP:      localIP,
