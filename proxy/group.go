@@ -221,6 +221,7 @@ type healthCheckOverride interface {
 }
 
 // checkProxyHealth checks if a single proxy is healthy
+// Note: Uses background context as this is a top-level health check
 func (g *ProxyGroup) checkProxyHealth(proxy Proxy) bool {
 	// Check if proxy has a custom health check override (for testing)
 	if hco, ok := proxy.(healthCheckOverride); ok {

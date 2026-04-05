@@ -685,6 +685,7 @@ func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	// Use circuit breaker for UDP dial if available
 	if d.circuitBreaker != nil {
 		var conn net.PacketConn
+		// Note: Circuit breaker uses background context internally, timeout is applied by proxy.DialUDP
 		cbErr := d.circuitBreaker.Execute(context.Background(), func() error {
 			if proxy, ok := d.Proxies[selectedTag]; ok && proxy != nil {
 				c, dialErr := proxy.DialUDP(metadata)

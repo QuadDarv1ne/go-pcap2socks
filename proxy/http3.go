@@ -129,7 +129,9 @@ func (h *HTTP3) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 		return nil, fmt.Errorf("metadata is nil")
 	}
 
-	ctx := context.Background()
+	// Note: Uses background context with timeout for UDP dialing
+	ctx, cancel := context.WithTimeout(context.Background(), tcpConnectTimeout)
+	defer cancel()
 
 	// Establish QUIC connection to proxy
 	qconn, err := quic.DialAddr(ctx, h.host, h.tlsConfig, h.quicConfig)

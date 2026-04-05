@@ -81,12 +81,19 @@ func SafeGoWithRetry(name string, maxRetries int, baseDelay time.Duration, fn Go
 			}()
 
 			// Wait for completion with timeout to detect hanging functions
+			// Use reusable timer to avoid allocations (called once per retry cycle)
+			goroutineTimer := time.NewTimer(5 * time.Minute)
 			select {
 			case success := <-done:
+				if !goroutineTimer.Stop() {
+					<-goroutineTimer.C
+				}
 				if success {
 					return // Success
 				}
-			case <-time.After(5 * time.Minute):
+				// Fall through to retry logic
+			case <-goroutineTimer.C:
+				// Timer expired - goroutine is still running
 				slog.Error("Goroutine timeout, treating as failure",
 					"name", name,
 					"timeout", "5m")

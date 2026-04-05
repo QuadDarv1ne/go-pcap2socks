@@ -553,6 +553,7 @@ func (r *Resolver) StopPrefetch() {
 }
 
 // Stop performs complete graceful shutdown of DNS resolver
+// Note: Uses background context as this is a top-level shutdown operation
 func (r *Resolver) Stop() {
 	// Use context with timeout for graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -730,6 +731,7 @@ func (r *Resolver) loadCache() {
 }
 
 // preWarmCache pre-populates DNS cache with common domains
+// Note: Uses background context as this is a background cache warm operation
 func (r *Resolver) preWarmCache(domains []string) {
 	slog.Info("DNS cache pre-warming started", "domains", len(domains))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -800,6 +802,7 @@ func (r *Resolver) checkExpiringCache() {
 }
 
 // doPrefetch performs background DNS refresh
+// Note: Uses background context as this is a background prefetch operation
 func (r *Resolver) doPrefetch(hostname string) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDNSTimeout)
 	defer cancel()

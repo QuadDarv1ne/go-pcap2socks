@@ -57,6 +57,7 @@ func (ss *Socks5) HealthStatus() (bool, time.Time) {
 }
 
 // CheckHealth performs a health check by attempting to connect to the proxy
+// Note: Uses background context as this is a top-level health check
 func (ss *Socks5) CheckHealth() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -203,6 +204,7 @@ func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {
 		}
 	}
 
+	// Note: Uses background context as this is a top-level UDP dialing entry point
 	ctx, cancel := context.WithTimeout(context.Background(), tcpConnectTimeout)
 	defer cancel()
 

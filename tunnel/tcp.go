@@ -136,6 +136,10 @@ func pipe(origin, remote net.Conn) {
 	})
 
 	// Wait for first direction to complete, then half-close the other
+	// Use reusable timer to avoid allocations
+	pipeTimer := time.NewTimer(TCPWaitTimeout)
+	defer pipeTimer.Stop()
+
 	select {
 	case <-done:
 		// One direction finished, close write side of other connection
@@ -146,12 +150,13 @@ func pipe(origin, remote net.Conn) {
 			c.CloseWrite()
 		}
 		// Wait for second direction with timeout
+		pipeTimer.Reset(TCPWaitTimeout)
 		select {
 		case <-done:
-		case <-time.After(TCPWaitTimeout):
+		case <-pipeTimer.C:
 			slog.Warn("TCP pipe timeout waiting for second direction")
 		}
-	case <-time.After(TCPWaitTimeout):
+	case <-pipeTimer.C:
 		slog.Warn("TCP pipe timeout waiting for first direction")
 	}
 

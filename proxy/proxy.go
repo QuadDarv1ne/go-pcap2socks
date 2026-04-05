@@ -134,6 +134,7 @@ func GetDialer() Dialer {
 }
 
 // Dial uses default Dialer to dial TCP.
+// Note: Uses background context as this is the top-level dialing entry point.
 func Dial(metadata *M.Metadata) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), tcpConnectTimeout)
 	defer cancel()

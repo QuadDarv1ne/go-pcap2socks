@@ -112,6 +112,7 @@ func (sf *Socks5WithFallback) healthCheckLoop() {
 			}
 
 			// Try to connect to SOCKS5 server
+			// Note: Uses background context with timeout for health check
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			conn, err := sf.Socks5.DialContext(ctx, &M.Metadata{
 				Network: M.TCP,

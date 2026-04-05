@@ -205,10 +205,13 @@ func (h *AsyncHandler) Stop() error {
 		close(done)
 	})
 
+	// Use reusable timer for shutdown timeout
+	shutdownTimer := time.NewTimer(DefaultShutdownTimeout)
+	defer shutdownTimer.Stop()
 	select {
 	case <-done:
 		return nil
-	case <-time.After(DefaultShutdownTimeout):
+	case <-shutdownTimer.C:
 		return ErrShutdownTimeout
 	}
 }

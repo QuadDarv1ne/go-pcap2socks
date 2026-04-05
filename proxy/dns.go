@@ -230,6 +230,7 @@ func (d *dnsConn) WriteTo(b []byte, _ net.Addr) (n int, err error) {
 		}
 
 		// Create context with timeout for async DNS exchange
+		// Note: Uses background context as this is the top-level DNS proxy entry point
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 

@@ -186,6 +186,7 @@ func (ws *WebSocket) DialContext(ctx context.Context, metadata *M.Metadata) (net
 // Note: WebSocket is TCP-based, so UDP is tunneled over TCP
 func (ws *WebSocket) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
 	// For UDP over WebSocket, we tunnel UDP packets over TCP
+	// Note: Uses background context with timeout for UDP tunneling
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
