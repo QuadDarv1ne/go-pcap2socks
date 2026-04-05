@@ -6,8 +6,12 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 )
+
+// recoveryMutex protects concurrent load/save operations
+var recoveryMutex sync.Mutex
 
 // RecoveryState tracks restart attempts and timing
 type RecoveryState struct {
@@ -151,6 +155,9 @@ func performRestartCleanup() {
 
 // loadRecoveryState loads state from file or creates new
 func loadRecoveryState() RecoveryState {
+	recoveryMutex.Lock()
+	defer recoveryMutex.Unlock()
+
 	data, err := os.ReadFile(recoveryStateFile)
 	if err != nil {
 		// File doesn't exist or can't be read - fresh state
@@ -159,7 +166,7 @@ func loadRecoveryState() RecoveryState {
 			FirstFailure: time.Now(),
 		}
 	}
-	
+
 	var state RecoveryState
 	if err := json.Unmarshal(data, &state); err != nil {
 		slog.Warn("Failed to parse recovery state, creating fresh state", "err", err)
@@ -168,23 +175,26 @@ func loadRecoveryState() RecoveryState {
 			FirstFailure: time.Now(),
 		}
 	}
-	
+
 	return state
 }
 
 // Save persists recovery state to file
 func (s *RecoveryState) Save() error {
+	recoveryMutex.Lock()
+	defer recoveryMutex.Unlock()
+
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		slog.Error("Failed to marshal recovery state", "err", err)
 		return err
 	}
-	
+
 	if err := os.WriteFile(recoveryStateFile, data, 0644); err != nil {
 		slog.Error("Failed to save recovery state", "err", err)
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -206,6 +216,12 @@ func notifyUserAboutMaxRestarts(state RecoveryState) {
 
 // showNotification displays a user notification (cross-platform)
 func showNotification(message string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("Notification panic recovered", "panic", r)
+		}
+	}()
+
 	// Try PowerShell on Windows
 	cmd := exec.Command("powershell", "-Command",
 		fmt.Sprintf(`[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms"); [System.Windows.Forms.MessageBox]::Show("%s", "go-pcap2socks Error")`, message))

@@ -2,10 +2,12 @@ package api
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -1253,7 +1255,8 @@ func (s *Server) handleDeviceRateLimit(w http.ResponseWriter, r *http.Request) {
 	s.sendSuccess(w, "Rate limit updated")
 }
 
-// readLastLines reads last N lines from a file
+// readLastLines reads last N lines from a file efficiently using os.Seek
+// Reads chunks from end of file instead of loading entire file into memory
 func readLastLines(filePath string, n int) ([]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -1261,17 +1264,96 @@ func readLastLines(filePath string, n int) ([]string, error) {
 	}
 	defer file.Close()
 
+	// Get file size
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	fileSize := stat.Size()
+	if fileSize == 0 {
+		return []string{}, nil
+	}
+
+	// Estimate chunk size: start with 4KB, increase for large files
+	chunkSize := int64(4096)
+	if fileSize > 1024*1024 { // 1MB+
+		chunkSize = 64 * 1024 // 64KB chunks
+	}
+
 	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+	var pos int64 = fileSize
+	buf := make([]byte, 0, chunkSize)
+	lastLineIncomplete := false
+
+	for pos > 0 && len(lines) < n {
+		// Calculate read position
+		readSize := chunkSize
+		if pos-readSize < 0 {
+			readSize = pos
+		}
+		pos -= readSize
+
+		// Seek to position
+		_, err := file.Seek(pos, io.SeekStart)
+		if err != nil {
+			return nil, err
+		}
+
+		// Read chunk
+		chunk := make([]byte, readSize)
+		_, err = io.ReadFull(file, chunk)
+		if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+			return nil, err
+		}
+
+		// Prepend buffer
+		buf = append(chunk, buf...)
+
+		// Split lines
+		scanner := bufio.NewScanner(bytes.NewReader(buf))
+		var chunkLines []string
+		for scanner.Scan() {
+			chunkLines = append(chunkLines, scanner.Text())
+		}
+
+		// Handle incomplete last line (if we're not at file start)
+		if pos > 0 && lastLineIncomplete && len(chunkLines) > 0 {
+			// First line of this chunk continues from previous chunk
+			if len(lines) > 0 {
+				chunkLines[0] = lines[0] + chunkLines[0]
+				lines = lines[1:]
+			}
+		}
+
+		// Check if last line is incomplete (no trailing newline)
+		if pos > 0 && len(buf) > 0 && buf[len(buf)-1] != '\n' {
+			lastLineIncomplete = true
+			if len(chunkLines) > 0 {
+				// Save incomplete line for next iteration
+				lines = append([]string{chunkLines[len(chunkLines)-1]}, lines...)
+				chunkLines = chunkLines[:len(chunkLines)-1]
+			}
+		} else {
+			lastLineIncomplete = false
+		}
+
+		// Prepend complete lines
+		lines = append(chunkLines, lines...)
+
+		// Keep only last N lines to save memory
+		if len(lines) > n {
+			lines = lines[len(lines)-n:]
+		}
+
+		// Reset buffer for next iteration (keep only incomplete line if any)
+		if lastLineIncomplete && len(lines) > 0 {
+			buf = []byte(lines[0])
+		} else {
+			buf = buf[:0]
+		}
 	}
 
-	if len(lines) <= n {
-		return lines, scanner.Err()
-	}
-
-	return lines[len(lines)-n:], scanner.Err()
+	return lines, nil
 }
 
 // handleAutoConfig runs automatic configuration

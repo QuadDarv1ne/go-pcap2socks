@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -26,11 +27,33 @@ var upgrader = websocket.Upgrader{
 		if host == "" {
 			return true
 		}
-		// Check if it's a local IP
-		if strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "172.") {
+		// Check if it's a local IP (private ranges)
+		if strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") {
 			return true
 		}
-		return true // Allow all for local use - can be restricted if needed
+		// Check for 172.16.0.0/12 range (172.16.x.x - 172.31.x.x)
+		if strings.HasPrefix(host, "172.") {
+			parts := strings.SplitN(host, ".", 3)
+			if len(parts) >= 2 {
+				var secondOctet int
+				if _, err := fmt.Sscanf(parts[1], "%d", &secondOctet); err == nil {
+					if secondOctet >= 16 && secondOctet <= 31 {
+						return true
+					}
+				}
+			}
+		}
+		// Check Origin header for additional safety
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			// Allow if origin is localhost or local IP
+			if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+				return true
+			}
+		}
+		// Default: deny non-local connections for security
+		slog.Warn("WebSocket connection rejected: non-local origin", "host", host, "origin", r.Header.Get("Origin"))
+		return false
 	},
 }
 

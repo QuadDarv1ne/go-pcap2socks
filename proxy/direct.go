@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/dialer"
 	M "github.com/QuadDarv1ne/go-pcap2socks/md"
@@ -73,4 +74,19 @@ func (pc *directPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 		return 0, err
 	}
 	return pc.PacketConn.WriteTo(b, udpAddr)
+}
+
+// SetDeadline sets the read and write deadlines
+func (pc *directPacketConn) SetDeadline(t time.Time) error {
+	return pc.PacketConn.SetDeadline(t)
+}
+
+// SetReadDeadline sets the read deadline
+func (pc *directPacketConn) SetReadDeadline(t time.Time) error {
+	return pc.PacketConn.SetReadDeadline(t)
+}
+
+// SetWriteDeadline sets the write deadline
+func (pc *directPacketConn) SetWriteDeadline(t time.Time) error {
+	return pc.PacketConn.SetWriteDeadline(t)
 }

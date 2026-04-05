@@ -62,7 +62,7 @@ type requestCounter struct {
 }
 
 const (
-	defaultRateLimit       = 10 // 10 requests per minute per MAC
+	defaultRateLimit       = 30 // 30 requests per minute per MAC (PS4 sends DHCP Discover every ~2s)
 	defaultRateLimitWindow = time.Minute
 )
 
