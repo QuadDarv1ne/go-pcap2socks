@@ -16,7 +16,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
 	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
-	"github.com/QuadDarv1ne/go-pcap2socks/router"
 	"gvisor.dev/gvisor/pkg/tcpip"
 )
 
@@ -25,7 +24,7 @@ import (
 type ProxyHandler struct {
 	connTracker *ConnTracker
 	proxyDialer proxy.Proxy
-	router      *router.Router
+	proxyRouter *proxy.Router // *proxy.Router for full proxy routing
 	dnsHijacker *dns.Hijacker
 	logger      *slog.Logger
 }
@@ -48,8 +47,8 @@ func NewProxyHandler(proxyDialer proxy.Proxy, logger *slog.Logger) *ProxyHandler
 	}
 }
 
-// NewProxyHandlerWithRouter creates a new proxy handler with connection tracking and routing filter.
-func NewProxyHandlerWithRouter(proxyDialer proxy.Proxy, r *router.Router, logger *slog.Logger) *ProxyHandler {
+// NewProxyHandlerWithRouter creates a new proxy handler with connection tracking and routing.
+func NewProxyHandlerWithRouter(proxyDialer proxy.Proxy, r *proxy.Router, logger *slog.Logger) *ProxyHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -62,13 +61,13 @@ func NewProxyHandlerWithRouter(proxyDialer proxy.Proxy, r *router.Router, logger
 	return &ProxyHandler{
 		connTracker: ct,
 		proxyDialer: proxyDialer,
-		router:      r,
+		proxyRouter: r,
 		logger:      logger,
 	}
 }
 
-// NewProxyHandlerWithDNS creates a new proxy handler with connection tracking, routing filter, and DNS hijacking.
-func NewProxyHandlerWithDNS(proxyDialer proxy.Proxy, r *router.Router, hijacker *dns.Hijacker, logger *slog.Logger) *ProxyHandler {
+// NewProxyHandlerWithDNS creates a new proxy handler with connection tracking, routing, and DNS hijacking.
+func NewProxyHandlerWithDNS(proxyDialer proxy.Proxy, r *proxy.Router, hijacker *dns.Hijacker, logger *slog.Logger) *ProxyHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -81,10 +80,38 @@ func NewProxyHandlerWithDNS(proxyDialer proxy.Proxy, r *router.Router, hijacker 
 	return &ProxyHandler{
 		connTracker: ct,
 		proxyDialer: proxyDialer,
-		router:      r,
+		proxyRouter: r,
 		dnsHijacker: hijacker,
 		logger:      logger,
 	}
+}
+
+// NewProxyHandlerWithRouterFromProxy creates a new proxy handler, extracting router from proxy.Proxy if possible.
+func NewProxyHandlerWithRouterFromProxy(proxyDialer proxy.Proxy, hijacker *dns.Hijacker, logger *slog.Logger) *ProxyHandler {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	ct := NewConnTracker(ConnTrackerConfig{
+		ProxyDialer: proxyDialer,
+		Logger:      logger,
+	})
+
+	// Try to extract router from proxy dialer
+	var router *proxy.Router
+	if r, ok := proxyDialer.(*proxy.Router); ok {
+		router = r
+	}
+
+	h := &ProxyHandler{
+		connTracker: ct,
+		proxyDialer: proxyDialer,
+		proxyRouter: router,
+		dnsHijacker: hijacker,
+		logger:      logger,
+	}
+
+	return h
 }
 
 // HandleTCP handles incoming TCP connections from gVisor stack.
@@ -119,16 +146,6 @@ func (h *ProxyHandler) HandleTCP(conn adapter.TCPConn) {
 			meta.Domain = domain
 			h.logger.Debug("DNS hijack resolved", "fake_ip", meta.DestIP.String(), "domain", domain)
 		}
-	}
-
-	// Check routing filter
-	if h.router != nil && !h.router.ShouldProxy(meta.DestIP, domain) {
-		h.logger.Debug("TCP connection blocked by router",
-			"dst", meta.DestIP.String(),
-			"dst_port", meta.DestPort,
-			"domain", domain)
-		conn.Close()
-		return
 	}
 
 	// Create tracked connection
@@ -219,14 +236,6 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 		"dst", udpMeta.DestIP.String(),
 		"dst_port", udpMeta.DestPort)
 
-	// Check routing filter
-	if h.router != nil && !h.router.ShouldProxy(udpMeta.DestIP, "") {
-		h.logger.Debug("UDP packet blocked by router",
-			"dst", udpMeta.DestIP.String(),
-			"dst_port", udpMeta.DestPort)
-		return
-	}
-
 	// Get or create UDP session
 	uc, ok := h.connTracker.GetUDP(udpMeta.SourceIP, udpMeta.SourcePort, udpMeta.DestIP, udpMeta.DestPort)
 	if !ok {
@@ -262,6 +271,31 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 					}
 				}
 				return
+			}
+
+			// Intercept DNS queries on port 53 and return fake IPs
+			if h.dnsHijacker != nil && udpMeta.DestPort == 53 {
+				h.logger.Debug("DNS query intercepted by hijacker",
+					"src", udpMeta.SourceIP.String(),
+					"dst", udpMeta.DestIP.String())
+				
+				response, hijacked := h.dnsHijacker.InterceptDNS(buf[:n])
+				if hijacked {
+					h.logger.Info("DNS hijacked",
+						"src", udpMeta.SourceIP.String(),
+						"query_len", n,
+						"response_len", len(response))
+					
+					// Send fake response back to client
+					_, writeErr := conn.WriteTo(response, &net.UDPAddr{
+						IP:   udpMeta.SourceIP.AsSlice(),
+						Port: int(udpMeta.SourcePort),
+					})
+					if writeErr != nil {
+						h.logger.Warn("Failed to send DNS hijack response", "err", writeErr)
+					}
+					continue // Don't forward to real DNS server
+				}
 			}
 
 			// Send to proxy relay using buffer.Clone for efficient memory

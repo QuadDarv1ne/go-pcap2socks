@@ -33,10 +33,12 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
 	"github.com/QuadDarv1ne/go-pcap2socks/common/svc"
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
+	"github.com/QuadDarv1ne/go-pcap2socks/core/adapter"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/option"
 	"github.com/QuadDarv1ne/go-pcap2socks/dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/dnslocal"
 	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
 	"github.com/QuadDarv1ne/go-pcap2socks/health"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
@@ -631,6 +633,10 @@ func main() {
 		Logger:          slog.Default(),
 	})
 	slog.Info("DNS hijacker initialized", "timeout", 5*time.Minute)
+
+	// Initialize local DNS server to accept client DNS queries on 192.168.100.1:53
+	// This is required because clients send DNS to this IP, but gvisor doesn't capture it
+	_localDNSServer = createLocalDNSServer(config)
 
 	// Wrap DNS resolver with rate limiter if enabled
 	if config.DNS.RateLimiter != nil && config.DNS.RateLimiter.Enabled {
@@ -1459,9 +1465,21 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 		return err
 	}
 
+	// Create proxy handler with DNS hijacker for transparent proxy routing
+	var proxyHandler adapter.TransportHandler
+	if _, ok := _defaultProxy.(*proxy.Router); ok {
+		// Router is available, use basic handler
+		proxyHandler = core.NewProxyHandler(_defaultProxy, slog.Default())
+		slog.Info("Proxy handler created with router")
+	} else {
+		// Fallback to basic tunnel if router is not available
+		proxyHandler = &core.Tunnel{}
+		slog.Warn("DNS hijacker disabled: _defaultProxy is not a Router")
+	}
+
 	if _defaultStack, err = core.CreateStack(&core.Config{
 		LinkEndpoint:     _defaultDevice,
-		TransportHandler: &core.Tunnel{},
+		TransportHandler: proxyHandler,
 		MulticastGroups:  []net.IP{},
 		Options:          []option.Option{},
 	}); err != nil {
@@ -1528,6 +1546,11 @@ func performGracefulShutdownImpl() {
 		start := time.Now()
 		// DNS hijacker doesn't have Stop method, just log
 		logComponentShutdown("dns_hijacker", time.Since(start), nil)
+	}
+	if _localDNSServer != nil {
+		start := time.Now()
+		_localDNSServer.Stop()
+		logComponentShutdown("local_dns_server", time.Since(start), nil)
 	}
 	if _dohServer != nil {
 		start := time.Now()
@@ -1801,6 +1824,12 @@ func stopImpl() {
 	if _dnsResolver != nil {
 		_dnsResolver.Stop()
 		slog.Info("DNS resolver stopped")
+	}
+
+	// Stop local DNS server
+	if _localDNSServer != nil {
+		_localDNSServer.Stop()
+		slog.Info("Local DNS server stopped")
 	}
 
 	// Stop config reloader
@@ -3638,15 +3667,9 @@ func createDHCPServerIfNeeded(cfg *cfg.Config, netConfig *device.NetworkConfig, 
 	_, network, _ := net.ParseCIDR(cfg.PCAP.Network)
 
 	// Parse DNS servers for DHCP
-	// Use external DNS servers so clients can resolve DNS directly
-	// DNS hijacker works via gVisor stack, not via UDP listener
-	dnsServers := make([]net.IP, 0, len(cfg.DNS.Servers))
-	for _, dns := range cfg.DNS.Servers {
-		ipStr := strings.Split(dns.Address, ":")[0]
-		if ip := net.ParseIP(ipStr); ip != nil {
-			dnsServers = append(dnsServers, ip)
-		}
-	}
+	// CRITICAL: DHCP must give local IP (192.168.100.1) as DNS server!
+	// Local DNS server on 192.168.100.1:53 will forward to upstream servers
+	dnsServers := []net.IP{localIP}
 
 	dhcpConfig := &dhcp.ServerConfig{
 		ServerIP:      localIP,
@@ -3716,6 +3739,31 @@ func initConfigReload(cfgFile string) {
 
 	_configReloader = reloader
 	slog.Info("Config hot reload enabled", "file", cfgFile)
+}
+
+// createLocalDNSServer creates a local DNS server that listens on 192.168.100.1:53
+// This is required because clients send DNS queries to the gateway IP,
+// but gvisor doesn't capture packets destined to the gateway itself
+func createLocalDNSServer(config *cfg.Config) *dnslocal.LocalServer {
+	if config.DHCP == nil || !config.DHCP.Enabled {
+		slog.Info("DHCP disabled, skipping local DNS server")
+		return nil
+	}
+
+	// Create DNS outbound proxy
+	dnsOutbound := proxy.NewDNS(config.DNS, config.PCAP.InterfaceGateway)
+
+	// Create local DNS server listening on gateway IP:53
+	listenAddr := config.PCAP.LocalIP + ":53"
+	localServer := dnslocal.NewLocalServer(listenAddr, dnsOutbound)
+
+	if err := localServer.Start(); err != nil {
+		slog.Error("Failed to start local DNS server", "addr", listenAddr, "err", err)
+		return nil
+	}
+
+	slog.Info("Local DNS server started", "addr", listenAddr)
+	return localServer
 }
 
 // setAdaptiveMemoryLimit sets memory limit based on available system RAM

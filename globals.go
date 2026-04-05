@@ -11,6 +11,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
+	"github.com/QuadDarv1ne/go-pcap2socks/dnslocal"
 	"github.com/QuadDarv1ne/go-pcap2socks/health"
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
@@ -82,6 +83,9 @@ var (
 
 	// _dohServer holds the DNS-over-HTTPS server
 	_dohServer *dns.DoHServer
+
+	// _localDNSServer holds the local DNS server for client DNS queries
+	_localDNSServer *dnslocal.LocalServer
 
 	// _shutdownManager holds the graceful shutdown manager
 	_shutdownManager *shutdown.Manager
