@@ -369,7 +369,7 @@ func (s *DHCPServer) processPacket(packet *Packet, dhcpPacketCount *int) {
 		"dstIP", packet.DstIP.String(),
 		"dhcp_payload_len", len(dhcpData))
 
-	// Rate limiting: prevent DHCP flood (max 1 request per 100ms per MAC)
+	// Rate limiting: prevent DHCP flood (max 1 request per 50ms per MAC)
 	// Optimized with sync.Map for lock-free reads in hot path
 	macStr := clientMAC.String()
 	now := time.Now().UnixNano()
@@ -377,7 +377,7 @@ func (s *DHCPServer) processPacket(packet *Packet, dhcpPacketCount *int) {
 	// Fast path: check with Load (lock-free)
 	if lastTimeVal, exists := s.lastRequest.Load(macStr); exists {
 		lastTime := lastTimeVal.(int64)
-		if now-lastTime < (100 * time.Millisecond).Nanoseconds() {
+		if now-lastTime < (50 * time.Millisecond).Nanoseconds() {
 			slog.Warn("DHCP request rate limited",
 				"mac", macStr,
 				"last_request_ns", lastTime,
