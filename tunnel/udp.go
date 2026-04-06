@@ -260,5 +260,9 @@ func pipeChannel(from net.PacketConn, to net.PacketConn, wg *sync.WaitGroup) {
 			}
 			return
 		}
+
+		// Update write deadline on successful write to prevent premature timeout
+		deadline = time.Now().Add(UdpSessionTimeout)
+		to.SetWriteDeadline(deadline)
 	}
 }

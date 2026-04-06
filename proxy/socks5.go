@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/common/pool"
@@ -184,15 +185,27 @@ func (ss *Socks5) DialContext(ctx context.Context, metadata *M.Metadata) (c net.
 // pooledConn wraps a pooled connection to auto-return on Close
 type pooledConn struct {
 	net.Conn
-	pool *connpool.Pool
-	once sync.Once
+	pool  *connpool.Pool
+	once  sync.Once
+	isErr atomic.Bool // Set to true if connection closed with error
 }
 
 func (pc *pooledConn) Close() error {
 	pc.once.Do(func() {
+		// Don't return errored connections to the pool
+		if pc.isErr.Load() {
+			pc.Conn.Close()
+			return
+		}
 		pc.pool.Put(pc.Conn)
 	})
 	return nil
+}
+
+// CloseWithError marks connection as errored and closes without returning to pool
+func (pc *pooledConn) CloseWithError() {
+	pc.isErr.Store(true)
+	pc.Close()
 }
 
 func (ss *Socks5) DialUDP(*M.Metadata) (_ net.PacketConn, err error) {

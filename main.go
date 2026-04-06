@@ -498,6 +498,8 @@ func main() {
 		multiHandler := newMultiHandler(syncHandler, fileHandler)
 		streamHandler := &streamLogHandler{handler: multiHandler}
 		asyncHandler = asynclogger.NewAsyncHandler(streamHandler)
+		// Ensure log file is closed on exit
+		defer logFile.Close()
 	}
 
 	if asyncHandler == nil {
