@@ -124,11 +124,20 @@
 - ✅ Проект компилируется без ошибок
 - ✅ Изменения синхронизированы (dev + main pushed to origin)
 
+### Критические исправления (коммит 246833a)
+- ✅ **CRITICAL**: Исправлен double mutex unlock в dhcp/server.go — выделен legacyAllocateIP() под мьютексом
+- ✅ **HIGH**: Добавлен sync.WaitGroup для relay-горутин TCP/UDP в conntracker — предотвращает race conditions
+- ✅ **HIGH**: readUDPFromProxy теперь вызывает RemoveUDP() при выходе — устранена утечка UDP-сессий
+- ✅ **HIGH**: DNS Resolver и DoH Server теперь реально останавливаются в shutdown (были заглушки)
+- ✅ **MEDIUM**: Router.cleanupLoop теперь имеет WaitGroup — корректное ожидание при Stop()
+- ✅ **MEDIUM**: Все глобальные колбэки в API защищены sync.RWMutex — предотвращены data races
+
 ### Состояние проекта
-- Компиляция: ✅
+- Компиляция: ✅ (все пакеты)
 - TODO/FIXME: 0
 - Мёртвый код: минимизирован
 - Shutdown sequence: исправлен
+- Race conditions: устранены критические
 - Ветки синхронизированы: dev == main
 
 ---
