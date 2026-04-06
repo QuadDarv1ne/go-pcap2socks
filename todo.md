@@ -142,6 +142,10 @@
 - ✅ **MEDIUM**: proxy/socks5.go — pooledConn теперь не возвращает соединения с ошибками в пул, добавлен CloseWithError()
 - ✅ **LOW**: main.go — закрытие лог-файла при выходе (предотвращение утечки file descriptor)
 
+### Критические исправления (коммит e0c2680)
+- ✅ **HIGH**: core/conntrack.go — Stop() и CloseAll() теперь ждут relayWG, предотвращение утечки relay-горутин при shutdown
+- ✅ **HIGH**: dnslocal/local_server.go — фикс data race: remoteAddr захватывался по ссылке в closure, теперь по значению
+
 ### Состояние проекта
 - Компиляция: ✅ (все пакеты)
 - TODO/FIXME: 0
