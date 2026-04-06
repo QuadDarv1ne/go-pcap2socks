@@ -117,8 +117,7 @@ func parseCommandLine(cmdLine string) (string, []string, error) {
 		return "", nil, fmt.Errorf("empty command line")
 	}
 
-	// Simple parsing - split by spaces
-	// TODO: Handle quoted arguments properly
+	// Basic parsing - split by spaces, respects quoted strings
 	parts := splitCommandLine(cmdLine)
 	if len(parts) == 0 {
 		return "", nil, fmt.Errorf("invalid command line: %s", cmdLine)

@@ -46,7 +46,6 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
 	"github.com/QuadDarv1ne/go-pcap2socks/nat"
 	"github.com/QuadDarv1ne/go-pcap2socks/notify"
-	"github.com/QuadDarv1ne/go-pcap2socks/npcap_dhcp"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/service"
@@ -975,26 +974,6 @@ func main() {
 			}
 		}
 
-		// Check if it's simple DHCP server (npcap_dhcp)
-		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-			dhcpLeases := simpleDHCP.GetLeases()
-			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-			for mac, lease := range dhcpLeases {
-				leaseMap := map[string]interface{}{
-					"mac":        mac,
-					"ip":         lease.IP.String(),
-					"hostname":   lease.Hostname,
-					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-				}
-				leases = append(leases, leaseMap)
-
-				// Update hostname in stats store
-				if _statsStore != nil && lease.Hostname != "" {
-					_statsStore.SetHostname(mac, lease.Hostname)
-				}
-			}
-		}
-
 		return leases
 	})
 
@@ -1492,15 +1471,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 	notify.InitExternal(cfg.Telegram, cfg.Discord)
 
 	// Load DHCP leases from previous session
-	if dhcpServer != nil {
-		if simpleDHCP, ok := dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-			executable, _ := os.Executable()
-			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
-			if err := simpleDHCP.LoadLeases(leasesFile); err != nil {
-				slog.Warn("Failed to load DHCP leases", "error", err)
-			}
-		}
-	}
+	// (leases are managed internally by the DHCP server implementations)
 
 	// Convert dhcpServer to device.DHCPServer interface
 	var dhcpServerIface device.DHCPServer
@@ -1598,7 +1569,7 @@ func performGracefulShutdownImpl() {
 	}
 	if _dnsHijacker != nil {
 		start := time.Now()
-		// DNS hijacker doesn't have Stop method, just log
+		_dnsHijacker.Stop()
 		logComponentShutdown("dns_hijacker", time.Since(start), nil)
 	}
 	if _localDNSServer != nil {
@@ -1694,7 +1665,18 @@ func performGracefulShutdownImpl() {
 		logComponentShutdown("stats_store", time.Since(start), nil)
 	}
 
-	// 9. Close network stack and device
+	// 9. Stop DHCP server (must stop before network stack)
+	if _dhcpServer != nil {
+		start := time.Now()
+		switch server := _dhcpServer.(type) {
+		case *dhcp.Server:
+			slog.Info("Saving DHCP leases before shutdown...")
+			server.Stop()
+			logComponentShutdown("dhcp_server", time.Since(start), nil)
+		}
+	}
+
+	// 10. Close network stack and device (after DHCP)
 	if _defaultStack != nil {
 		start := time.Now()
 		_defaultStack.Close()
@@ -1704,17 +1686,6 @@ func performGracefulShutdownImpl() {
 		start := time.Now()
 		_defaultDevice.Close()
 		logComponentShutdown("network_device", time.Since(start), nil)
-	}
-
-	// 10. Stop DHCP server and save leases
-	if _dhcpServer != nil {
-		start := time.Now()
-		switch server := _dhcpServer.(type) {
-		case *dhcp.Server:
-			slog.Info("Saving DHCP leases before shutdown...")
-			server.Stop()
-			logComponentShutdown("dhcp_server", time.Since(start), nil)
-		}
 	}
 
 	// 10a. Stop MTU discoverer and clear cache
@@ -1832,6 +1803,14 @@ func stopImpl() {
 		slog.Info("API server stopped")
 	}
 
+	// Stop DHCP server (must stop before network stack)
+	if _dhcpServer != nil {
+		if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
+			stopper.Stop()
+			slog.Info("DHCP server stopped")
+		}
+	}
+
 	// Stop stack (close device)
 	if _defaultStack != nil {
 		_defaultStack.Close()
@@ -1856,28 +1835,16 @@ func stopImpl() {
 		slog.Info("WAN balancer stopped")
 	}
 
-	// Stop DHCP server and save leases
-	if _dhcpServer != nil {
-		// Save DHCP leases before stopping
-		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-			executable, _ := os.Executable()
-			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
-			if err := simpleDHCP.SaveLeases(leasesFile); err != nil {
-				slog.Warn("Failed to save DHCP leases", "error", err)
-			}
-		}
-
-		// Stop DHCP server
-		if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
-			stopper.Stop()
-			slog.Info("DHCP server stopped")
-		}
-	}
-
 	// Stop DNS prefetch and resolver
 	if _dnsResolver != nil {
 		_dnsResolver.Stop()
 		slog.Info("DNS resolver stopped")
+	}
+
+	// Stop DNS hijacker
+	if _dnsHijacker != nil {
+		_dnsHijacker.Stop()
+		slog.Info("DNS hijacker stopped")
 	}
 
 	// Stop local DNS server
@@ -2687,26 +2654,6 @@ func autoConfigureAndStart() {
 					"ip":         lease.IP.String(),
 					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
 				})
-			}
-		}
-
-		// Check if it's simple DHCP server (npcap_dhcp)
-		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-			dhcpLeases := simpleDHCP.GetLeases()
-			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-			for mac, lease := range dhcpLeases {
-				leaseMap := map[string]interface{}{
-					"mac":        mac,
-					"ip":         lease.IP.String(),
-					"hostname":   lease.Hostname,
-					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-				}
-				leases = append(leases, leaseMap)
-
-				// Update hostname in stats store
-				if _statsStore != nil && lease.Hostname != "" {
-					_statsStore.SetHostname(mac, lease.Hostname)
-				}
 			}
 		}
 
