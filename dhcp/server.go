@@ -694,31 +694,28 @@ func (s *Server) allocateIP(mac net.HardwareAddr) (net.IP, error) {
 
 	// Protect entire allocation from race conditions
 	s.allocMu.Lock()
-	defer s.allocMu.Unlock()
+	ip, err := s.legacyAllocateIP(macStr, mac)
+	s.allocMu.Unlock()
+	return ip, err
+}
 
-	// If MAC already has a lease with different IP, remove old IP from index
+// legacyAllocateIP allocates an IP using legacy round-robin method.
+// Caller must hold s.allocMu. Returns the allocated IP.
+func (s *Server) legacyAllocateIP(macStr string, mac net.HardwareAddr) (net.IP, error) {
+	// If MAC already has a lease, update the index
 	if val, ok := s.leases.Load(macStr); ok {
 		oldLease := val.(*DHCPLease)
 		oldIPStr := oldLease.IP.String()
-		// Remove old IP from index to prevent IP leak
 		s.ipIndex.Delete(oldIPStr)
-		slog.Debug("DHCP: Removing old IP from index",
-			"mac", macStr,
-			"old_ip", oldIPStr)
 	}
 
 	startIPLoaded := s.nextIP.Load()
 	if startIPLoaded == nil {
-		s.allocMu.Unlock()
 		return nil, fmt.Errorf("DHCP nextIP not initialized")
 	}
 	startIP := startIPLoaded.(net.IP)
 	maxAttempts := int(binary.BigEndian.Uint32(s.config.LastIP.To4()) -
 		binary.BigEndian.Uint32(s.config.FirstIP.To4()) + 1)
-
-	slog.Debug("DHCP: Legacy allocation starting",
-		"start_ip", startIP.String(),
-		"max_attempts", maxAttempts)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		nextIPLoaded := s.nextIP.Load()

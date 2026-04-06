@@ -51,6 +51,7 @@ type TCPConn struct {
 
 	closeOnce sync.Once
 	closed    atomic.Bool
+	relayWG   sync.WaitGroup // Wait for relay goroutines to finish
 
 	// Statistics
 	bytesSent     atomic.Uint64
@@ -76,6 +77,7 @@ type UDPConn struct {
 
 	closeOnce sync.Once
 	closed    atomic.Bool
+	relayWG   sync.WaitGroup // Wait for relay goroutines to finish
 
 	// Statistics
 	packetsSent     atomic.Uint64
@@ -208,6 +210,7 @@ func (ct *ConnTracker) CreateTCP(parentCtx context.Context, meta ConnMeta) (*TCP
 	ct.logger.Info("TCP connection created", "conn", meta.String())
 
 	// Запускаем worker'ов в фоне с защитой от паники
+	tc.relayWG.Add(2)
 	goroutine.SafeGo(func() {
 		ct.relayToProxy(tc)
 	})
@@ -319,6 +322,7 @@ func (ct *ConnTracker) CreateUDP(parentCtx context.Context, meta ConnMeta) (*UDP
 	ct.logger.Info("UDP session created", "conn", meta.String())
 
 	// Запускаем worker для отправки пакетов в proxy с защитой от паники
+	uc.relayWG.Add(1)
 	goroutine.SafeGo(func() {
 		ct.relayUDPPackets(uc)
 	})
@@ -449,6 +453,7 @@ forceClose:
 
 // relayToProxy читает из канала ToProxy (от gVisor) и пишет в SOCKS5
 func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
+	defer tc.relayWG.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			ct.logger.Error("relayToProxy panic recovered", "recover", r, "conn", tc.Meta.String())
@@ -512,6 +517,7 @@ func (ct *ConnTracker) relayToProxy(tc *TCPConn) {
 
 // relayFromProxy читает из SOCKS5 и отправляет в канал FromProxy (в gVisor)
 func (ct *ConnTracker) relayFromProxy(tc *TCPConn) {
+	defer tc.relayWG.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			ct.logger.Error("relayFromProxy panic recovered", "recover", r, "conn", tc.Meta.String())
@@ -667,6 +673,7 @@ func (ct *ConnTracker) dialProxy(tc *TCPConn) error {
 
 // relayUDPPackets отправляет UDP пакеты в proxy
 func (ct *ConnTracker) relayUDPPackets(uc *UDPConn) {
+	defer uc.relayWG.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			ct.logger.Error("relayUDPPackets panic recovered", "recover", r, "conn", uc.Meta.String())
@@ -762,6 +769,7 @@ func (ct *ConnTracker) dialUDPProxy(uc *UDPConn) error {
 	uc.proxyMu.Unlock()
 
 	// Start reading from proxy с защитой от паники
+	uc.relayWG.Add(1)
 	goroutine.SafeGo(func() {
 		ct.readUDPFromProxy(uc)
 	})
@@ -776,6 +784,8 @@ func (ct *ConnTracker) readUDPFromProxy(uc *UDPConn) {
 		if r := recover(); r != nil {
 			ct.logger.Error("readUDPFromProxy panic recovered", "recover", r, "conn", uc.Meta.String())
 		}
+		// Always remove UDP session when read goroutine exits
+		ct.RemoveUDP(uc)
 	}()
 
 	// Use buffer pool for efficient memory management

@@ -145,7 +145,10 @@ func RegisterComponents(mgr *Manager, components Components) {
 	// Register DNS resolver
 	if components.DNSResolver != nil {
 		mgr.Register(NewWrapper("dns_resolver", func(ctx context.Context) error {
-			logger.Info("Stopping DNS resolver prefetch")
+			logger.Info("Stopping DNS resolver")
+			if stopper, ok := components.DNSResolver.(interface{ Stop() }); ok {
+				stopper.Stop()
+			}
 			return nil
 		}))
 	}
@@ -154,6 +157,9 @@ func RegisterComponents(mgr *Manager, components Components) {
 	if components.DoHServer != nil {
 		mgr.Register(NewWrapper("doh_server", func(ctx context.Context) error {
 			logger.Info("Stopping DoH server")
+			if stopper, ok := components.DoHServer.(interface{ Stop() error }); ok {
+				return stopper.Stop()
+			}
 			return nil
 		}))
 	}

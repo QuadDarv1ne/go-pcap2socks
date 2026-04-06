@@ -305,60 +305,74 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.sendSuccess(w, status)
 }
 
-// getIsRunningFn returns a function to check if service is running
-// This is set from main package
+// Global callback functions for metrics and status.
+// Protected by callbacksMu for thread safety.
+var callbacksMu sync.RWMutex
+
 var getIsRunningFn func() bool
 var getProxyConnectionStatsFn func() (success, errors uint64, errorRate float64, ok bool)
 var getDNSMetricsFn func() (hits, misses uint64, hitRatio float64, ok bool)
 var getDHCPMetricsFn func() (map[string]interface{}, bool)
 var getProxyHealthFn func() (map[string]interface{}, bool)
+var getConnPoolMetricsFn func() (map[string]interface{}, bool)
+var getCircuitBreakerStatsFn func() (map[string]interface{}, bool)
+var getHealthCheckerStatsFn func() (map[string]interface{}, bool)
+var startServiceFn func() error
+var stopServiceFn func() error
 
 // SetIsRunningFn sets the function to check if service is running
 func SetIsRunningFn(fn func() bool) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getIsRunningFn = fn
 }
 
 // SetProxyConnectionStatsFn sets the function to get proxy connection stats
 func SetProxyConnectionStatsFn(fn func() (success, errors uint64, errorRate float64, ok bool)) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getProxyConnectionStatsFn = fn
 }
 
 // SetDNSMetricsFn sets the function to get DNS metrics
 func SetDNSMetricsFn(fn func() (hits, misses uint64, hitRatio float64, ok bool)) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getDNSMetricsFn = fn
 }
 
 // SetDHCPMetricsFn sets the function to get DHCP metrics
 func SetDHCPMetricsFn(fn func() (map[string]interface{}, bool)) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getDHCPMetricsFn = fn
 }
 
 // SetProxyHealthFn sets the function to get proxy health status
 func SetProxyHealthFn(fn func() (map[string]interface{}, bool)) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getProxyHealthFn = fn
 }
 
 // SetConnPoolMetricsFn sets the function to get connection pool metrics
-var getConnPoolMetricsFn func() (map[string]interface{}, bool)
-
-// SetConnPoolMetricsFn sets the function to get connection pool metrics
 func SetConnPoolMetricsFn(fn func() (map[string]interface{}, bool)) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getConnPoolMetricsFn = fn
 }
 
 // SetCircuitBreakerStatsFn sets the function to get circuit breaker stats
-var getCircuitBreakerStatsFn func() (map[string]interface{}, bool)
-
-// SetCircuitBreakerStatsFn sets the function to get circuit breaker stats
 func SetCircuitBreakerStatsFn(fn func() (map[string]interface{}, bool)) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getCircuitBreakerStatsFn = fn
 }
 
 // SetHealthCheckerStatsFn sets the function to get health checker stats
-var getHealthCheckerStatsFn func() (map[string]interface{}, bool)
-
-// SetHealthCheckerStatsFn sets the function to get health checker stats
 func SetHealthCheckerStatsFn(fn func() (map[string]interface{}, bool)) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	getHealthCheckerStatsFn = fn
 }
 
@@ -436,11 +450,10 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 }
 
 // startServiceFn and stopServiceFn are callbacks for real service control
-var startServiceFn func() error
-var stopServiceFn func() error
-
-// SetServiceCallbacks sets the start and stop callbacks
+// Protected by callbacksMu
 func SetServiceCallbacks(startFn func() error, stopFn func() error) {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
 	startServiceFn = startFn
 	stopServiceFn = stopFn
 }

@@ -297,6 +297,7 @@ type Router struct {
 	macFilter    *cfg.MACFilter
 	routeCache   *routeCache
 	stopCleanup  chan struct{}
+	cleanupWG    sync.WaitGroup // Wait for cleanup goroutine
 
 	// Bandwidth limiting
 	bandwidthLimiter *bandwidth.BandwidthLimiter
@@ -467,6 +468,7 @@ func NewRouter(rules []cfg.Rule, proxies map[string]Proxy) *Router {
 	r.bandwidthLimiter = limiter
 
 	// Start cleanup goroutine
+	r.cleanupWG.Add(1)
 	goroutine.SafeGo(r.cleanupLoop)
 
 	return r
@@ -474,6 +476,7 @@ func NewRouter(rules []cfg.Rule, proxies map[string]Proxy) *Router {
 
 // cleanupLoop periodically removes expired cache entries
 func (r *Router) cleanupLoop() {
+	defer r.cleanupWG.Done()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -490,6 +493,7 @@ func (r *Router) cleanupLoop() {
 // Stop stops the router and cleanup goroutine
 func (r *Router) Stop() {
 	close(r.stopCleanup)
+	r.cleanupWG.Wait()
 }
 
 // SetBandwidthLimit sets bandwidth limit for a specific client
