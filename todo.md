@@ -137,6 +137,11 @@
 - ✅ **MEDIUM**: windivert/dhcp_server.go проверяет stopChan перед перезапуском packetLoop — предотвращена утечка горутин при shutdown
 - ✅ **MEDIUM**: health/checker.go — triggerRecovery вызывается напрямую (без лишней горутины), добавлена защита от nested recovery
 
+### Улучшения стабильности (коммит c2a3dc8)
+- ✅ **MEDIUM**: tunnel/udp.go — обновление write deadline при успешной записи, предотвращение premature timeout активных UDP сессий
+- ✅ **MEDIUM**: proxy/socks5.go — pooledConn теперь не возвращает соединения с ошибками в пул, добавлен CloseWithError()
+- ✅ **LOW**: main.go — закрытие лог-файла при выходе (предотвращение утечки file descriptor)
+
 ### Состояние проекта
 - Компиляция: ✅ (все пакеты)
 - TODO/FIXME: 0
