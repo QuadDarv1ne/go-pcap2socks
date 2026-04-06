@@ -132,6 +132,11 @@
 - ✅ **MEDIUM**: Router.cleanupLoop теперь имеет WaitGroup — корректное ожидание при Stop()
 - ✅ **MEDIUM**: Все глобальные колбэки в API защищены sync.RWMutex — предотвращены data races
 
+### Дополнительные исправления (коммит a83d839)
+- ✅ **HIGH**: proxy_handler.go ждёт relayWG перед RemoveUDP — устранена race при удалении UDP-сессии
+- ✅ **MEDIUM**: windivert/dhcp_server.go проверяет stopChan перед перезапуском packetLoop — предотвращена утечка горутин при shutdown
+- ✅ **MEDIUM**: health/checker.go — triggerRecovery вызывается напрямую (без лишней горутины), добавлена защита от nested recovery
+
 ### Состояние проекта
 - Компиляция: ✅ (все пакеты)
 - TODO/FIXME: 0
