@@ -535,10 +535,8 @@ func (hc *HealthChecker) runChecks(ctx context.Context) {
 				"threshold", hc.recoveryThreshold,
 				"failed_probes", len(failedProbes),
 				"backoff", time.Duration(hc.backoffInterval.Load()))
-			// Run recovery in background to not block the health check loop
-			goroutine.SafeGo(func() {
-				hc.triggerRecovery(ctx, failedProbes)
-			})
+			// Run recovery directly - triggerRecovery has its own protection
+			hc.triggerRecovery(ctx, failedProbes)
 		}
 	} else {
 		// Reset counter and backoff on success
@@ -667,10 +665,19 @@ func (hc *HealthChecker) triggerRecovery(ctx context.Context, failedProbes []Pro
 	}
 
 	// Prevent recovery loops - only one recovery at a time
+	// Use a marker value to prevent double recovery
 	if hc.consecutiveFailures.Load() > int32(hc.recoveryThreshold)*2 {
 		slog.Warn("Recovery already in progress, skipping")
 		return
 	}
+	// Mark recovery in progress by setting high failure count
+	hc.consecutiveFailures.Store(int32(hc.recoveryThreshold) * 2)
+	defer func() {
+		// If recovery failed completely, reset counter
+		if hc.consecutiveFailures.Load() >= int32(hc.recoveryThreshold)*2 {
+			hc.consecutiveFailures.Store(0)
+		}
+	}()
 
 	slog.Info("Starting network recovery", "failed_probes", len(failedProbes))
 	hc.totalRecoveries.Add(1)

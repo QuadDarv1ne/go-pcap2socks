@@ -183,7 +183,6 @@ func (s *DHCPServer) HandleRequest(data []byte) ([]byte, error) {
 // packetLoop captures and processes DHCP packets
 // Uses runtime.LockOSThread() for stable Windows performance
 func (s *DHCPServer) packetLoop() {
-	defer s.wg.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("WinDivert packet loop panic", "recover", r)
@@ -191,13 +190,23 @@ func (s *DHCPServer) packetLoop() {
 			if s.backoffTimer != nil {
 				s.backoffTimer.Stop()
 			}
+			// Check if server is being stopped before restarting
+			select {
+			case <-s.stopChan:
+				slog.Info("WinDivert DHCP server stopping, not restarting packet loop")
+				s.wg.Done()
+				return
+			default:
+			}
 			// Restart loop after panic with limit
 			time.Sleep(1 * time.Second)
 			s.wg.Add(1)
 			goroutine.SafeGo(func() {
 				s.packetLoop()
 			})
+			return // Original goroutine is done
 		}
+		s.wg.Done()
 	}()
 
 	// Initialize backoff timer

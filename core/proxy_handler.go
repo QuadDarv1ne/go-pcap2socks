@@ -314,7 +314,10 @@ func (h *ProxyHandler) HandleUDP(conn adapter.UDPConn) {
 	goroutine.SafeGo(func() {
 		defer func() {
 			conn.Close()
-			h.connTracker.RemoveUDP(uc) // Only one goroutine should cleanup
+			// Only remove UDP session if relay goroutine has finished
+			// Use relayWG to wait for readUDPFromProxy to complete
+			uc.relayWG.Wait()
+			h.connTracker.RemoveUDP(uc)
 		}()
 
 		for {
