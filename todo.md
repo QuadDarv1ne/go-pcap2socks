@@ -156,6 +156,10 @@
 - ✅ **HIGH**: main.go — retry loop теперь полностью очищает ресурсы предыдущей попытки (Router.Stop(), DHCP stop, device/stack reset)
 - ✅ **MEDIUM**: proxy/router.go — Stop() теперь вызывает StopHealthChecks() для полной остановки всех горутин
 
+### Очистка ресурсов при shutdown (коммит 094e78e)
+- ✅ **MEDIUM**: nat/nat.go — добавлена функция Teardown() для удаления правил NAT маршрутизации
+- ✅ **MEDIUM**: main.go — вызов nat.Teardown() при graceful shutdown, предотвращение оставления netsh правил в системе
+
 ### Состояние проекта
 - Компиляция: ✅ (все пакеты)
 - TODO/FIXME: 0
