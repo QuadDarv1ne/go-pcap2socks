@@ -16,6 +16,7 @@ import (
 	"github.com/QuadDarv1ne/go-pcap2socks/hotkey"
 	"github.com/QuadDarv1ne/go-pcap2socks/metrics"
 	"github.com/QuadDarv1ne/go-pcap2socks/mtu"
+	"github.com/QuadDarv1ne/go-pcap2socks/nat"
 	"github.com/QuadDarv1ne/go-pcap2socks/profiles"
 	"github.com/QuadDarv1ne/go-pcap2socks/proxy"
 	"github.com/QuadDarv1ne/go-pcap2socks/shutdown"
@@ -110,6 +111,9 @@ var (
 
 	// _metricsServer holds the metrics HTTP server
 	_metricsServer *http.Server
+
+	// _natConfig holds the NAT configuration for teardown
+	_natConfig *nat.Config
 )
 
 // GetStatsStore returns the global statistics store

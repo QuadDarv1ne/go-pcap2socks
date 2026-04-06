@@ -1406,6 +1406,7 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 			slog.Error("NAT setup failed", "err", err)
 		} else {
 			slog.Info("NAT routing configured successfully")
+			_natConfig = natConfig // Save for teardown
 		}
 	}
 
@@ -1762,6 +1763,13 @@ func performGracefulShutdownImpl() {
 		} else {
 			slog.Info("Shutdown manager completed", "duration_ms", time.Since(start).Milliseconds())
 		}
+	}
+
+	// 13. Remove NAT routing rules if they were configured
+	if _natConfig != nil && _natConfig.Enabled {
+		start := time.Now()
+		nat.Teardown(_natConfig)
+		logComponentShutdown("nat_teardown", time.Since(start), nil)
 	}
 
 	// Log total shutdown duration

@@ -53,6 +53,23 @@ func Setup(cfg *Config) error {
 	return nil
 }
 
+// Teardown removes NAT routing rules on shutdown
+func Teardown(cfg *Config) {
+	if !cfg.Enabled {
+		return
+	}
+
+	slog.Info("Removing NAT routing",
+		"external", cfg.ExternalInterface,
+		"internal", cfg.InternalInterface)
+
+	// Remove NAT interfaces (ignore errors - may already be removed)
+	exec.Command("netsh", "routing", "ip", "nat", "delete", "interface", "interface="+cfg.ExternalInterface).Run()
+	exec.Command("netsh", "routing", "ip", "nat", "delete", "interface", "interface="+cfg.InternalInterface).Run()
+
+	slog.Info("NAT routing removed")
+}
+
 // enableIPRouting enables IP forwarding in Windows registry
 func enableIPRouting() error {
 	// Use reg add command to enable IPEnableRouter
