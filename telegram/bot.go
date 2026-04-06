@@ -124,12 +124,20 @@ func (b *Bot) Start() {
 
 // StartPeriodicReports starts periodic traffic reports
 func (b *Bot) StartPeriodicReports(interval time.Duration) {
-	if !b.enabled || b.reportRunning {
+	if !b.enabled {
 		return
 	}
 
 	b.mu.Lock()
+	// Stop existing reports first to prevent goroutine leaks
+	if b.reportRunning {
+		b.reportRunning = false
+		if b.reportStop != nil {
+			close(b.reportStop)
+		}
+	}
 	b.reportInterval = interval
+	b.reportStop = make(chan struct{}) // Fresh channel for this cycle
 	b.reportRunning = true
 	b.mu.Unlock()
 
@@ -153,14 +161,15 @@ func (b *Bot) StartPeriodicReports(interval time.Duration) {
 
 // StopPeriodicReports stops periodic reports
 func (b *Bot) StopPeriodicReports() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if !b.reportRunning {
 		return
 	}
-
-	close(b.reportStop)
-	b.mu.Lock()
 	b.reportRunning = false
-	b.mu.Unlock()
+	if b.reportStop != nil {
+		close(b.reportStop)
+	}
 }
 
 func (b *Bot) sendPeriodicReport() {

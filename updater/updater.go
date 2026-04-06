@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/goroutine"
@@ -59,6 +60,7 @@ type Updater struct {
 	checkInterval  time.Duration
 	httpClient     *http.Client
 	onUpdate       func(oldVersion, newVersion string)
+	checkMu        sync.Mutex      // Protects checkStop and checkRunning
 	checkStop      chan struct{}
 	checkRunning   bool
 }
@@ -237,12 +239,20 @@ func (u *Updater) ApplyUpdate(newVersion string) error {
 
 // StartAutoCheck starts periodic update checking in background
 func (u *Updater) StartAutoCheck() {
+	u.checkMu.Lock()
 	if u.checkRunning {
+		u.checkMu.Unlock()
 		return
+	}
+
+	// Stop any existing check first
+	if u.checkStop != nil {
+		close(u.checkStop)
 	}
 
 	u.checkStop = make(chan struct{})
 	u.checkRunning = true
+	u.checkMu.Unlock()
 
 	goroutine.SafeGo(func() {
 		ticker := time.NewTicker(u.checkInterval)
@@ -277,10 +287,11 @@ func (u *Updater) StartAutoCheck() {
 
 // StopAutoCheck stops periodic update checking
 func (u *Updater) StopAutoCheck() {
+	u.checkMu.Lock()
+	defer u.checkMu.Unlock()
 	if !u.checkRunning {
 		return
 	}
-
 	close(u.checkStop)
 	u.checkRunning = false
 }

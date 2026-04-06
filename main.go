@@ -829,6 +829,13 @@ func main() {
 	maxRetries := 3
 	retryDelay := 5 * time.Second
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Stop previous router's health checks on retry to prevent goroutine accumulation
+		if attempt > 1 && _defaultProxy != nil {
+			if router, ok := _defaultProxy.(*proxy.Router); ok {
+				router.StopHealthChecks()
+			}
+		}
+
 		err = run(config, localizer)
 		if err == nil {
 			break // Success

@@ -341,8 +341,17 @@ func (r *Router) HealthStatus() map[string]map[string]interface{} {
 	return status
 }
 
-// StartHealthChecks starts periodic health checks for all proxies
+// StartHealthChecks starts periodic health checks on all proxies.
+// If health checks are already running, they are stopped and restarted.
 func (r *Router) StartHealthChecks(interval time.Duration) {
+	// Stop any existing health checks first to prevent goroutine leaks
+	if r.healthCheckStop != nil {
+		r.stopHealthOnce = sync.Once{}
+		r.StopHealthChecks()
+	}
+	// Reset the Once for fresh stop cycle
+	r.stopHealthOnce = sync.Once{}
+
 	if interval <= 0 {
 		interval = 30 * time.Second // Default interval
 	}
