@@ -152,6 +152,10 @@
 - ✅ **MEDIUM**: telegram/bot.go — StartPeriodicReports пересоздаёт stop-канал и останавливает предыдущие отчёты
 - ✅ **MEDIUM**: updater/updater.go — checkRunning/checkStop защищены sync.Mutex, устранён race condition
 
+### Утечки ресурсов при retry (коммит 7cb37f4)
+- ✅ **HIGH**: main.go — retry loop теперь полностью очищает ресурсы предыдущей попытки (Router.Stop(), DHCP stop, device/stack reset)
+- ✅ **MEDIUM**: proxy/router.go — Stop() теперь вызывает StopHealthChecks() для полной остановки всех горутин
+
 ### Состояние проекта
 - Компиляция: ✅ (все пакеты)
 - TODO/FIXME: 0
