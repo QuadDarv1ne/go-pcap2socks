@@ -86,8 +86,10 @@ func (s *LocalServer) readLoop() {
 		msgBuf := make([]byte, n)
 		copy(msgBuf, buf[:n])
 
+		// Capture remoteAddr by value to prevent data race
+		addrCopy := remoteAddr
 		goroutine.SafeGo(func() {
-			s.handleDNSQuery(msgBuf, remoteAddr)
+			s.handleDNSQuery(msgBuf, addrCopy)
 		})
 	}
 }

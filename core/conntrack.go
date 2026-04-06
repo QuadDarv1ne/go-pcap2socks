@@ -392,9 +392,11 @@ func (ct *ConnTracker) CloseAll() {
 	// Close all connections outside the lock
 	for _, tc := range tcpConns {
 		ct.RemoveTCP(tc)
+		tc.relayWG.Wait()
 	}
 	for _, uc := range udpConns {
 		ct.RemoveUDP(uc)
+		uc.relayWG.Wait()
 	}
 
 	ct.logger.Info("All connections closed",
@@ -428,6 +430,8 @@ func (ct *ConnTracker) Stop(ctx context.Context) error {
 		default:
 		}
 		ct.RemoveTCP(tc)
+		// Wait for relay goroutines to finish
+		tc.relayWG.Wait()
 	}
 
 	// Close all UDP connections gracefully outside the lock
@@ -439,6 +443,8 @@ func (ct *ConnTracker) Stop(ctx context.Context) error {
 		default:
 		}
 		ct.RemoveUDP(uc)
+		// Wait for relay goroutines to finish
+		uc.relayWG.Wait()
 	}
 
 forceClose:
