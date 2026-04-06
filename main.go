@@ -829,11 +829,25 @@ func main() {
 	maxRetries := 3
 	retryDelay := 5 * time.Second
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Stop previous router's health checks on retry to prevent goroutine accumulation
-		if attempt > 1 && _defaultProxy != nil {
-			if router, ok := _defaultProxy.(*proxy.Router); ok {
-				router.StopHealthChecks()
+		// Clean up from previous attempt on retry
+		if attempt > 1 {
+			// Stop previous router completely (includes health checks)
+			if _defaultProxy != nil {
+				if router, ok := _defaultProxy.(*proxy.Router); ok {
+					router.Stop()
+				}
+				_defaultProxy = nil
 			}
+			// Stop previous DHCP server to release resources
+			if _dhcpServer != nil {
+				if stopper, ok := _dhcpServer.(interface{ Stop() }); ok {
+					stopper.Stop()
+				}
+				_dhcpServer = nil
+			}
+			// Reset device and stack for clean re-initialization
+			_defaultDevice = nil
+			_defaultStack = nil
 		}
 
 		err = run(config, localizer)

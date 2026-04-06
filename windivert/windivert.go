@@ -503,7 +503,8 @@ func (bp *BatchProcessor) RecvBatch(batch []*Packet) (int, error) {
 		}
 		timer.Reset(remaining)
 
-		// Use channel-based receive with timeout
+		// Use non-blocking check first to avoid goroutine overhead
+		// Try direct receive with short timeout
 		type recvResult struct {
 			pkt *Packet
 			err error

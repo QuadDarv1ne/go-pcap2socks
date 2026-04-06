@@ -501,6 +501,8 @@ func (r *Router) cleanupLoop() {
 
 // Stop stops the router and cleanup goroutine
 func (r *Router) Stop() {
+	// Stop health checks first
+	r.StopHealthChecks()
 	close(r.stopCleanup)
 	r.cleanupWG.Wait()
 }
