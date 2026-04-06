@@ -146,6 +146,12 @@
 - ✅ **HIGH**: core/conntrack.go — Stop() и CloseAll() теперь ждут relayWG, предотвращение утечки relay-горутин при shutdown
 - ✅ **HIGH**: dnslocal/local_server.go — фикс data race: remoteAddr захватывался по ссылке в closure, теперь по значению
 
+### Утечки горутин и race conditions (коммит eaa1566)
+- ✅ **HIGH**: proxy/router.go — StartHealthChecks теперь останавливает предыдущие проверки, предотвращение утечки горутин
+- ✅ **HIGH**: main.go — retry loop останавливает health checks предыдущего роутера, предотвращение накопления горутин
+- ✅ **MEDIUM**: telegram/bot.go — StartPeriodicReports пересоздаёт stop-канал и останавливает предыдущие отчёты
+- ✅ **MEDIUM**: updater/updater.go — checkRunning/checkStop защищены sync.Mutex, устранён race condition
+
 ### Состояние проекта
 - Компиляция: ✅ (все пакеты)
 - TODO/FIXME: 0
