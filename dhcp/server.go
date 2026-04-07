@@ -3,9 +3,11 @@ package dhcp
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -982,6 +984,74 @@ func (s *Server) GetLeases() map[string]*DHCPLease {
 // GetLeaseCount returns the number of active leases
 func (s *Server) GetLeaseCount() int {
 	return int(s.leaseCount.Load())
+}
+
+// LoadLeases loads DHCP leases from a JSON file
+func (s *Server) LoadLeases(filePath string) error {
+	// Read file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("read lease file: %w", err)
+	}
+	// Parse JSON
+	var serialized []serializedLease
+	if err := json.Unmarshal(data, &serialized); err != nil {
+		return fmt.Errorf("parse lease file: %w", err)
+	}
+	// Load leases
+	now := time.Now()
+	count := 0
+	for _, sl := range serialized {
+		mac, err := net.ParseMAC(sl.MAC)
+		if err != nil {
+			continue
+		}
+		// Only load non-expired leases
+		if sl.ExpiresAt.After(now) {
+			lease := &DHCPLease{
+				IP:          net.ParseIP(sl.IP),
+				MAC:         mac,
+				Hostname:    sl.Hostname,
+				ExpiresAt:   sl.ExpiresAt,
+				Transaction: sl.Transaction,
+			}
+			s.leases.Store(sl.MAC, lease)
+			s.leaseCount.Add(1)
+			count++
+		}
+	}
+	slog.Info("DHCP leases loaded from file", "count", count, "file", filePath)
+	return nil
+}
+
+// SaveLeases saves DHCP leases to a JSON file
+func (s *Server) SaveLeases(filePath string) error {
+	// Get all leases
+	leases := s.GetLeases()
+	if len(leases) == 0 {
+		return nil // Nothing to save
+	}
+	// Serialize leases
+	serialized := make([]serializedLease, 0, len(leases))
+	for mac, lease := range leases {
+		serialized = append(serialized, serializedLease{
+			IP:          lease.IP.String(),
+			MAC:         mac,
+			Hostname:    lease.Hostname,
+			ExpiresAt:   lease.ExpiresAt,
+			Transaction: lease.Transaction,
+		})
+	}
+	// Write to file
+	data, err := json.MarshalIndent(serialized, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal leases: %w", err)
+	}
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("write leases file: %w", err)
+	}
+	slog.Info("DHCP leases saved to file", "count", len(serialized), "file", filePath)
+	return nil
 }
 
 // BuildDHCPRequestPacket builds an Ethernet+IP+UDP+DHCP packet for sending

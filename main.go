@@ -998,25 +998,6 @@ func main() {
 			}
 		}
 
-		// Check if it's simple DHCP server (npcap_dhcp)
-		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-			dhcpLeases := simpleDHCP.GetLeases()
-			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-			for mac, lease := range dhcpLeases {
-				leaseMap := map[string]interface{}{
-					"mac":        mac,
-					"ip":         lease.IP.String(),
-					"hostname":   lease.Hostname,
-					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-				}
-				leases = append(leases, leaseMap)
-
-				// Update hostname in stats store
-				if _statsStore != nil && lease.Hostname != "" {
-					_statsStore.SetHostname(mac, lease.Hostname)
-				}
-			}
-		}
 
 		return leases
 	})
@@ -1517,6 +1498,23 @@ func run(cfg *cfg.Config, localizer *i18n.Localizer) error {
 
 	// Load DHCP leases from previous session
 	if dhcpServer != nil {
+		// Try to load leases from WinDivert DHCP server
+		if wdDHCP, ok := dhcpServer.(*windivert.DHCPServer); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := wdDHCP.LoadLeases(leasesFile); err != nil {
+				slog.Warn("Failed to load DHCP leases", "error", err)
+			}
+		}
+		// Try to load leases from standard DHCP server
+		if stdDHCP, ok := dhcpServer.(*dhcp.Server); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := stdDHCP.LoadLeases(leasesFile); err != nil {
+				slog.Warn("Failed to load DHCP leases", "error", err)
+			}
+		}
+		// Try to load leases from npcap simple DHCP server
 		if simpleDHCP, ok := dhcpServer.(*npcap_dhcp.SimpleServer); ok {
 			executable, _ := os.Executable()
 			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
@@ -1866,6 +1864,21 @@ func stopImpl() {
 	// Stop DHCP server (must stop before network stack)
 	if _dhcpServer != nil {
 		// Save DHCP leases before stopping
+		if wdDHCP, ok := _dhcpServer.(*windivert.DHCPServer); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := wdDHCP.SaveLeases(leasesFile); err != nil {
+				slog.Warn("Failed to save DHCP leases", "error", err)
+			}
+		}
+		if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
+			executable, _ := os.Executable()
+			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
+			if err := stdDHCP.SaveLeases(leasesFile); err != nil {
+				slog.Warn("Failed to save DHCP leases", "error", err)
+			}
+		}
+		// Save leases from npcap simple DHCP server
 		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
 			executable, _ := os.Executable()
 			leasesFile := filepath.Join(filepath.Dir(executable), "dhcp_leases.json")
@@ -2726,25 +2739,6 @@ func autoConfigureAndStart() {
 			}
 		}
 
-		// Check if it's simple DHCP server (npcap_dhcp)
-		if simpleDHCP, ok := _dhcpServer.(*npcap_dhcp.SimpleServer); ok {
-			dhcpLeases := simpleDHCP.GetLeases()
-			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-			for mac, lease := range dhcpLeases {
-				leaseMap := map[string]interface{}{
-					"mac":        mac,
-					"ip":         lease.IP.String(),
-					"hostname":   lease.Hostname,
-					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-				}
-				leases = append(leases, leaseMap)
-
-				// Update hostname in stats store
-				if _statsStore != nil && lease.Hostname != "" {
-					_statsStore.SetHostname(mac, lease.Hostname)
-				}
-			}
-		}
 
 		return leases
 	})

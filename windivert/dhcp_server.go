@@ -825,6 +825,16 @@ func (s *DHCPServer) GetLeases() map[string]*dhcp.DHCPLease {
 	return s.server.GetLeases()
 }
 
+// LoadLeases loads DHCP leases from a JSON file
+func (s *DHCPServer) LoadLeases(filePath string) error {
+	return s.server.LoadLeases(filePath)
+}
+
+// SaveLeases saves DHCP leases to a JSON file
+func (s *DHCPServer) SaveLeases(filePath string) error {
+	return s.server.SaveLeases(filePath)
+}
+
 // buildIPUDPPacket builds an IP+UDP packet with payload (no Ethernet header)
 // This is used for WinDivert network layer which expects IP packets without Ethernet framing
 func buildIPUDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) ([]byte, error) {
