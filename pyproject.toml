@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "go-pcap2socks-utils"
+version = "1.0.0"
+description = "Python utilities for go-pcap2socks project"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Maksim Duplei", email = "your-email@example.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "python-docx>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0",
+    "flake8>=7.0",
+    "mypy>=1.8",
+    "pytest>=8.0",
+]
+
+[project.scripts]
+generate-doc = "generate_doc:main"
+
+[tool.setuptools]
+py-modules = ["check_context", "check_lines", "check_strings", "generate_doc"]
+
+[tool.black]
+line-length = 120
+target-version = ['py311', 'py313', 'py314']
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

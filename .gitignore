@@ -84,3 +84,7 @@ go-pcap2socks.log
 
 # Coverage
 coverage.out
+
+# Python cache
+__pycache__/
+*.pyc

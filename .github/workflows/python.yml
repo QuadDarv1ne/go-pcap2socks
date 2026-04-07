@@ -1,0 +1,122 @@
+name: Python Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - '**/*.py'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - '**/*.py'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+
+jobs:
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13', '3.14']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install black flake8 mypy
+
+    - name: Check formatting with black
+      run: |
+        black --check --diff *.py || true
+
+    - name: Lint with flake8
+      run: |
+        flake8 *.py --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 *.py --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+    - name: Type check with mypy
+      run: |
+        mypy *.py --ignore-missing-imports || true
+
+  python-syntax-check:
+    name: Python Syntax Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13', '3.14']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Check Python syntax
+      run: |
+        python -m py_compile check_context.py
+        python -m py_compile check_lines.py
+        python -m py_compile check_strings.py
+        echo "Syntax check passed for all Python files"
+
+    - name: Validate script execution (dry run)
+      run: |
+        # Test that scripts can be imported without errors
+        python -c "import py_compile; py_compile.compile('check_context.py', doraise=True)"
+        python -c "import py_compile; py_compile.compile('check_lines.py', doraise=True)"
+        python -c "import py_compile; py_compile.compile('check_strings.py', doraise=True)"
+        echo "All scripts compiled successfully"
+
+  python-doc-generation:
+    name: Python Doc Generation Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13', '3.14']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Test doc generation
+      run: |
+        python generate_doc.py
+        # Check if the document was created
+        if [ -f "go-pcap2socks_improvements.docx" ]; then
+          echo "Document generation successful on Python ${{ matrix.python-version }}"
+        else
+          echo "ERROR: Document was not generated"
+          exit 1
+        fi

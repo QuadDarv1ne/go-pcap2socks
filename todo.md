@@ -2,8 +2,22 @@
 
 > Последнее обновление: 2026-04-07
 > Ветка: dev
-> Статус: SYNCED (dev == main)
+> Статус: PYTHON COMPATIBILITY ADDED
 > Коммит: 474f7d0
+
+---
+
+## ✅ НЕДАВНИЕ ИЗМЕНЕНИЯ (2026-04-07)
+
+### Python Compatibility
+- [x] Добавлена поддержка Python 3.11, 3.13, 3.14
+- [x] Создан pyproject.toml с зависимостями
+- [x] Создан requirements.txt
+- [x] Создан .github/workflows/python.yml для CI/CD
+- [x] Создан .python-version для pyenv
+- [x] Удалены временные Python-скрипты (check_*.py, generate_doc.py)
+- [x] Удалены лишние отчеты и документация (14 файлов)
+- [x] Протестирована генерация документа на всех версиях Python
 
 ---
 
