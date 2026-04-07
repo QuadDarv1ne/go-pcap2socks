@@ -1,357 +1,380 @@
-//go:build ignore
-
 package retry
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
 
-var errTemporary = errors.New("temporary error")
-var errPermanent = errors.New("permanent error")
+var errNonRetryable = errors.New("non-retryable error")
+var errTransient = errors.New("transient error")
 
-func TestRetrySuccess(t *testing.T) {
-	cfg := DefaultConfig()
-
-	attempts := 0
-	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
-		attempts++
+func TestDo_Success(t *testing.T) {
+	callCount := 0
+	fn := func(ctx context.Context, attempt int) error {
+		callCount++
 		return nil
-	}, cfg)
-
-	if !result.Success {
-		t.Error("Expected success")
-	}
-	if attempts != 1 {
-		t.Errorf("Expected 1 attempt, got %d", attempts)
-	}
-	if result.Attempts != 1 {
-		t.Errorf("Expected 1 attempt in result, got %d", result.Attempts)
-	}
-}
-
-func TestRetryWithFailures(t *testing.T) {
-	cfg := Config{
-		MaxAttempts:  3,
-		InitialDelay: 10 * time.Millisecond,
-		MaxDelay:     100 * time.Millisecond,
-		Multiplier:   2.0,
-		Jitter:       0,
 	}
 
-	attempts := 0
-	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
-		attempts++
-		if attempt < 3 {
-			return errTemporary
-		}
-		return nil
-	}, cfg)
-
-	if !result.Success {
-		t.Error("Expected success after retries")
-	}
-	if attempts != 3 {
-		t.Errorf("Expected 3 attempts, got %d", attempts)
-	}
-}
-
-func TestRetryMaxAttempts(t *testing.T) {
 	cfg := Config{
 		MaxAttempts:  3,
 		InitialDelay: 1 * time.Millisecond,
 		MaxDelay:     10 * time.Millisecond,
-		Multiplier:   1.0,
-	}
-
-	attempts := 0
-	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
-		attempts++
-		return errTemporary
-	}, cfg)
-
-	if result.Success {
-		t.Error("Expected failure after max attempts")
-	}
-	if attempts != 3 {
-		t.Errorf("Expected 3 attempts, got %d", attempts)
-	}
-}
-
-func TestRetryNonRetryableError(t *testing.T) {
-	cfg := Config{
-		MaxAttempts:     5,
-		InitialDelay:    1 * time.Millisecond,
-		RetryableErrors: []error{errTemporary},
-	}
-
-	attempts := 0
-	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
-		attempts++
-		return errPermanent
-	}, cfg)
-
-	if result.Success {
-		t.Error("Expected failure for non-retryable error")
-	}
-	if attempts != 1 {
-		t.Errorf("Expected 1 attempt for non-retryable error, got %d", attempts)
-	}
-}
-
-func TestRetryContextCancellation(t *testing.T) {
-	cfg := Config{
-		MaxAttempts:  100,
-		InitialDelay: 100 * time.Millisecond,
-		MaxDelay:     1 * time.Second,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	start := time.Now()
-	result := Do(ctx, func(ctx context.Context, attempt int) error {
-		return errTemporary
-	}, cfg)
-
-	elapsed := time.Since(start)
-
-	if result.Success {
-		t.Error("Expected failure due to context cancellation")
-	}
-	if elapsed > 150*time.Millisecond {
-		t.Errorf("Expected early exit due to context, took %v", elapsed)
-	}
-	if result.LastErr != context.DeadlineExceeded {
-		t.Errorf("Expected context.DeadlineExceeded, got %v", result.LastErr)
-	}
-}
-
-func TestRetryExponentialBackoff(t *testing.T) {
-	cfg := Config{
-		MaxAttempts:  4,
-		InitialDelay: 10 * time.Millisecond,
-		MaxDelay:     100 * time.Millisecond,
 		Multiplier:   2.0,
 		Jitter:       0,
 	}
 
-	delays := []time.Duration{}
-	currentDelay := cfg.InitialDelay
-
-	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
-		if attempt > 1 {
-			delays = append(delays, currentDelay)
-		}
-		currentDelay = time.Duration(float64(currentDelay) * cfg.Multiplier)
-		if currentDelay > cfg.MaxDelay {
-			currentDelay = cfg.MaxDelay
-		}
-		return errTemporary
-	}, cfg)
-
-	if result.Success {
-		t.Error("Expected failure")
-	}
-
-	// Verify exponential backoff
-	expectedDelays := []time.Duration{
-		10 * time.Millisecond,
-		20 * time.Millisecond,
-		40 * time.Millisecond,
-	}
-
-	for i, expected := range expectedDelays {
-		if i < len(delays) {
-			// Allow some tolerance for timing
-			if delays[i] < expected/2 || delays[i] > expected*2 {
-				t.Errorf("Delay %d: expected ~%v, got %v", i, expected, delays[i])
-			}
-		}
-	}
-}
-
-func TestRetryWithTimeout(t *testing.T) {
-	cfg := Config{
-		MaxAttempts:  3,
-		InitialDelay: 10 * time.Millisecond,
-		Timeout:      50 * time.Millisecond,
-	}
-
-	attemptDurations := []time.Duration{}
-
-	result := Do(context.Background(), func(ctx context.Context, attempt int) error {
-		start := time.Now()
-		<-ctx.Done()
-		attemptDurations = append(attemptDurations, time.Since(start))
-		return ctx.Err()
-	}, cfg)
-
-	if result.Success {
-		t.Error("Expected failure")
-	}
-
-	// Each attempt should timeout after ~50ms
-	for i, d := range attemptDurations {
-		if d < 40*time.Millisecond || d > 70*time.Millisecond {
-			t.Errorf("Attempt %d duration %v outside expected range", i, d)
-		}
-	}
-}
-
-func TestRetryWithResult(t *testing.T) {
-	cfg := DefaultConfig()
-
-	attempts := 0
-	value, result := DoWithResult(context.Background(), func(ctx context.Context, attempt int) (int, error) {
-		attempts++
-		return attempt * 10, nil
-	}, cfg)
+	result := Do(context.Background(), fn, cfg)
 
 	if !result.Success {
 		t.Error("Expected success")
 	}
-	if value != 10 {
-		t.Errorf("Expected value 10, got %d", value)
+	if result.Attempts != 1 {
+		t.Errorf("Expected 1 attempt, got %d", result.Attempts)
 	}
-	if attempts != 1 {
-		t.Errorf("Expected 1 attempt, got %d", attempts)
+	if callCount != 1 {
+		t.Errorf("Expected 1 call, got %d", callCount)
 	}
 }
 
-func TestRetryWithResultFailure(t *testing.T) {
-	cfg := Config{
-		MaxAttempts:  2,
-		InitialDelay: 1 * time.Millisecond,
+func TestDo_Failure(t *testing.T) {
+	callCount := 0
+	fn := func(ctx context.Context, attempt int) error {
+		callCount++
+		return errTransient
 	}
 
-	attempts := 0
-	_, result := DoWithResult(context.Background(), func(ctx context.Context, attempt int) (int, error) {
-		attempts++
-		return 0, errTemporary
-	}, cfg)
+	cfg := Config{
+		MaxAttempts:  3,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       0,
+	}
+
+	result := Do(context.Background(), fn, cfg)
 
 	if result.Success {
 		t.Error("Expected failure")
 	}
-	if attempts != 2 {
-		t.Errorf("Expected 2 attempts, got %d", attempts)
+	if result.Attempts != 3 {
+		t.Errorf("Expected 3 attempts, got %d", result.Attempts)
+	}
+	if callCount != 3 {
+		t.Errorf("Expected 3 calls, got %d", callCount)
+	}
+	if result.LastErr != errTransient {
+		t.Errorf("Expected last err to be errTransient, got %v", result.LastErr)
+	}
+}
+
+func TestDo_NonRetryableError(t *testing.T) {
+	callCount := 0
+	fn := func(ctx context.Context, attempt int) error {
+		callCount++
+		return errNonRetryable
+	}
+
+	cfg := Config{
+		MaxAttempts:     3,
+		InitialDelay:    1 * time.Millisecond,
+		MaxDelay:        10 * time.Millisecond,
+		Multiplier:      2.0,
+		Jitter:          0,
+		RetryableErrors: []error{errTransient},
+	}
+
+	result := Do(context.Background(), fn, cfg)
+
+	if result.Success {
+		t.Error("Expected failure")
+	}
+	if result.Attempts != 1 {
+		t.Errorf("Expected 1 attempt (non-retryable), got %d", result.Attempts)
+	}
+	if callCount != 1 {
+		t.Errorf("Expected 1 call, got %d", callCount)
+	}
+}
+
+func TestDo_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	callCount := 0
+
+	fn := func(ctx context.Context, attempt int) error {
+		callCount++
+		if attempt == 2 {
+			cancel() // Cancel on second attempt
+		}
+		return errTransient
+	}
+
+	cfg := Config{
+		MaxAttempts:  5,
+		InitialDelay: 10 * time.Millisecond,
+		MaxDelay:     50 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       0,
+	}
+
+	result := Do(ctx, fn, cfg)
+
+	if result.Success {
+		t.Error("Expected failure due to cancellation")
+	}
+	if result.LastErr != context.Canceled {
+		t.Errorf("Expected context.Canceled, got %v", result.LastErr)
+	}
+}
+
+func TestDo_InfiniteRetries(t *testing.T) {
+	callCount := 0
+	maxCalls := 5
+
+	fn := func(ctx context.Context, attempt int) error {
+		callCount++
+		if callCount >= maxCalls {
+			return nil // Succeed after maxCalls
+		}
+		return errTransient
+	}
+
+	cfg := Config{
+		MaxAttempts:  0, // Infinite
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       0,
+	}
+
+	result := Do(context.Background(), fn, cfg)
+
+	if !result.Success {
+		t.Error("Expected success")
+	}
+	if result.Attempts != maxCalls {
+		t.Errorf("Expected %d attempts, got %d", maxCalls, result.Attempts)
+	}
+}
+
+func TestDoWithResult(t *testing.T) {
+	callCount := 0
+	fn := func(ctx context.Context, attempt int) (string, error) {
+		callCount++
+		return fmt.Sprintf("result-%d", attempt), nil
+	}
+
+	cfg := Config{
+		MaxAttempts:  3,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       0,
+	}
+
+	result, retryResult := DoWithResult(context.Background(), fn, cfg)
+
+	if !retryResult.Success {
+		t.Error("Expected success")
+	}
+	if result != "result-1" {
+		t.Errorf("Expected 'result-1', got %q", result)
+	}
+	if callCount != 1 {
+		t.Errorf("Expected 1 call, got %d", callCount)
+	}
+}
+
+func TestDoWithResult_Failure(t *testing.T) {
+	fn := func(ctx context.Context, attempt int) (string, error) {
+		return "", errTransient
+	}
+
+	cfg := Config{
+		MaxAttempts:  2,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       0,
+	}
+
+	result, retryResult := DoWithResult(context.Background(), fn, cfg)
+
+	if retryResult.Success {
+		t.Error("Expected failure")
+	}
+	if result != "" {
+		t.Errorf("Expected empty result, got %q", result)
+	}
+}
+
+func TestCalculateDelay(t *testing.T) {
+	baseDelay := 100 * time.Millisecond
+
+	// Test with no jitter
+	delay := calculateDelay(baseDelay, 0)
+	if delay != baseDelay {
+		t.Errorf("Expected %v, got %v", baseDelay, delay)
+	}
+
+	// Test with jitter - should be within range
+	delay = calculateDelay(baseDelay, 0.1)
+	minDelay := time.Duration(float64(baseDelay) * 0.9)
+	maxDelay := time.Duration(float64(baseDelay) * 1.1)
+	if delay < minDelay || delay > maxDelay {
+		t.Errorf("Expected delay between %v and %v, got %v", minDelay, maxDelay, delay)
+	}
+}
+
+func TestCalculateDelay_NegativeResult(t *testing.T) {
+	// Ensure delay never goes negative
+	baseDelay := 100 * time.Millisecond
+	for i := 0; i < 100; i++ {
+		delay := calculateDelay(baseDelay, 0.5)
+		if delay < 0 {
+			t.Errorf("Delay should never be negative, got %v", delay)
+		}
+	}
+}
+
+func TestShouldRetry(t *testing.T) {
+	cfg := Config{
+		RetryableErrors: []error{errTransient},
+	}
+
+	if !shouldRetry(errTransient, cfg) {
+		t.Error("Expected shouldRetry=true for transient error")
+	}
+
+	if shouldRetry(errNonRetryable, cfg) {
+		t.Error("Expected shouldRetry=false for non-retryable error")
+	}
+
+	// Empty list = retry all
+	cfgEmpty := Config{}
+	if !shouldRetry(errNonRetryable, cfgEmpty) {
+		t.Error("Expected shouldRetry=true when no retryable errors specified")
+	}
+}
+
+func TestDefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.MaxAttempts != 3 {
+		t.Errorf("Expected MaxAttempts=3, got %d", cfg.MaxAttempts)
+	}
+	if cfg.InitialDelay != 100*time.Millisecond {
+		t.Errorf("Expected InitialDelay=100ms, got %v", cfg.InitialDelay)
+	}
+	if cfg.Multiplier != 2.0 {
+		t.Errorf("Expected Multiplier=2.0, got %f", cfg.Multiplier)
+	}
+}
+
+func TestAggressiveConfig(t *testing.T) {
+	cfg := AggressiveConfig()
+	if cfg.MaxAttempts != 5 {
+		t.Errorf("Expected MaxAttempts=5, got %d", cfg.MaxAttempts)
+	}
+	if cfg.InitialDelay != 50*time.Millisecond {
+		t.Errorf("Expected InitialDelay=50ms, got %v", cfg.InitialDelay)
+	}
+}
+
+func TestConservativeConfig(t *testing.T) {
+	cfg := ConservativeConfig()
+	if cfg.MaxAttempts != 2 {
+		t.Errorf("Expected MaxAttempts=2, got %d", cfg.MaxAttempts)
+	}
+	if cfg.InitialDelay != 500*time.Millisecond {
+		t.Errorf("Expected InitialDelay=500ms, got %v", cfg.InitialDelay)
 	}
 }
 
 func TestConstantDelay(t *testing.T) {
-	cfg := ConstantDelay(50*time.Millisecond, 3)
-
-	if cfg.InitialDelay != 50*time.Millisecond {
-		t.Errorf("Expected 50ms initial delay, got %v", cfg.InitialDelay)
+	cfg := ConstantDelay(1*time.Second, 5)
+	if cfg.MaxAttempts != 5 {
+		t.Errorf("Expected MaxAttempts=5, got %d", cfg.MaxAttempts)
 	}
-	if cfg.MaxDelay != 50*time.Millisecond {
-		t.Errorf("Expected 50ms max delay, got %v", cfg.MaxDelay)
+	if cfg.InitialDelay != 1*time.Second {
+		t.Errorf("Expected InitialDelay=1s, got %v", cfg.InitialDelay)
+	}
+	if cfg.MaxDelay != 1*time.Second {
+		t.Errorf("Expected MaxDelay=1s, got %v", cfg.MaxDelay)
 	}
 	if cfg.Multiplier != 1.0 {
-		t.Errorf("Expected multiplier 1.0, got %f", cfg.Multiplier)
+		t.Errorf("Expected Multiplier=1.0, got %f", cfg.Multiplier)
 	}
 }
 
-func TestIsRetryableError(t *testing.T) {
+func TestConfig_IsRetryableError(t *testing.T) {
 	cfg := Config{
-		RetryableErrors: []error{errTemporary, context.DeadlineExceeded},
+		RetryableErrors: []error{errTransient},
 	}
 
-	if !cfg.IsRetryableError(errTemporary) {
-		t.Error("Expected errTemporary to be retryable")
+	if !cfg.IsRetryableError(errTransient) {
+		t.Error("Expected errTransient to be retryable")
 	}
-	if !cfg.IsRetryableError(context.DeadlineExceeded) {
-		t.Error("Expected context.DeadlineExceeded to be retryable")
-	}
-	if cfg.IsRetryableError(errPermanent) {
-		t.Error("Did not expect errPermanent to be retryable")
+
+	if cfg.IsRetryableError(errNonRetryable) {
+		t.Error("Expected errNonRetryable to not be retryable")
 	}
 }
 
 func TestGetRetryableErrors(t *testing.T) {
 	errors := GetRetryableErrors()
-
 	if len(errors) == 0 {
-		t.Error("Expected some retryable errors")
+		t.Error("Expected non-empty list of retryable errors")
 	}
 
-	// Check for common errors
-	foundDeadline := false
+	// Check common errors are included
+	found := false
 	for _, err := range errors {
 		if err == context.DeadlineExceeded {
-			foundDeadline = true
+			found = true
 			break
 		}
 	}
-
-	if !foundDeadline {
+	if !found {
 		t.Error("Expected context.DeadlineExceeded in retryable errors")
 	}
 }
 
-func TestRetryJitter(t *testing.T) {
-	cfg := Config{
-		MaxAttempts:  10,
-		InitialDelay: 100 * time.Millisecond,
-		Jitter:       0.5, // 50% jitter
+func BenchmarkDo_Success(b *testing.B) {
+	fn := func(ctx context.Context, attempt int) error {
+		return nil
 	}
 
-	delays := make(map[time.Duration]int)
-
-	Do(context.Background(), func(ctx context.Context, attempt int) error {
-		if attempt > 1 {
-			// Record delay (simplified - actual delay calculation)
-		}
-		return errTemporary
-	}, cfg)
-
-	// With 50% jitter, we should see variation in delays
-	// This is a basic sanity check
-	_ = delays
-}
-
-// BenchmarkRetryNoDelay benchmarks retry with no delays
-func BenchmarkRetryNoDelay(b *testing.B) {
 	cfg := Config{
 		MaxAttempts:  3,
 		InitialDelay: 0,
 		MaxDelay:     0,
+		Multiplier:   2.0,
+		Jitter:       0,
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		Do(context.Background(), func(ctx context.Context, attempt int) error {
-			if attempt < 3 {
-				return errTemporary
-			}
-			return nil
-		}, cfg)
+		_ = Do(context.Background(), fn, cfg)
 	}
 }
 
-// BenchmarkRetrySuccess benchmarks successful retry
-func BenchmarkRetrySuccess(b *testing.B) {
-	cfg := DefaultConfig()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		Do(context.Background(), func(ctx context.Context, attempt int) error {
-			return nil
-		}, cfg)
+func BenchmarkDo_Failure(b *testing.B) {
+	fn := func(ctx context.Context, attempt int) error {
+		return errTransient
 	}
-}
 
-// BenchmarkRetryWithResult benchmarks retry with result
-func BenchmarkRetryWithResult(b *testing.B) {
-	cfg := DefaultConfig()
+	cfg := Config{
+		MaxAttempts:  3,
+		InitialDelay: 0,
+		MaxDelay:     0,
+		Multiplier:   2.0,
+		Jitter:       0,
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		DoWithResult(context.Background(), func(ctx context.Context, attempt int) (string, error) {
-			return "success", nil
-		}, cfg)
+		_ = Do(context.Background(), fn, cfg)
 	}
 }

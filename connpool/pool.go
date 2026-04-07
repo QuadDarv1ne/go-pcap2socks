@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Pool manages a pool of reusable connections
+// Pool manage a pool of reusable connections
 type Pool struct {
 	mu          sync.Mutex
 	connections chan connWithExpiry
@@ -17,7 +17,7 @@ type Pool struct {
 	maxSize     int
 	idleTimeout time.Duration
 	maxLifetime time.Duration // Maximum time a connection can stay in the pool
-	closed      bool
+	closed      atomic.Bool   // Atomic flag for lock-free closed check
 
 	// Metrics - atomic for lock-free updates
 	hits    atomic.Uint64 // Connection reused from pool
@@ -32,6 +32,9 @@ type connWithExpiry struct {
 	createdAt time.Time
 }
 
+// Pre-allocated buffer for connection health checks (OPTIMIZATION: avoid per-call allocation)
+var healthCheckBuf [1]byte
+
 // NewPool creates a new connection pool
 func NewPool(addr string, maxSize int, idleTimeout time.Duration) *Pool {
 	if maxSize <= 0 {
@@ -41,13 +44,15 @@ func NewPool(addr string, maxSize int, idleTimeout time.Duration) *Pool {
 		idleTimeout = 5 * time.Minute
 	}
 
-	return &Pool{
+	p := &Pool{
 		connections: make(chan connWithExpiry, maxSize),
 		addr:        addr,
 		maxSize:     maxSize,
 		idleTimeout: idleTimeout,
 		maxLifetime: 30 * time.Minute, // Default max lifetime
 	}
+	p.closed.Store(false)
+	return p
 }
 
 // NewPoolWithLifetime creates a new connection pool with custom maxLifetime
@@ -62,23 +67,23 @@ func NewPoolWithLifetime(addr string, maxSize int, idleTimeout time.Duration, ma
 		maxLifetime = 30 * time.Minute
 	}
 
-	return &Pool{
+	p := &Pool{
 		connections: make(chan connWithExpiry, maxSize),
 		addr:        addr,
 		maxSize:     maxSize,
 		idleTimeout: idleTimeout,
 		maxLifetime: maxLifetime,
 	}
+	p.closed.Store(false)
+	return p
 }
 
 // Get retrieves a connection from the pool or creates a new one
 func (p *Pool) Get(ctx context.Context, dialer func(context.Context) (net.Conn, error)) (net.Conn, error) {
-	p.mu.Lock()
-	if p.closed {
-		p.mu.Unlock()
+	// OPTIMIZATION: Use atomic.Bool instead of mutex for closed check (P0)
+	if p.closed.Load() {
 		return nil, ErrPoolClosed
 	}
-	p.mu.Unlock()
 
 	// Try to get a connection from the pool
 	select {
@@ -115,14 +120,12 @@ func (p *Pool) Put(conn net.Conn) {
 		return
 	}
 
-	p.mu.Lock()
-	if p.closed {
-		p.mu.Unlock()
+	// OPTIMIZATION: Use atomic.Bool instead of mutex for closed check (P0)
+	if p.closed.Load() {
 		conn.Close()
 		p.dropCnt.Add(1)
 		return
 	}
-	p.mu.Unlock()
 
 	p.putCnt.Add(1)
 
@@ -145,13 +148,10 @@ func (p *Pool) Put(conn net.Conn) {
 
 // Close closes the pool and all connections
 func (p *Pool) Close() {
-	p.mu.Lock()
-	if p.closed {
-		p.mu.Unlock()
-		return
+	// OPTIMIZATION: Use atomic.Bool for closed flag (P0)
+	if p.closed.Swap(true) {
+		return // Already closed
 	}
-	p.closed = true
-	p.mu.Unlock()
 
 	// Close the channel to prevent new connections from being added
 	close(p.connections)
@@ -187,9 +187,8 @@ func (p *Pool) isConnectionAlive(conn net.Conn) (alive bool, hasData bool) {
 	conn.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
 	defer conn.SetReadDeadline(time.Time{})
 
-	// Try to read 1 byte
-	buf := make([]byte, 1)
-	_, err := conn.Read(buf)
+	// OPTIMIZATION: Use pre-allocated buffer instead of make([]byte, 1) (P0)
+	_, err := conn.Read(healthCheckBuf[:])
 
 	if err == nil {
 		// We read data - connection is alive but has pending data.
@@ -216,9 +215,7 @@ func (p *Pool) isConnectionExpired(createdAt time.Time) bool {
 
 // Stats returns pool statistics
 func (p *Pool) Stats() PoolStats {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
+	// No mutex needed - all fields are atomic
 	hits := p.hits.Load()
 	misses := p.misses.Load()
 	total := hits + misses
@@ -230,7 +227,7 @@ func (p *Pool) Stats() PoolStats {
 	return PoolStats{
 		Available: len(p.connections),
 		MaxSize:   p.maxSize,
-		Closed:    p.closed,
+		Closed:    p.closed.Load(),
 		Hits:      hits,
 		Misses:    misses,
 		HitRatio:  hitRatio,
@@ -249,4 +246,13 @@ type PoolStats struct {
 	HitRatio  float64 `json:"hit_ratio"`
 	PutCount  uint64  `json:"put_count"`
 	DropCount uint64  `json:"drop_count"`
+}
+
+// PoolError represents a pool-related error
+type PoolError struct {
+	Message string
+}
+
+func (e *PoolError) Error() string {
+	return e.Message
 }

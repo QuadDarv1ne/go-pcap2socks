@@ -35,7 +35,8 @@ func TestExecuteOnStart_SingleCommand(t *testing.T) {
 
 	var cmd string
 	if runtime.GOOS == "windows" {
-		cmd = "ipconfig /?"
+		// Use ping instead of ipconfig /? as it's more reliable
+		cmd = "ping -n 1 127.0.0.1"
 	} else {
 		cmd = "ping -c 1 127.0.0.1"
 	}
@@ -73,13 +74,13 @@ func TestExecuteOnStart_MultipleCommands(t *testing.T) {
 	var commands []string
 	if runtime.GOOS == "windows" {
 		commands = []string{
-			"ipconfig /?",
+			"ping -n 1 127.0.0.1",
 			"ping -n 1 127.0.0.1",
 		}
 	} else {
 		commands = []string{
 			"ping -c 1 127.0.0.1",
-			"echo test",
+			"ping -c 1 127.0.0.1",
 		}
 	}
 
@@ -128,9 +129,9 @@ func TestExecuteOnStart_ContinueOnError(t *testing.T) {
 
 	var validCmd string
 	if runtime.GOOS == "windows" {
-		validCmd = "ipconfig /?"
+		validCmd = "ping -n 1 127.0.0.1"
 	} else {
-		validCmd = "echo test"
+		validCmd = "ping -c 1 127.0.0.1"
 	}
 
 	config := ExecuteOnStartConfig{
@@ -305,7 +306,7 @@ func BenchmarkExecuteOnStart(b *testing.B) {
 
 	var cmd string
 	if runtime.GOOS == "windows" {
-		cmd = "ipconfig /?"
+		cmd = "echo test"
 	} else {
 		cmd = "echo test"
 	}

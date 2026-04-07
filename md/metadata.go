@@ -27,6 +27,7 @@ type Metadata struct {
 	// Cached addresses to avoid repeated allocations
 	dstAddr string
 	srcAddr string
+	srcIPStr string // OPTIMIZATION (P1): Cached SrcIP.String() for routing decisions
 }
 
 // DestinationAddress returns the destination address string.
@@ -45,6 +46,15 @@ func (m *Metadata) SourceAddress() string {
 		m.srcAddr = net.JoinHostPort(m.SrcIP.String(), strconv.FormatUint(uint64(m.SrcPort), 10))
 	}
 	return m.srcAddr
+}
+
+// SrcIPString returns the source IP string.
+// Uses cached value to avoid allocations (OPTIMIZATION P1).
+func (m *Metadata) SrcIPString() string {
+	if m.srcIPStr == "" {
+		m.srcIPStr = m.SrcIP.String()
+	}
+	return m.srcIPStr
 }
 
 // Addr returns the net.Addr implementation for this metadata.

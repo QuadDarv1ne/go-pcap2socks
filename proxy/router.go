@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/QuadDarv1ne/go-pcap2socks/bandwidth"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
@@ -77,8 +78,8 @@ func (rt *RoutingTable) Match(metadata *M.Metadata) (string, bool) {
 	// First check radix tree for IP-based rules (fast path)
 	if tree := rt.ipTree.Load(); tree != nil {
 		radixTree := tree.(*radix.Tree)
-		// Check source IP
-		if _, value, ok := radixTree.LongestPrefix(metadata.SrcIP.String()); ok && value != nil {
+		// Check source IP (OPTIMIZATION P1: use cached SrcIPString)
+		if _, value, ok := radixTree.LongestPrefix(metadata.SrcIPString()); ok && value != nil {
 			rule := value.(*cfg.Rule)
 			if matchRuleNoIP(metadata, rule) {
 				return rule.OutboundTag, true
@@ -263,8 +264,9 @@ func (c *routeCache) buildKey(protocol string, srcIP, dstIP []byte, srcPort, dst
 	buf = append(buf, ':')
 	buf = strconv.AppendUint(buf, uint64(dstPort), 10)
 
-	// Convert to string — this creates a copy of the buffer content
-	result := string(buf)
+	// OPTIMIZATION (P1): Use unsafe.String for zero-copy conversion
+	// This avoids allocating a new string - just wraps the existing byte slice
+	result := unsafe.String(unsafe.SliceData(buf), len(buf))
 
 	// Return buffer to pool for reuse
 	// Reset to full capacity for next use
@@ -616,8 +618,8 @@ func (d *Router) route(cacheKey string, metadata *M.Metadata) (string, error) {
 }
 
 func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Conn, error) {
-	// Check source IP filter first
-	if !d.isSourceAllowed(metadata.SrcIP.String()) {
+	// Check source IP filter first (OPTIMIZATION P1: use cached SrcIPString)
+	if !d.isSourceAllowed(metadata.SrcIPString()) {
 		slog.Debug("Connection blocked by source filter", "srcIP", metadata.SrcIP)
 		return nil, ErrBlockedByMACFilter
 	}
@@ -684,8 +686,8 @@ func (d *Router) DialContext(ctx context.Context, metadata *M.Metadata) (net.Con
 }
 
 func (d *Router) DialUDP(metadata *M.Metadata) (net.PacketConn, error) {
-	// Check source IP filter first
-	if !d.isSourceAllowed(metadata.SrcIP.String()) {
+	// Check source IP filter first (OPTIMIZATION P1: use cached SrcIPString)
+	if !d.isSourceAllowed(metadata.SrcIPString()) {
 		slog.Debug("UDP blocked by source filter", "srcIP", metadata.SrcIP)
 		return nil, ErrBlockedByMACFilter
 	}
