@@ -59,10 +59,17 @@ func SafeGoNamed(name string, fn GoFunc) {
 // IMPORTANT: On timeout, the original goroutine continues running in background
 // (cannot be cancelled). Consider using context-aware functions instead.
 func SafeGoWithRetry(name string, maxRetries int, baseDelay time.Duration, fn GoFunc) {
+	// OPTIMIZATION: Reuse done channel to avoid allocations per retry cycle
+	done := make(chan bool, 1)
+	
 	go func() {
 		retries := 0
 		for {
-			done := make(chan bool, 1)
+			// Clear channel by draining it (safe for buffered channel)
+			select {
+			case <-done:
+			default:
+			}
 
 			go func() {
 				defer func() {
