@@ -2,20 +2,18 @@
 
 > Последнее обновление: 2026-04-07
 > Ветка: dev
-> Статус: ACTIVE DEVELOPMENT
+> Статус: SYNCED (dev == main)
+> Коммит: 474f7d0
 
 ---
 
 ## 🔴 КРИТИЧНО — Мёртвый код (ФАКТИЧЕСКОЕ СОСТОЯНИЕ)
 
-### 1. Удалить npcap_dhcp пакет (НЕ ИСПОЛЬЗУЕТСЯ РЕАЛЬНО)
-- [ ] **ПРОБЛЕМА:** В main.go есть 4 type assertion к `*npcap_dhcp.SimpleServer` (строки 1002, 1520, 1869, 2730)
-- [ ] **ФАКТ:** На Windows создаётся `*windivert.DHCPServer` (dhcp_server_windows.go:58)
-- [ ] **ФАКТ:** На Unix создаётся `*dhcp.Server` (dhcp_server_unix.go)
-- [ ] **ВЫВОД:** Type assertion к `*npcap_dhcp.SimpleServer` НИКОГДА не сработает - мёртвый код
-- [ ] **ДЕЙСТВИЕ:** Удалить все 4 блока if в main.go + удалить импорт npcap_dhcp
-- [ ] **ДЕЙСТВИЕ:** Удалить директорию npcap_dhcp/ целиком
-- [ ] **РЕШАЕТ:** Замена на `*windivert.DHCPServer` и `*dhcp.Server` где нужно
+### 1. npcap_dhcp пакет (ВОССТАНОВЛЕН ✅)
+- [x] **БЫЛО:** Удалён по ошибке, type assertion в main.go были мёртвым кодом
+- [x] **ИСПРАВЛЕНО:** Восстановлен из git, нужен для проекта
+- [x] **ДОБАВЛЕНО:** LoadLeases/SaveLeases методы для dhcp.Server и windivert.DHCPServer
+- [x] **ИНТЕГРИРОВАНО:** Все 3 DHCP сервера теперь поддерживают сохранение/загрузку leases
 
 ### 2. Buffer pool дубликаты
 - [ ] `buffer/` — используется в core/tunnel ✅
@@ -102,6 +100,15 @@
 ---
 
 ## ✅ ВЫПОЛНЕНО (предыдущие сессии)
+
+### Коммит 474f7d0 (2026-04-07)
+- ✅ Восстановлен npcap_dhcp пакет из git history
+- ✅ Восстановлен interfaces/ пакет из git history
+- ✅ Добавлены LoadLeases/SaveLeases для dhcp.Server
+- ✅ Добавлены LoadLeases/SaveLeases для windivert.DHCPServer
+- ✅ Интегрирован npcap_dhcp.SimpleServer в main.go
+- ✅ DHCP leases сохраняются между перезапусками для всех 3 типов серверов
+- ✅ Обновлён todo.md с актуальным статусом
 
 ### Коммиты стабильности
 - ✅ 8c67825 — NAT teardown fix
