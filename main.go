@@ -834,26 +834,6 @@ func main() {
 			"max_retries", config.DNS.RateLimiter.MaxRetries)
 	}
 
-	// Initialize rate limiter for proxy connections
-	if config.RateLimiter != nil && config.RateLimiter.Enabled {
-		_rateLimiter = core.NewRateLimiter(core.RateLimiterConfig{
-			MaxTokens:  config.RateLimiter.MaxTokens,
-			RefillRate: config.RateLimiter.RefillRate,
-		})
-		slog.Info("Rate limiter initialized",
-			"max_tokens", config.RateLimiter.MaxTokens,
-			"refill_rate", config.RateLimiter.RefillRate)
-	} else {
-		// Default rate limiter: 1000 RPS, burst 2000
-		_rateLimiter = core.NewRateLimiter(core.RateLimiterConfig{
-			MaxTokens:  2000,
-			RefillRate: 1000,
-		})
-		slog.Debug("Rate limiter initialized with defaults",
-			"max_tokens", 2000,
-			"refill_rate", 1000)
-	}
-
 	// Initialize MTU discoverer
 	if config.MTU != nil && config.MTU.Enabled {
 		_mtuDiscoverer = mtu.NewMTUDiscoverer()
@@ -1434,13 +1414,6 @@ func performGracefulShutdownImpl() {
 		logComponentShutdown("health_checker", time.Since(start), nil)
 	}
 
-	// Stop rate limiter
-	if _rateLimiter != nil {
-		start := time.Now()
-		// Rate limiter doesn't have Stop method, just log
-		logComponentShutdown("rate_limiter", time.Since(start), nil)
-	}
-
 	// 4. Stop hotkey manager
 	if _hotkeyManager != nil {
 		start := time.Now()
@@ -1512,6 +1485,10 @@ func performGracefulShutdownImpl() {
 			slog.Info("Saving DHCP leases before shutdown...")
 			server.Stop()
 			logComponentShutdown("dhcp_server", time.Since(start), nil)
+		case *windivert.DHCPServer:
+			slog.Info("Saving WinDivert DHCP leases before shutdown...")
+			server.Stop()
+			logComponentShutdown("windivert_dhcp_server", time.Since(start), nil)
 		}
 	}
 

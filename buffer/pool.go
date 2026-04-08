@@ -156,36 +156,6 @@ func Clone(src []byte) []byte {
 	return buf
 }
 
-// Copy copies data from src to a pooled buffer
-func Copy(src []byte) []byte {
-	if len(src) == 0 {
-		return Get(0)
-	}
-
-	buf := Get(len(src))
-	// Use copy instead of append to avoid potential reallocation
-	buf = buf[:len(src)]
-	copy(buf, src)
-	return buf
-}
-
-// Reset clears a buffer and returns it to the pool
-// Returns a new buffer from the pool with the same or larger size
-func Reset(buf []byte, newSize int) []byte {
-	Put(buf)
-	return Get(newSize)
-}
-
-// SafePut safely puts a buffer to the pool, handling nil and invalid buffers
-func SafePut(buf []byte) {
-	defer func() {
-		if r := recover(); r != nil {
-			// Ignore panics from pool operations
-		}
-	}()
-	Put(buf)
-}
-
 // PoolStats holds statistics about pool usage
 type PoolStats struct {
 	SmallGets   uint64
@@ -271,14 +241,4 @@ func (p *Pool) ExportPrometheus() string {
 	sb.WriteString(fmt.Sprintf("go_pcap2socks_buffer_reuse_ratio %.4f\n", stats.ReuseRatio))
 
 	return sb.String()
-}
-
-// GetDefaultPoolStats returns statistics for the default global pool
-func GetDefaultPoolStats() PoolStats {
-	return defaultPool.GetStats()
-}
-
-// ExportDefaultPoolPrometheus exports metrics for the default global pool
-func ExportDefaultPoolPrometheus() string {
-	return defaultPool.ExportPrometheus()
 }

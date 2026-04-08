@@ -63,9 +63,13 @@ func Teardown(cfg *Config) {
 		"external", cfg.ExternalInterface,
 		"internal", cfg.InternalInterface)
 
-	// Remove NAT interfaces (ignore errors - may already be removed)
-	exec.Command("netsh", "routing", "ip", "nat", "delete", "interface", "interface="+cfg.ExternalInterface).Run()
-	exec.Command("netsh", "routing", "ip", "nat", "delete", "interface", "interface="+cfg.InternalInterface).Run()
+	// Remove NAT interfaces - log errors for debugging
+	if out, err := exec.Command("netsh", "routing", "ip", "nat", "delete", "interface", "interface="+cfg.ExternalInterface).CombinedOutput(); err != nil {
+		slog.Warn("NAT teardown external interface warning", "output", string(out), "err", err)
+	}
+	if out, err := exec.Command("netsh", "routing", "ip", "nat", "delete", "interface", "interface="+cfg.InternalInterface).CombinedOutput(); err != nil {
+		slog.Warn("NAT teardown internal interface warning", "output", string(out), "err", err)
+	}
 
 	slog.Info("NAT routing removed")
 }

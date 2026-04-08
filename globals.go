@@ -8,7 +8,6 @@ import (
 
 	"github.com/QuadDarv1ne/go-pcap2socks/api"
 	"github.com/QuadDarv1ne/go-pcap2socks/cfg"
-	"github.com/QuadDarv1ne/go-pcap2socks/core"
 	"github.com/QuadDarv1ne/go-pcap2socks/core/device"
 	"github.com/QuadDarv1ne/go-pcap2socks/dns"
 	"github.com/QuadDarv1ne/go-pcap2socks/dnslocal"
@@ -94,9 +93,6 @@ var (
 	// _healthChecker holds the health checker for network monitoring and recovery
 	_healthChecker *health.HealthChecker
 
-	// _rateLimiter holds the global rate limiter for proxy connections
-	_rateLimiter *core.RateLimiter
-
 	// _wanBalancerDialer holds the WAN balancer dialer for Multi-WAN load balancing
 	_wanBalancerDialer *wanbalancer.WANBalancerDialer
 
@@ -115,33 +111,3 @@ var (
 	// _natConfig holds the NAT configuration for teardown
 	_natConfig *nat.Config
 )
-
-// GetStatsStore returns the global statistics store
-func GetStatsStore() *stats.Store {
-	return _statsStore
-}
-
-// GetProfileManager returns the global profile manager
-func GetProfileManager() *profiles.Manager {
-	return _profileManager
-}
-
-// GetUPnPManager returns the global UPnP manager
-func GetUPnPManager() *upnp.Manager {
-	return _upnpManager
-}
-
-// GetShutdownChan returns the shutdown channel
-func GetShutdownChan() <-chan struct{} {
-	return _shutdownChan
-}
-
-// IsRunning returns the running state
-func IsRunning() bool {
-	return _running.Load()
-}
-
-// GetMetricsCollector returns the global metrics collector
-func GetMetricsCollector() *metrics.Collector {
-	return _metricsCollector
-}
