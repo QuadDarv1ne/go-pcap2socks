@@ -302,6 +302,132 @@ func printUsage() {
 	fmt.Println("  pcap2socks.exe --help            Show help")
 }
 
+// createDHCPCallbacks создаёт callback'и для API сервера чтобы получать данные от DHCP сервера
+func createDHCPCallbacks(dhcpServer interface{}) *api.DHCPServerCallbacks {
+	if dhcpServer == nil {
+		return nil
+	}
+
+	return &api.DHCPServerCallbacks{
+		IsWinDivert: func() bool {
+			return isWinDivertServer(dhcpServer)
+		},
+		GetLeases: func() []map[string]interface{} {
+			var leases []map[string]interface{}
+
+			// Check if it's WinDivert DHCP server (Windows only)
+			if isWinDivertServer(dhcpServer) {
+				leasesData := getWinDivertLeases(dhcpServer)
+				if leasesData != nil {
+					if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
+						leases = make([]map[string]interface{}, 0, len(leasesList))
+						for mac, lease := range leasesList {
+							if leaseMap, ok := lease.(struct {
+								IP        net.IP
+								ExpiresAt time.Time
+							}); ok {
+								leases = append(leases, map[string]interface{}{
+									"mac":        mac,
+									"ip":         leaseMap.IP.String(),
+									"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
+								})
+							}
+						}
+					}
+				}
+			}
+
+			// Try standard DHCP server if WinDivert didn't return anything
+			if leases == nil {
+				if stdDHCP, ok := dhcpServer.(*dhcp.Server); ok {
+					for mac, lease := range stdDHCP.GetLeases() {
+						leases = append(leases, map[string]interface{}{
+							"mac":        mac,
+							"ip":         lease.IP.String(),
+							"expires_at": lease.ExpiresAt.Format(time.RFC3339),
+						})
+					}
+				}
+			}
+
+			return leases
+		},
+		GetMetrics: func() map[string]interface{} {
+			metrics := make(map[string]interface{})
+
+			// Try to get metrics from WinDivert DHCP server
+			if isWinDivertServer(dhcpServer) {
+				if wdDHCP, ok := dhcpServer.(*windivert.DHCPServer); ok {
+					wdMetrics := wdDHCP.GetMetrics()
+					for k, v := range wdMetrics {
+						metrics[k] = v
+					}
+				}
+			}
+
+			// Try standard DHCP server metrics
+			if stdDHCP, ok := dhcpServer.(*dhcp.Server); ok {
+				metricsCollector := stdDHCP.GetMetrics()
+				if metricsCollector != nil {
+					snapshot := metricsCollector.GetMetrics()
+					metrics["available"] = true
+					metrics["uptime_seconds"] = snapshot.UptimeSeconds
+					metrics["active_leases"] = snapshot.ActiveLeases
+					metrics["total_allocations"] = snapshot.TotalAllocations
+					metrics["total_renewals"] = snapshot.TotalRenewals
+					metrics["discover_count"] = snapshot.DiscoverCount
+					metrics["offer_count"] = snapshot.OfferCount
+					metrics["request_count"] = snapshot.RequestCount
+					metrics["ack_count"] = snapshot.AckCount
+					metrics["nak_count"] = snapshot.NakCount
+					metrics["release_count"] = snapshot.ReleaseCount
+					metrics["decline_count"] = snapshot.DeclineCount
+					metrics["error_count"] = snapshot.ErrorCount
+					metrics["last_request_mac"] = snapshot.LastRequestMAC
+					metrics["last_request_ip"] = snapshot.LastRequestIP
+					metrics["start_time"] = snapshot.StartTime.Format(time.RFC3339)
+				} else {
+					metrics["available"] = false
+					metrics["message"] = "Metrics collector not available"
+				}
+			} else {
+				metrics["available"] = false
+				metrics["message"] = "DHCP server not running or unsupported type"
+			}
+
+			return metrics
+		},
+	}
+}
+
+// createAPIServerDeps подготавливает все зависимости для API сервера
+func createAPIServerDeps(
+	statsStore *stats.Store,
+	profileManager *profiles.Manager,
+	upnpManager *upnpmanager.Manager,
+	hotkeyManager *hotkey.Manager,
+	defaultProxy proxy.Proxy,
+	healthChecker *health.HealthChecker,
+	dhcpServer interface{},
+	dnsRateLimiter interface{},
+	isRunningFn func() bool,
+	startTime time.Time,
+) api.APIServerDeps {
+	return api.APIServerDeps{
+		StatsStore:     statsStore,
+		ProfileManager: profileManager,
+		UPnPManager:    upnpManager,
+		HotkeyManager:  hotkeyManager,
+		DefaultProxy:   defaultProxy,
+		HealthChecker:  healthChecker,
+		DHCPServer:     dhcpServer,
+		DHCPCallbacks:  createDHCPCallbacks(dhcpServer),
+		DNSRateLimiter: dnsRateLimiter,
+		IsRunningFn:    isRunningFn,
+		StartTime:      startTime,
+	}
+}
+
 func main() {
 	// Setup automatic recovery with exponential backoff and restart limits
 	defer func() {
@@ -923,280 +1049,25 @@ func main() {
 		}
 	})
 
-	// Setup API server
+	// Setup API server using refactored initialization
 	slog.Info("Starting web UI server", "port", defaultAPIPort)
 
-	// Set start time for API
-	api.SetStartTime(time.Now())
-
-	// Set running state checker for API
-	api.SetIsRunningFn(func() bool {
-		return _running.Load()
-	})
-
-	// Set interface list getter for API
-	api.SetInterfaceListFn(func() []interface{} {
-		interfaces := auto.GetInterfaceList()
-		result := make([]interface{}, len(interfaces))
-		for i, iface := range interfaces {
-			result[i] = map[string]interface{}{
-				"name":            iface.Name,
-				"ip":              iface.IP,
-				"mac":             iface.MAC,
-				"network":         iface.Network,
-				"netmask":         iface.Netmask,
-				"network_start":   iface.NetworkStart,
-				"recommended_mtu": iface.RecommendedMTU,
-				"has_internet":    iface.HasInternet,
-				"is_virtual":      iface.IsVirtual,
-			}
-		}
-		return result
-	})
-
-	// Set DHCP leases getter for API
-	api.SetGetDHCPLeasesFn(func() []map[string]interface{} {
-		if _dhcpServer == nil {
-			return nil
-		}
-
-		// Try to get leases from DHCP server
-		var leases []map[string]interface{}
-
-		// Check if it's WinDivert DHCP server (Windows only)
-		if isWinDivertServer(_dhcpServer) {
-			leasesData := getWinDivertLeases(_dhcpServer)
-			if leasesData != nil {
-				if leasesList, ok := leasesData["leases"].(map[string]interface{}); ok {
-					leases = make([]map[string]interface{}, 0, len(leasesList))
-					for mac, lease := range leasesList {
-						if leaseMap, ok := lease.(struct {
-							IP        net.IP
-							ExpiresAt time.Time
-						}); ok {
-							leases = append(leases, map[string]interface{}{
-								"mac":        mac,
-								"ip":         leaseMap.IP.String(),
-								"expires_at": leaseMap.ExpiresAt.Format(time.RFC3339),
-							})
-						}
-					}
-				}
-			}
-		}
-
-		// Check if it's standard DHCP server
-		if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
-			dhcpLeases := stdDHCP.GetLeases()
-			leases = make([]map[string]interface{}, 0, len(dhcpLeases))
-			for mac, lease := range dhcpLeases {
-				leases = append(leases, map[string]interface{}{
-					"mac":        mac,
-					"ip":         lease.IP.String(),
-					"expires_at": lease.ExpiresAt.Format(time.RFC3339),
-				})
-			}
-		}
-
-
-		return leases
-	})
-
-	// Set DHCP metrics getter for API
-	api.SetGetDHCPMetricsFn(func() map[string]interface{} {
-		if _dhcpServer == nil {
-			return map[string]interface{}{
-				"available": false,
-				"message":   "DHCP server not running",
-			}
-		}
-
-		// Try to get metrics from DHCP server
-		var metrics map[string]interface{}
-
-		// Check if it's standard DHCP server with metrics
-		if stdDHCP, ok := _dhcpServer.(*dhcp.Server); ok {
-			metricsCollector := stdDHCP.GetMetrics()
-			if metricsCollector != nil {
-				snapshot := metricsCollector.GetMetrics()
-				metrics = map[string]interface{}{
-					"available":         true,
-					"uptime_seconds":    snapshot.UptimeSeconds,
-					"active_leases":     snapshot.ActiveLeases,
-					"total_allocations": snapshot.TotalAllocations,
-					"total_renewals":    snapshot.TotalRenewals,
-					"discover_count":    snapshot.DiscoverCount,
-					"offer_count":       snapshot.OfferCount,
-					"request_count":     snapshot.RequestCount,
-					"ack_count":         snapshot.AckCount,
-					"nak_count":         snapshot.NakCount,
-					"release_count":     snapshot.ReleaseCount,
-					"decline_count":     snapshot.DeclineCount,
-					"error_count":       snapshot.ErrorCount,
-					"last_request_mac":  snapshot.LastRequestMAC,
-					"last_request_ip":   snapshot.LastRequestIP,
-					"start_time":        snapshot.StartTime.Format(time.RFC3339),
-				}
-			}
-		}
-
-		if metrics == nil {
-			metrics = map[string]interface{}{
-				"available": false,
-				"message":   "DHCP metrics not available",
-			}
-		}
-
-		return metrics
-	})
-
-	// Set DNS metrics getter for API
-	api.SetDNSMetricsFn(func() (hits, misses uint64, hitRatio float64, ok bool) {
-		if _dnsResolver == nil {
-			return 0, 0, 0, false
-		}
-		hits, misses, hitRatio = _dnsResolver.GetMetrics()
-		return hits, misses, hitRatio, true
-	})
-
-	// Set proxy connection stats getter for API
-	api.SetProxyConnectionStatsFn(func() (success, errors uint64, errorRate float64, ok bool) {
-		if _defaultProxy == nil {
-			return 0, 0, 0, false
-		}
-		if router, ok := _defaultProxy.(*proxy.Router); ok {
-			success, errors, errorRate = router.GetConnectionStats()
-			return success, errors, errorRate, true
-		}
-		return 0, 0, 0, false
-	})
-
-	// Set DHCP metrics getter for API
-	api.SetDHCPMetricsFn(func() (map[string]interface{}, bool) {
-		if _dhcpServer == nil {
-			return nil, false
-		}
-		// Try to get metrics from WinDivert DHCP server
-		if dhcpServer, ok := _dhcpServer.(*windivert.DHCPServer); ok {
-			return dhcpServer.GetMetrics(), true
-		}
-		return nil, false
-	})
-
-	// Set proxy health getter for API
-	api.SetProxyHealthFn(func() (map[string]interface{}, bool) {
-		if _defaultProxy == nil {
-			return nil, false
-		}
-		// Try to get health status from Router
-		if router, ok := _defaultProxy.(*proxy.Router); ok {
-			health := router.HealthStatus()
-			// Convert map[string]map[string]interface{} to map[string]interface{}
-			result := make(map[string]interface{})
-			for k, v := range health {
-				result[k] = v
-			}
-			return result, true
-		}
-		return nil, false
-	})
-
-	// Set connection pool metrics getter for API
-	api.SetConnPoolMetricsFn(func() (map[string]interface{}, bool) {
-		if _defaultProxy == nil {
-			return nil, false
-		}
-		// Get metrics from Router's SOCKS5 proxies
-		if router, ok := _defaultProxy.(*proxy.Router); ok {
-			metrics := make(map[string]interface{})
-			for tag, p := range router.Proxies {
-				if socks5, ok := p.(*proxy.Socks5); ok {
-					stats := socks5.ConnPoolStats()
-					metrics[tag] = stats
-				}
-			}
-			if len(metrics) > 0 {
-				return metrics, true
-			}
-		}
-		return nil, false
-	})
-
-	// Set circuit breaker stats getter for API
-	api.SetCircuitBreakerStatsFn(func() (map[string]interface{}, bool) {
-		if _defaultProxy == nil {
-			return nil, false
-		}
-		// Get circuit breaker stats from Router
-		if router, ok := _defaultProxy.(*proxy.Router); ok {
-			stats := router.GetCircuitBreakerStats()
-			return map[string]interface{}{
-				"available":       stats.Available,
-				"state":           stats.State,
-				"total_requests":  stats.TotalRequests,
-				"successful_reqs": stats.SuccessfulReqs,
-				"failed_reqs":     stats.FailedReqs,
-				"rejected_reqs":   stats.RejectedReqs,
-			}, true
-		}
-		return nil, false
-	})
-
-	// Set health checker stats getter for API
-	api.SetHealthCheckerStatsFn(func() (map[string]interface{}, bool) {
-		if _healthChecker == nil {
-			return nil, false
-		}
-		// Get health checker stats
-		stats := _healthChecker.GetStats()
-		return map[string]interface{}{
-			"total_checks":         stats.TotalChecks,
-			"consecutive_failures": stats.ConsecutiveFailures,
-			"total_recoveries":     stats.TotalRecoveries,
-			"total_probes":         stats.TotalProbes,
-			"successful_probes":    stats.SuccessfulProbes,
-			"failed_probes":        stats.FailedProbes,
-			"success_rate":         stats.SuccessRate,
-			"probe_count":          stats.ProbeCount,
-			"current_backoff":      stats.CurrentBackoff.String(),
-			"last_check_time":      stats.LastCheckTime.Format(time.RFC3339),
-			"last_success_time":    stats.LastSuccessTime.Format(time.RFC3339),
-		}, true
-	})
-
-	// Set service control callbacks for API
-	api.SetServiceCallbacks(
-		func() error {
-			// Start service: set running flag and reset start time
-			if !_running.Load() {
-				_running.Store(true)
-				api.SetStartTime(time.Now())
-				slog.Info("Service started via API")
-				// Notify via system notification
-				notify.Show("go-pcap2socks", "Сервис запущен", notify.NotifyInfo)
-			}
-			return nil
-		},
-		func() error {
-			// Stop service: clear running flag
-			if _running.Load() {
-				_running.Store(false)
-				slog.Info("Service stopped via API")
-				// Notify via system notification
-				notify.Show("go-pcap2socks", "Сервис остановлен", notify.NotifyWarning)
-			}
-			return nil
-		},
+	// Prepare all dependencies for API server
+	apiDeps := createAPIServerDeps(
+		_statsStore,
+		_profileManager,
+		_upnpManager,
+		_hotkeyManager,
+		_defaultProxy,
+		_healthChecker,
+		_dhcpServer,
+		_dnsRateLimiter,
+		func() bool { return _running.Load() },
+		time.Now(),
 	)
 
-	// Create API server with global stats store and profile manager
-	_apiServer = api.NewServer(_statsStore, _profileManager, _upnpManager, _hotkeyManager, _wanBalancerDialer)
-
-	// Set DNS rate limiter for metrics collection
-	if _dnsRateLimiter != nil {
-		_apiServer.SetDNSRateLimiter(_dnsRateLimiter)
-		slog.Debug("DNS rate limiter registered with API metrics")
-	}
+	// Create API server with all dependencies
+	_apiServer = api.SetupAndCreateServer(apiDeps)
 
 	// Set auth token from config if provided, otherwise use auto-generated token
 	if config.API != nil && config.API.Token != "" {
@@ -1217,10 +1088,7 @@ func main() {
 		slog.Info("API authentication token auto-generated. Set 'token' in config.json to use a custom token.", "token", _apiServer.GetAuthToken())
 	}
 
-	// Start real-time WebSocket updates (5 second interval for reduced CPU usage)
-	_apiServer.StartRealTimeUpdates(5 * time.Second)
-
-	// Start API server in goroutine
+	// Start API server in goroutine (HTTP/HTTPS serving + log streaming)
 	goroutine.SafeGo(func() {
 		// Add log streaming endpoint
 		http.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
@@ -1248,88 +1116,8 @@ func main() {
 			json.NewEncoder(w).Encode(map[string][]string{"logs": entries})
 		})
 
-		// Setup HTTPS if configured
-		if config.API != nil && config.API.HTTPS != nil && config.API.HTTPS.Enabled {
-			httpsCfg := config.API.HTTPS
-
-			// Generate self-signed certificate if AutoTLS is enabled
-			if httpsCfg.AutoTLS {
-				executable, _ := os.Executable()
-				certFile := httpsCfg.CertFile
-				keyFile := httpsCfg.KeyFile
-
-				if certFile == "" {
-					certFile = path.Join(path.Dir(executable), "server.crt")
-				}
-				if keyFile == "" {
-					keyFile = path.Join(path.Dir(executable), "server.key")
-				}
-
-				// Generate certificate if it doesn't exist
-				if !tlsutil.CertExists(certFile, keyFile) {
-					slog.Info("Generating self-signed TLS certificate",
-						"cert", certFile, "key", keyFile)
-					if err := tlsutil.GenerateSelfSignedCertToFile(certFile, keyFile, "localhost"); err != nil {
-						slog.Error("Failed to generate TLS certificate", slog.Any("err", err))
-					} else {
-						slog.Info("Self-signed TLS certificate generated successfully")
-					}
-				}
-
-				httpsCfg.CertFile = certFile
-				httpsCfg.KeyFile = keyFile
-			}
-
-			// Start HTTPS server
-			if httpsCfg.CertFile != "" && httpsCfg.KeyFile != "" {
-				slog.Info("Starting HTTPS server",
-					"port", config.API.Port,
-					"url", fmt.Sprintf("https://localhost:%d", config.API.Port),
-					"cert", httpsCfg.CertFile,
-					"key", httpsCfg.KeyFile)
-
-				// Optionally start HTTP server for redirect
-				if httpsCfg.ForceHTTPS {
-					goroutine.SafeGo(func() {
-						redirectMux := http.NewServeMux()
-						redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-							http.Redirect(w, r, fmt.Sprintf("https://%s%s", r.Host, r.URL.Path), http.StatusMovedPermanently)
-						})
-						slog.Info("Starting HTTP to HTTPS redirect server", "port", 80)
-						if err := http.ListenAndServe(":80", redirectMux); err != nil {
-							slog.Error("HTTP redirect server error", slog.Any("err", err))
-						}
-					})
-				}
-
-				if err := http.ListenAndServeTLS(fmt.Sprintf(":%d", config.API.Port),
-					httpsCfg.CertFile, httpsCfg.KeyFile, _apiServer); err != nil {
-					slog.Error("HTTPS server error", slog.Any("err", err))
-				}
-			} else {
-				slog.Error("HTTPS enabled but certificate files not configured")
-			}
-		} else {
-			// Start HTTP server (default)
-			port := findAvailablePort(8080)
-			if config.API != nil && config.API.Port > 0 {
-				port = config.API.Port
-			}
-			slog.Info("Starting HTTP server", "port", port, "url", fmt.Sprintf("http://localhost:%d", port))
-
-			// Create HTTP server with timeouts for DoS protection
-			apiHTTPServer := &http.Server{
-				Addr:         fmt.Sprintf(":%d", port),
-				Handler:      _apiServer,
-				ReadTimeout:  15 * time.Second,
-				WriteTimeout: 60 * time.Second, // Increased for log/traffic export
-				IdleTimeout:  120 * time.Second,
-			}
-
-			if err := apiHTTPServer.ListenAndServe(); err != nil {
-				slog.Error("HTTP server error", slog.Any("err", err))
-			}
-		}
+		// Use the centralized StartAPIServer function
+		api.StartAPIServer(_apiServer, config, findAvailablePort)
 	})
 
 	// Wait for shutdown signal using signal.NotifyContext for proper context cancellation
