@@ -1,13 +1,13 @@
 ﻿# TODO — go-pcap2socks
 
-> Последнее обновление: 2026-04-08 17:00
-> Ветка: dev (ready for merge → main)
-> Статус: ✅ FULL CODE AUDIT COMPLETE — ALL CRITICAL ISSUES FIXED
-> Коммит: pending
+> Последнее обновление: 2026-04-08 17:15
+> Ветка: dev (synced), main (synced)
+> Статус: ✅ FULL CODE AUDIT COMPLETE — MERGED TO MAIN
+> Коммит: 7c52577
 
 ---
 
-## ✅ ВЫПОЛНЕНО (2026-04-08 Session)
+## ✅ ВЫПОЛНЕНО (2026-04-08 Session) — ЗАКОММИЧЕНО В main
 
 ### Критические исправления
 - [x] Исправлены вызовы createProxies/createWANBalancer в main.go (сделаны неэкспортированными)
@@ -29,12 +29,12 @@
 - [x] Включены тесты shutdown (убран //go:build ignore)
 
 ### Итоги
-- Удалено ~500+ строк мёртвого кода
-- Удалено 4 файла целиком (initapp/*, interfaces/*, common/pool/buffer.go, common/pool/packet_pool.go, ratelimit/limiter.go, ratelimit/adaptive.go)
+- Удалено ~1200+ строк мёртвого кода
+- Удалено 7 файлов целиком
 - Исправлена критическая утечка ресурсов (WinDivert DHCP)
 - Сборка проходит успешно ✅
-
----
+- Закоммичено: 7c52577
+- Отправлено: origin/dev, origin/main ✅
 
 ### 1. Компиляция сломана — функции экспортированы, но вызываются строчные
 - [ ] `main.go:1229` — вызывается `createProxies()`, но функция определена как `CreateProxies()` (строка 3300)
