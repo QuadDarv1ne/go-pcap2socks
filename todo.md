@@ -1,13 +1,23 @@
 ﻿# TODO — go-pcap2socks
 
-> Последнее обновление: 2026-04-07
+> Последнее обновление: 2026-04-08
 > Ветка: dev
-> Статус: PERFORMANCE OPTIMIZATIONS + TEST COVERAGE
-> Коммит: 474f7d0
+> Статус: MAIN.GO REFACTORING — PHASE 1 COMPLETE
+> Коммит: a4d249e
 
 ---
 
-## ✅ НЕДАВНИЕ ИЗМЕНЕНИЯ (2026-04-07 Session 2)
+## ✅ НЕДАВНИЕ ИЗМЕНЕНИЯ (2026-04-08 Session)
+
+### Main.go Refactoring — Phase 1 (API Server Initialization)
+- [x] Создан api/setup.go с SetupAndCreateServer() и StartAPIServer()
+- [x] Создан APIServerDeps struct для инкапсуляции всех зависимостей API
+- [x] Создан DHCPServerCallbacks interface для DHCP metrics/leases
+- [x] Заменено ~570 строк настройки API на вызовы новых функций
+- [x] main.go: 3954 → 3742 строки (-212 строк net)
+- [x] Все тесты проходят, проект компилируется
+
+### Previous Session (2026-04-07 Session 2)
 
 ### Performance Optimizations
 - [x] connpool.Pool: sync.Mutex → atomic.Bool для closed check (-100% mutex contention)
