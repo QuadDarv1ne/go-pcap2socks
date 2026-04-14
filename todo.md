@@ -1,9 +1,11 @@
 ﻿# TODO — go-pcap2socks
 
 > Последнее обновление: 2026-04-14
-> Ветка: dev (активна), main (стабильная) — СИНХРОНИЗИРОВАНЫ
+> Ветка: dev (активна), main (стабильная)
 > Статус: ✅ Стабильная версия 3.30.0+
 > Коммит: d057c8f (dev = main)
+> Сборка: ✅ проходит без ошибок
+> Модули: ✅ все проверены
 
 ---
 
@@ -18,7 +20,6 @@
 ### Очистка мёртвого кода
 - [x] Удалены common/pool/buffer.go, packet_pool.go (мёртвый код)
 - [x] Удалены buffer/pool.go: Copy(), Reset(), SafePut(), GetDefaultPoolStats(), ExportDefaultPoolPrometheus()
-- [x] Удалён core/rate_limiter.go: ConnectionRateLimiter (не использовался)
 - [x] Удалено создание _rateLimiter в main.go (создавался но не использовался)
 - [x] Удалены ratelimit/limiter.go, adaptive.go, adaptive_test.go (не использовались)
 - [x] Удалены неиспользуемые функции в globals.go: GetStatsStore, GetProfileManager, GetUPnPManager, GetShutdownChan, IsRunning, GetMetricsCollector
@@ -38,82 +39,119 @@
 
 ---
 
-## 🟡 ТЕКУЩИЕ ЗАДАЧИ - РАЗРАБОТКА
+## 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ
 
-### 1. Rate limiter в core/ — частичное использование
-- [x] `_rateLimiter` удалён из main.go ✅
-- [ ] `core/rate_limiter.go` — ConnectionRateLimiter используется ТОЛЬКО в тестах
-- [ ] **Решение:** удалить ConnectionRateLimiter из core/rate_limiter.go ИЛИ использовать в продакшене
+### 1. Все 77 тестов отключены (`//go:build ignore`)
+**Статус:** НЕ ТЕСТИРУЕТСЯ ВООБЩЕ
 
-### 2. Buffer pool — три реализации
-- [ ] `buffer/` — используется в core/tunnel ✅
-- [ ] `common/pool/` — generic allocator ✅ (alloc.go, pool.go)
-- [ ] bufpool/ — УДАЛЁН ✅
-- [ ] **Статус:** Две реализации (buffer/ и common/pool/) — ПРОВЕРЬ дублирование функционала
+Все `*_test.go` файлы начинаются с `//go:build ignore`, что означает:
+- `go test` пропускает ВСЕ тесты
+- Нет автоматической проверки работоспособности
+- Баги могут пройти незамеченными
 
-### 3. connlimit/ пакет
-- [x] УДАЛЁН ✅ (не использовался)
+**Затронутые пакеты:**
+- api (7 тестов)
+- dhcp (6 тестов)
+- proxy (10 тестов)
+- core, dns, connpool, buffer, cache и др.
+
+**Решение (приоритет HIGH):**
+1. Убрать `//go:build ignore` с критичных тестов
+2. Исправить failing tests
+3. Добавить в CI запуск тестов
+
+### 2. core/rate_limiter.go — мёртвый код ✅ УДАЛЕНО
+- [x] `core/rate_limiter.go` — УДАЛЁН
+- [x] `core/rate_limiter_test.go` — УДАЛЁН
+
+### 3. sandbox/ — неиспользуемый пакет ✅ УДАЛЁН
+- [x] sandbox/ пакет — УДАЛЁН (8 файлов)
+- [x] main_sandbox.go — УДАЛЁН (импортировал удалённый пакет)
 
 ---
 
-## 🟢 УЛУЧШЕНИЯ — КАЧЕСТВО И СТАБИЛЬНОСТЬ
+## 🟡 УЛУЧШЕНИЯ КОДА
 
-### 4. NAT teardown ошибки
-- [x] Добавлено логирование ошибок ✅
+### 4. main.go — 3719 строк (цель < 2000)
+**Текущее состояние:**
+- func main(): строка 431
+- Файл содержит: инициализацию, CLI, shutdown, recovery, конфиги
 
-### 5. main.go — большой файл (~3960 строк)
-- [ ] **Фаза 1:** Вынести API endpoints в api/routes.go
-- [ ] **Фаза 2:** Вынести инициализацию компонентов в init/components.go
-- [ ] **Фаза 3:** Вынести shutdown логику в shutdown/handler.go
-- [ ] **Цель:** main.go < 2000 строк
+**План рефакторинга (приоритет MEDIUM):**
+- [ ] Фаза 1: Вынести CLI commands в `cli/commands.go`
+- [ ] Фаза 2: Вынести инициализацию компонентов в `init/components.go`
+- [ ] Фаза 3: Вынести shutdown логику в `shutdown/handler.go`
 
-### 6. Глобальные переменные (~25 в globals.go)
-- [ ] Создать AppContext struct для хранения состояния
-- [ ] Заменить глобальные `_apiServer`, `_dnsResolver` и др.
-- [ ] **ПРИОРИТЕТ:** MEDIUM (работает стабильно, но антипаттерн)
+### 5. Глобальные переменные (~25 в globals.go)
+**Текущее состояние:**
+- 25 глобальных переменных с подчёркиванием (`_apiServer`, `_dnsResolver` и т.д.)
+- Работает стабильно, но антипаттерн
 
-### 7. Sandbox package TODO
-- [ ] `sandbox/integration.go:121` — "TODO: Handle quoted arguments properly"
-- [ ] `sandbox/sandbox_windows.go:62` — "TODO: Implement using Windows Job Objects API"
-- [ ] **ДЕЙСТВИЕ:** Либо реализовать, либо удалить sandbox (если не используется)
+**План (приоритет LOW — работает стабильно):**
+- [ ] Создать AppContext struct
+- [ ] Заменить глобальные переменные на поля контекста
+- [ ] Обновить все функции инициализации
+
+### 6. fmt.Println в main.go (CLI вывод)
+**Статус:** 81 использование fmt.Println/fmt.Printf
+
+- В main.go используются fmt.Println для CLI help
+- Это нормально для CLI, но можно заменить на slog
+
+**Решение (приоритет LOW):**
+- Оставить fmt.Println для CLI help (нормальная практика)
+- Заменить остальные на slog
 
 ---
 
 ## 📋 ПЛАН ДЕЙСТВИЙ
 
-### Фаза 1: Очистка мёртвого кода (СЛЕДУЮЩИЙ)
-1. Проверить использование core/rate_limiter.go ConnectionRateLimiter
-2. Удалить или использовать ConnectionRateLimiter
-3. Проверить buffer/ vs common/pool/ на дубликаты
+### Фаза 1: Критические исправления ✅ ВЫПОЛНЕНО
+1. [x] Удалить core/rate_limiter.go и core/rate_limiter_test.go
+2. [x] Удалить sandbox/ пакет (8 файлов + main_sandbox.go)
+3. [x] Проверить сборку: `go build ./...` — проходит успешно ✅
 
-### Фаза 2: Рефакторинг main.go (ПОЗЖЕ)
-4. Вынести API routes в отдельный файл
-5. Вынести component initialization
-6. Уменьшить main.go до <2000 строк
+### Фаза 2: Включение тестов (СЛЕДУЮЩИЙ)
+4. Убрать `//go:build ignore` с критичных тестов (dhcp, proxy, api)
+5. Исправить failing tests
+6. Запустить: `go test ./...`
+7. Добавить тесты в CI
 
-### Фаза 3: Глобальные переменные (ПОЗЖЕ)
-7. Создать AppContext struct
-8. Заменить глобальные переменные
-9. Обновить все функции инициализации
+### Фаза 3: Рефакторинг main.go (ПОЗЖЕ)
+8. Вынести CLI commands в cli/commands.go
+9. Вынести component initialization в init/components.go
+10. Уменьшить main.go до <2000 строк
 
 ### Фаза 4: Финальная проверка
-10. Проверить компиляцию (`go build`)
-11. Проверить линтер (`golangci-lint run`)
-12. Commit dev
-13. Merge dev → main
-14. Push origin dev && origin main
+11. Проверить компиляцию (`go build`)
+12. Проверить тесты (`go test ./...`)
+13. Commit dev
+14. Merge dev → main
+15. Push origin dev && origin main
 
 ---
 
 ## 📌 ТЕКУЩАЯ СЕССИЯ (2026-04-14)
 
 ### Статус синхронизации
-- [x] dev и main синхронизированы (коммит d057c8f)
-- [x] Рабочее дерево чистое
+- [ ] Изменения готовы (удаление мёртвого кода)
+- [ ] Нужно закоммитить в dev
+- [ ] Проверить и отправить в main
+
+### Выполнено в этой сессии
+- [x] Удалён core/rate_limiter.go (142 строки мёртвого кода)
+- [x] Удалён core/rate_limiter_test.go
+- [x] Удалён sandbox/ пакет (8 файлов)
+- [x] Удалён main_sandbox.go
+- [x] Сборка проходит успешно ✅
 - [x] todo.md обновлён
 
-### Следующие задачи (по приоритету)
-1. **Фаза 1:** Проверить и удалить/использовать core/rate_limiter.go ConnectionRateLimiter
-2. **Фаза 1:** Проверить buffer/ vs common/pool/ на дубликаты
-3. **Фаза 2:** Рефакторинг main.go (вынести API routes, инициализацию, shutdown)
-4. **Фаза 3:** Заменить глобальные переменные на AppContext struct
+### Найденные проблемы (по приоритету)
+1. **🔴 КРИТИЧНО:** Все 77 тестов отключены через `//go:build ignore`
+2. **🟢 РЕФАКТОРИНГ:** main.go 3719 строк (цель <2000)
+3. **🟢 ГЛОБАЛЬНЫЕ:** 25 глобальных переменных в globals.go
+
+### Следующие действия
+1. Закоммитить изменения (удаление мёртвого кода)
+2. Отправить в dev и main
+3. Начать работу с тестами (убрать ignore, исправить)
